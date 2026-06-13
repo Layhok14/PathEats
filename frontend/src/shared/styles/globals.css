@@ -1,0 +1,16 @@
+/* PathEat brand tokens — extend or override theme.css here */
+:root {
+  --brand-sidebar: #004b1e;
+  --brand-sidebar-active-bg: rgba(63, 70, 92, 0.2);
+  --brand-green: #22c55e;
+  --brand-green-dark: #006e2f;
+  --brand-header-bg: #f8f9ff;
+  --brand-header-border: #bccbb9;
+  --brand-card-border: #bccbb9;
+  --brand-text-dark: #0b1c30;
+  --brand-text-muted: #565e74;
+  --brand-input-border: #334155;
+  --brand-chip-selected: #006e2f;
+  --brand-map-bg: #eff4ff;
+  --brand-coordinates-bg: #e5eeff;
+}
