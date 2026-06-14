@@ -9,8 +9,8 @@ const MAP_RANGE = { lat: 0.12, lng: 0.18 }; // degrees visible across the map
 
 function pinToCoords(xPct: number, yPct: number) {
   return {
-    lat: parseFloat((MAP_CENTER.lat + (0.5 - yPct / 100) * MAP_RANGE.lat).toFixed(4)),
-    lng: parseFloat((MAP_CENTER.lng + (xPct / 100 - 0.5) * MAP_RANGE.lng).toFixed(4)),
+    lat: MAP_CENTER.lat + (0.5 - yPct / 100) * MAP_RANGE.lat,
+    lng: MAP_CENTER.lng + (xPct / 100 - 0.5) * MAP_RANGE.lng,
   };
 }
 
@@ -231,7 +231,7 @@ export function LocationPinpointPage() {
               CURRENT SELECTION
             </p>
             <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 500, color: "#0b1c30", margin: 0 }}>
-              {coords.lat}° N, {coords.lng}° E
+              {coords.lat.toFixed(4)}° N, {coords.lng.toFixed(4)}° E
             </p>
           </div>
         </div>

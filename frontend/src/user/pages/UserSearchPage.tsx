@@ -232,7 +232,7 @@ export default function UserSearchPage() {
 
         {/* Vendor detail slide-in */}
         <div className="absolute top-0 right-0 bottom-0 z-[1000] transition-transform duration-300"
-          style={{ width: 360, transform: selectedVendor ? "translateX(0)" : "translateX(100%)", boxShadow: "-8px 0 32px rgba(0,0,0,0.35)" }}>
+          style={{ width: 320, transform: selectedVendor ? "translateX(0)" : "translateX(100%)", boxShadow: "-8px 0 32px rgba(0,0,0,0.35)" }}>
           {selectedVendor && (
             <VendorDetail vendor={selectedVendor} onClose={() => setSelectedVendor(null)}
               isFavorite={favorites.has(selectedVendor.id)} onToggleFavorite={() => toggleFavorite(selectedVendor.id)} />

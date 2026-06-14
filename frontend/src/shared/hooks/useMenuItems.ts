@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import type { MenuItem, MenuCategory } from "../types";
+import type { VendorMenuItem as MenuItem, MenuCategory } from "../types";
 
 const INITIAL: MenuItem[] = [
   { id: "mi-1", name: "Hainanese Chicken Rice", description: "Tender poached chicken over fragrant rice with ginger sauce", price: 8.5, imageUrl: "https://images.unsplash.com/photo-1569050467447-ce54b3bbc37d?w=400&q=80", category: "Rice", isAvailable: true },

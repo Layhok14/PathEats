@@ -6,7 +6,7 @@ import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import type { MenuItemFormData } from "../../shared/hooks/useMenuItems";
 import { MENU_CATEGORIES } from "../../shared/constants/categories";
 import { formatPrice } from "../../shared/utils/formatters";
-import type { MenuItem, MenuCategory } from "../../shared/types";
+import type { VendorMenuItem as MenuItem, MenuCategory } from "../../shared/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../app/components/ui/dialog";
 
 const inp: React.CSSProperties = {

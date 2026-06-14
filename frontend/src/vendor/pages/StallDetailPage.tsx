@@ -7,7 +7,7 @@ import { useStalls } from "../../shared/hooks/useStalls";
 import { useMenuItems, getAllMenuItems } from "../../shared/hooks/useMenuItems";
 import { STALL_CATEGORIES, MENU_CATEGORIES } from "../../shared/constants/categories";
 import { formatPrice } from "../../shared/utils/formatters";
-import type { StallFormData, StallCategory, MenuItem, MenuCategory } from "../../shared/types";
+import type { StallFormData, StallCategory, VendorMenuItem as MenuItem, MenuCategory } from "../../shared/types";
 import type { MenuItemFormData } from "../../shared/hooks/useMenuItems";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../app/components/ui/dialog";
 

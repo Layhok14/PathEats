@@ -1,19 +1,16 @@
-import pg from "pg";
-import dotenv from "dotenv";
-dotenv.config();
+import { createClient } from "@supabase/supabase-js";
 
-const { Pool } = pg;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://localhost:5432/patheat",
-  ...(process.env.DATABASE_URL?.includes("supabase")
-    ? { ssl: { rejectUnauthorized: false } }
-    : {}),
-});
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("[db] SUPABASE_URL or SUPABASE_SERVICE_KEY missing — using fallback pool (local PG)");
+}
 
-pool.on("error", (err) => {
-  console.error("Unexpected pool error:", err);
-  process.exit(-1);
-});
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+  : null;
 
-export default pool;
+export default supabase;

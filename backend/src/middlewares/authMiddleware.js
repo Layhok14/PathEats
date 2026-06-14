@@ -1,11 +1,20 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "patheat-dev-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
 
+/**
+ * JWT verification middleware.
+ * Attaches decoded token payload to `req.user`.
+ * Throws 401 if token is missing, invalid, or expired.
+ */
 export function authMiddleware(req, res, next) {
   const header = req.headers.authorization;
+
   if (!header || !header.startsWith("Bearer ")) {
-    return res.status(401).json({ success: false, message: "No token provided" });
+    return res.status(401).json({
+      success: false,
+      message: "No token provided. Include Authorization: Bearer <token>",
+    });
   }
 
   try {
@@ -13,7 +22,11 @@ export function authMiddleware(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
-  } catch {
-    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+  } catch (err) {
+    const message =
+      err.name === "TokenExpiredError"
+        ? "Token has expired"
+        : "Invalid or malformed token";
+    return res.status(401).json({ success: false, message });
   }
 }

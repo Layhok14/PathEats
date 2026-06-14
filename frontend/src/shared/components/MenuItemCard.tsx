@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { formatPrice } from "../utils/formatters";
-import type { MenuItem } from "../types";
+import type { VendorMenuItem as MenuItem } from "../types";
 
 interface MenuItemCardProps {
   item: MenuItem;
