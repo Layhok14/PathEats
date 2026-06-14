@@ -1,44 +1,48 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { Toaster } from "./components/ui/sonner";
-import { VendorLayout } from "../vendor/layouts/VendorLayout";
-import { DashboardPage } from "../vendor/pages/DashboardPage";
-import { StallListPage } from "../vendor/pages/StallListPage";
-import { StallCreatePage } from "../vendor/pages/StallCreatePage";
-import { StallDetailPage } from "../vendor/pages/StallDetailPage";
-import { StallViewPage } from "../vendor/pages/StallViewPage";
-import { LocationPinpointPage } from "../vendor/pages/LocationPinpointPage";
-import { ReviewsPage } from "../vendor/pages/ReviewsPage";
-import { SettingsPage } from "../vendor/pages/SettingsPage";
-import { SupportPage } from "../vendor/pages/SupportPage";
-import { MenuItemsPage } from "../vendor/pages/MenuItemsPage";
+import { AuthProvider } from "../shared/hooks/useAuth";
+import { ThemeProvider } from "../shared/hooks/useTheme";
+import { UserRoutes } from "../user/routes/userRoutes";
+import { VendorRoutes } from "../vendor/routes/vendorRoutes";
+import adminRoutes from "../admin/routes/adminRoutes";
+import customerServiceRoutes from "../admin/routes/customerServiceRoutes";
+import developerRoutes from "../admin/routes/developerRoutes";
+
+function AppRoutes() {
+  return (
+    <ThemeProvider>
+      <Routes>
+        <Route index element={<Navigate to="/user" replace />} />
+        {UserRoutes()}
+        {VendorRoutes()}
+        <Route path="/admin/*" element={adminRoutes.element}>
+          {adminRoutes.children?.map((child, i) => (
+            <Route key={i} index={child.index} path={child.path} element={child.element} />
+          ))}
+        </Route>
+        <Route path="/customer-service/*" element={customerServiceRoutes.element}>
+          {customerServiceRoutes.children?.map((child, i) => (
+            <Route key={i} index={child.index} path={child.path} element={child.element} />
+          ))}
+        </Route>
+        <Route path="/developer/*" element={developerRoutes.element}>
+          {developerRoutes.children?.map((child, i) => (
+            <Route key={i} index={child.index} path={child.path} element={child.element} />
+          ))}
+        </Route>
+        <Route path="*" element={<Navigate to="/user" replace />} />
+      </Routes>
+      <Toaster position="top-right" richColors />
+    </ThemeProvider>
+  );
+}
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Navigate to="/vendor" replace />} />
-
-        <Route path="/vendor" element={<VendorLayout />}>
-          <Route index element={<DashboardPage />} />
-
-          {/* Stall management */}
-          <Route path="stalls" element={<StallListPage />} />
-          <Route path="stalls/new" element={<StallCreatePage />} />
-          <Route path="stalls/:id" element={<StallDetailPage />} />
-          <Route path="stalls/:id/view" element={<StallViewPage />} />
-          <Route path="stalls/:id/location" element={<LocationPinpointPage />} />
-
-          {/* Other sections */}
-          <Route path="reviews" element={<ReviewsPage />} />
-          <Route path="menu" element={<MenuItemsPage />} />
-          <Route path="support" element={<SupportPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-
-        <Route path="*" element={<Navigate to="/vendor" replace />} />
-      </Routes>
-
-      <Toaster position="top-right" richColors />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

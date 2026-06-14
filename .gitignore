@@ -11,3 +11,4 @@ dist/          # build output
 coverage/      # test coverage
 .DS_Store      # macOS system files
 *.log          # log files
+.commandcode

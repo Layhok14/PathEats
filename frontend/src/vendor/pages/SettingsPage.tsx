@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import imgAvatar from "../../imports/SettingsLight-1/5ca851e66f74e55219ac0be53917ce61059b346e.png";
 
 export function SettingsPage() {
   const [profile, setProfile] = useState({

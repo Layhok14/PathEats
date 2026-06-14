@@ -59,9 +59,9 @@ const reviews = [
 ];
 
 const topItems = [
-  { name: "Bai Sach Chrouk", price: "$2.00", img: imgBaiSach },
-  { name: "Kuyteav Soup", price: "$1.75", img: imgKuyteav },
-  { name: "Fried Rice", price: "$2.00", img: imgFriedRice },
+  { name: "Bai Sach Chrouk", price: "$2.00", color: "#22c55e" },
+  { name: "Kuyteav Soup", price: "$1.75", color: "#3b82f6" },
+  { name: "Fried Rice", price: "$2.00", color: "#f59e0b" },
 ];
 
 const stats = [
@@ -166,7 +166,7 @@ export function DashboardPage() {
           <div className="flex flex-col gap-3 mt-4">
             {topItems.map((item) => (
               <div key={item.name} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: "var(--brand-card-border)" }}>
-                <img src={item.img} alt={item.name} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                <div className="w-12 h-12 rounded-lg shrink-0 flex items-center justify-center text-white font-bold" style={{ background: item.color }}>{item.name[0]}</div>
                 <div>
                   <p style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600 }}>{item.name}</p>
                   <p style={{ color: "var(--brand-green)", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 500 }}>{item.price}</p>

@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import imgMapBg from "../../imports/LocationPinpointLight-2/0f478ac5ca927ac7d563427fb2c70efb55537682.png";
-import svgPaths from "../../imports/LocationPinpointLight-2/svg-h5bymgvxa7";
 import { useStalls } from "../../shared/hooks/useStalls";
 
 // Centre of the map (Phnom Penh area)
@@ -26,8 +24,9 @@ function coordsToPin(lat: number, lng: number) {
 // SVG pin icon (location marker)
 function PinIcon() {
   return (
-    <svg width="20" height="25" viewBox="0 0 20 25" fill="none">
-      <path d={svgPaths.p27200f00} fill="white" />
+    <svg width="20" height="25" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" fill="white" stroke="none" />
     </svg>
   );
 }
@@ -35,8 +34,9 @@ function PinIcon() {
 // Location icon for coordinates display
 function LocationIcon() {
   return (
-    <svg width="22" height="22" viewBox="0 0 21.9 21.9" fill="none">
-      <path d={svgPaths.p3488f2a0} fill="#565E74" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#565E74" strokeWidth="2">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
     </svg>
   );
 }
@@ -127,16 +127,16 @@ export function LocationPinpointPage() {
         }}
         onClick={handleMapClick}
       >
-        {/* Map background image */}
-        <div
-          className="absolute inset-0 overflow-hidden pointer-events-none"
-          style={{ mixBlendMode: "multiply", opacity: 0.6 }}
-        >
-          <img
-            alt="map"
-            src={imgMapBg}
-            style={{ position: "absolute", top: "-2.08%", left: 0, width: "100%", height: "104.17%", maxWidth: "none" }}
-          />
+        {/* Map background — grid pattern */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20" style={{ mixBlendMode: "multiply" }}>
+          <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#94a3b8" strokeWidth="0.5" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
         </div>
 
         {/* Draggable pin */}
