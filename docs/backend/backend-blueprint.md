@@ -283,7 +283,7 @@ router.post("/login", controller.login);
 
 ### Person 1 — Smey (User + Customer Service Domain)
 
-| Layer | Files to Create | What to Implement |
+| Layer | Files to  | What to Implement |
 |-------|----------------|-------------------|
 | **Model** | `UserModel.js` | Shape: id, email, password_hash, first_name, last_name, phone, role_scope, created_at. Static `validate()` method |
 | **Repository** | `UserRepository.js` | `findByEmail(email)`, `findById(id)`, `create(data)`, `update(id, data)`, `softDelete(id)` |
@@ -299,7 +299,7 @@ router.post("/login", controller.login);
 | **Controller** | `CsController.js` | `listTickets`, `getTicket`, `updateTicket`, `listDisputes`, `approveVendor`, `moderateReview` |
 | **Routes** | `csRoutes.js` | All `GET/POST /api/cs/*` endpoints with `restrictToRoles("CUSTOMER_SERVICE_ADMIN", "GLOBAL_ADMIN")` |
 
-### Person 2 — Hok (Vendor + Developer Domain)
+### Person 2 — Hok (Vendor Domain)
 
 | Layer | Files to Create | What to Implement |
 |-------|----------------|-------------------|
@@ -311,7 +311,7 @@ router.post("/login", controller.login);
 | **Controller** | `VendorController.js` | `getDashboard`, `getProfile`, `updateProfile`, `getMenu`, `addMenuItem`, `updateMenuItem`, `deleteMenuItem`, `listOrders`, `updateOrderStatus` |
 | **Routes** | `vendorRoutes.js` | All `GET/POST/PUT/DELETE /api/vendor/*` with `restrictToRoles("VENDOR")` |
 
-**Person 2 — Developer:**
+**Person 2 — Developer: Pav**
 
 | Layer | Files to Create | What to Implement |
 |-------|----------------|-------------------|
