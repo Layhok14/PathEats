@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
-import { catchAsync } from "../utils/catchAsync.js";
+import {
+  getDashboard,
+  getStalls,
+  createStall,
+  getStallById,
+} from "../controllers/vendorController.js";
 
 const router = Router();
 
+// All vendor routes require authentication + VENDOR role
 router.use(authMiddleware);
 router.use(restrictToRoles("VENDOR"));
 
@@ -17,110 +23,73 @@ router.use(restrictToRoles("VENDOR"));
  *     security: [{ BearerAuth: [] }]
  *     responses:
  *       200:
- *         description: Dashboard stats (views, orders, rating, reviews)
+ *         description: Dashboard stats (total_stalls, open_stalls, avg_rating, orders)
  */
-router.get("/dashboard", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Vendor dashboard — implement vendor service" } });
-}));
+router.get("/dashboard", getDashboard);
 
 /**
  * @swagger
- * /api/vendor/profile:
+ * /api/vendor/stalls:
  *   get:
  *     tags: [Vendor]
- *     summary: Get own vendor profile
+ *     summary: List all stalls owned by this vendor
  *     security: [{ BearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Array of stalls
  */
-router.get("/profile", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Vendor profile — implement" } });
-}));
+router.get("/stalls", getStalls);
 
 /**
  * @swagger
- * /api/vendor/profile:
- *   put:
- *     tags: [Vendor]
- *     summary: Update vendor details (name, description, hours, location)
- *     security: [{ BearerAuth: [] }]
- */
-router.put("/profile", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Update vendor — implement" } });
-}));
-
-/**
- * @swagger
- * /api/vendor/menu:
- *   get:
- *     tags: [Vendor]
- *     summary: List menu items
- *     security: [{ BearerAuth: [] }]
- */
-router.get("/menu", catchAsync(async (req, res) => {
-  res.json({ success: true, data: [] });
-}));
-
-/**
- * @swagger
- * /api/vendor/menu:
+ * /api/vendor/stalls:
  *   post:
  *     tags: [Vendor]
- *     summary: Add a menu item
+ *     summary: Register a new stall
  *     security: [{ BearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, category_id]
+ *             properties:
+ *               name:        { type: string, example: "Spice & Wok Haven" }
+ *               category_id: { type: string, format: uuid }
+ *               description: { type: string }
+ *               address:     { type: string }
+ *               photo_url:   { type: string }
+ *               price_range: { type: integer, minimum: 1, maximum: 4 }
+ *               latitude:    { type: number, example: 11.5564 }
+ *               longitude:   { type: number, example: 104.9282 }
+ *               status:      { type: string, enum: [active, inactive] }
+ *     responses:
+ *       201:
+ *         description: Stall created
+ *       400:
+ *         description: Validation error
  */
-router.post("/menu", catchAsync(async (req, res) => {
-  res.status(201).json({ success: true, data: { message: "Add menu item — implement" } });
-}));
+router.post("/stalls", createStall);
 
 /**
  * @swagger
- * /api/vendor/menu/{id}:
- *   put:
- *     tags: [Vendor]
- *     summary: Update a menu item
- *     security: [{ BearerAuth: [] }]
- */
-router.put("/menu/:id", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Update menu item — implement" } });
-}));
-
-/**
- * @swagger
- * /api/vendor/menu/{id}:
- *   delete:
- *     tags: [Vendor]
- *     summary: Delete a menu item
- *     security: [{ BearerAuth: [] }]
- */
-router.delete("/menu/:id", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Delete menu item — implement" } });
-}));
-
-/**
- * @swagger
- * /api/vendor/orders:
+ * /api/vendor/stalls/{id}:
  *   get:
  *     tags: [Vendor]
- *     summary: List orders (filter by status)
+ *     summary: Get a single stall by ID
  *     security: [{ BearerAuth: [] }]
  *     parameters:
- *       - in: query
- *         name: status
- *         schema: { type: string, enum: [pending, received, cooking, ready, delivered, cancelled] }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Stall details
+ *       404:
+ *         description: Stall not found
  */
-router.get("/orders", catchAsync(async (req, res) => {
-  res.json({ success: true, data: [] });
-}));
-
-/**
- * @swagger
- * /api/vendor/orders/{id}/status:
- *   patch:
- *     tags: [Vendor]
- *     summary: Update order status (received → cooking → ready)
- *     security: [{ BearerAuth: [] }]
- */
-router.patch("/orders/:id/status", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Update order status — implement" } });
-}));
+router.get("/stalls/:id", getStallById);
 
 export default router;

@@ -1,26 +1,24 @@
-// seed.js
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import db from './config/db.js';
+import paths from '../utils/path.js';
+import db from '../config/db.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const sqlFilePath = path.join(__dirname, 'seed_patheats_master_all_tables(1).sql'); // Ensure this matches your filename
+const seeder_file = path.join(paths.db,'new-seed.sql')
 
 async function runSeed() {
-  try {
     console.log('Reading seed file...');
-    const sql = fs.readFileSync(sqlFilePath, 'utf8');
+    const sql = fs.readFileSync(seeder_file, 'utf8');
+    if(!sql.trim()){
+        console.warn('file is empty');
+        process.exit(0);
+    }
+    try{
+    await db.transaction(async(client)=>{
+        await client.query(sql);
+    });
 
-    console.log('Executing seed...');
-    await db.query(sql);
-    
-    console.log('Database seeded successfully!');
-    process.exit(0);
-  } catch (err) {
-    console.error('Error seeding database:', err);
-    process.exit(1);
-  }
+    }catch(err){
+        console.error("Error loading data: ",err.message);
+    }
 }
-
 runSeed();

@@ -1,14 +1,10 @@
 // Auth context — single source for session state across all domains.
-// Swap login/signup bodies for real Axios calls; nothing else changes.
+// Switched from mock data to real API calls via axios.
 
 import { createContext, useContext, useState, useEffect } from "react";
+import api from "../services/axiosService";
 
 const AuthContext = createContext(null);
-
-const MOCK_USERS = [
-  { id: "u-001", firstName: "Sophea", lastName: "Meng", email: "sophea@patheat.app", phone: "012-345-678", role_scope: "CONSUMER" },
-  { id: "u-002", firstName: "Dara",   lastName: "Vuth", email: "dara@patheat.app",   phone: "098-765-432", role_scope: "CONSUMER" },
-];
 
 const SESSION_KEY = "patheat_user";
 
@@ -22,24 +18,62 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem(SESSION_KEY);
   }, [user]);
 
-  async function login(email, _password) {
-    // TODO: POST /api/auth/login
-    const found = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!found) throw new Error("No account found with that email.");
-    setUser(found);
+  async function login(email, password) {
+    const { data } = await api.post("/auth/login", { email, password });
+    const session = data.data;
+    setUser({
+      id: session.user.id,
+      firstName: session.user.firstName,
+      lastName: session.user.lastName,
+      email: session.user.email,
+      role_scope: session.user.role_scope,
+      token: session.token,
+    });
   }
 
-  async function signup({ firstName, lastName, email }) {
-    // TODO: POST /api/auth/register
-    const newUser = { id: `u-${Date.now()}`, firstName, lastName, email, phone: "", role_scope: "CONSUMER" };
-    MOCK_USERS.push(newUser);
-    setUser(newUser);
+  async function signup({ firstName, lastName, email, password }) {
+    // Default to CONSUMER for user signup; vendor signup should use roleScope: "VENDOR"
+    const { data } = await api.post("/auth/register", {
+      email,
+      password,
+      firstName,
+      lastName,
+      roleScope: "CONSUMER",
+    });
+    const session = data.data;
+    setUser({
+      id: session.user.id,
+      firstName: session.user.firstName,
+      lastName: session.user.lastName,
+      email: session.user.email,
+      role_scope: session.user.role_scope,
+      token: session.token,
+    });
+  }
+
+  async function vendorSignup({ firstName, lastName, email, password }) {
+    const { data } = await api.post("/auth/register", {
+      email,
+      password,
+      firstName,
+      lastName,
+      roleScope: "VENDOR",
+    });
+    const session = data.data;
+    setUser({
+      id: session.user.id,
+      firstName: session.user.firstName,
+      lastName: session.user.lastName,
+      email: session.user.email,
+      role_scope: session.user.role_scope,
+      token: session.token,
+    });
   }
 
   function logout() { setUser(null); }
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, signup, vendorSignup, logout }}>
       {children}
     </AuthContext.Provider>
   );
