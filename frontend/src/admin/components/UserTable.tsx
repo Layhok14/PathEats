@@ -6,15 +6,27 @@ type Tab = (typeof TABS)[number];
 const PAGE_SIZE = 5;
 
 interface User { id: string; name: string; email: string; role: string; status: string; avatarInitials?: string; avatarColor?: string }
-interface Props { users: User[] }
+interface Props {
+  users: User[];
+  onActivate?: (id: string) => void;
+  onSuspend?: (id: string) => void;
+  onRoleChange?: (id: string, role: string) => void;
+}
 
-export function UserTable({ users }: Props) {
+export function UserTable({ users, onActivate, onSuspend, onRoleChange }: Props) {
   const [tab, setTab] = useState<Tab>("All Members");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
 
   const filtered = users.filter((u) => {
-    const matchTab = tab === "All Members" || u.role === tab.slice(0, -1);
+    const roleMap: Record<Tab, string | null> = {
+      "All Members": null,
+      Students: "CONSUMER",
+      Vendors: "VENDOR",
+      Commuters: "CONSUMER",
+    };
+    const expectedRole = roleMap[tab];
+    const matchTab = !expectedRole || u.role === expectedRole;
     const matchQ = !query || u.name.toLowerCase().includes(query.toLowerCase()) || u.email.toLowerCase().includes(query.toLowerCase());
     return matchTab && matchQ;
   });
@@ -52,8 +64,32 @@ export function UserTable({ users }: Props) {
               <td className="px-6 py-3"><span className="text-[13px]" style={{ color: u.status === "Active" ? "#006e2f" : u.status === "Pending" ? "#f59e0b" : "#ef4444" }}>{u.status}</span></td>
               <td className="px-6 py-3"><div className="flex items-center gap-2">
                 <button className="p-1.5 rounded text-[#64748b] hover:bg-gray-100"><Eye size={15} /></button>
-                <button className="p-1.5 rounded text-[#006e2f] hover:bg-green-50"><CheckCircle size={15} /></button>
-                <button className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Ban size={15} /></button>
+                <button
+                  onClick={() => onActivate?.(u.id)}
+                  className="p-1.5 rounded text-[#006e2f] hover:bg-green-50"
+                  title="Activate user"
+                >
+                  <CheckCircle size={15} />
+                </button>
+                <button
+                  onClick={() => onSuspend?.(u.id)}
+                  className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"
+                  title="Suspend user"
+                >
+                  <Ban size={15} />
+                </button>
+                <select
+                  value={u.role}
+                  onChange={(event) => onRoleChange?.(u.id, event.target.value)}
+                  className="text-[11px] rounded border border-[#e2e8f0] px-1 py-1 text-[#64748b]"
+                  title="Change role"
+                >
+                  <option value="CONSUMER">Consumer</option>
+                  <option value="VENDOR">Vendor</option>
+                  <option value="GLOBAL_ADMIN">Global Admin</option>
+                  <option value="CUSTOMER_SERVICE_ADMIN">CS Admin</option>
+                  <option value="DEVELOPER_ADMIN">Dev Admin</option>
+                </select>
                 <button className="p-1.5 rounded text-[#94a3b8] hover:bg-gray-100"><MoreHorizontal size={15} /></button>
               </div></td>
             </tr>

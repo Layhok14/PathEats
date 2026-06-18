@@ -1,13 +1,21 @@
-import { Bell, HelpCircle } from "lucide-react";
+
 import { useState } from "react";
 
 interface Props {
   actionLabel?: string;
+  secondActionLabel?: string;
   onAction?: () => void;
+  onSecondAction?: () => void;
   searchPlaceholder?: string;
 }
 
-export function TopBar({ actionLabel = "+ Add Vendor", onAction, searchPlaceholder = "Search system logs, users, or restaurants…" }: Props) {
+export function TopBar({
+  actionLabel = "",
+  secondActionLabel,
+  onAction,
+  onSecondAction,
+  searchPlaceholder = "Search system logs, users, or restaurants…"
+}: Props){
   const [query, setQuery] = useState("");
 
   return (
@@ -22,19 +30,25 @@ export function TopBar({ actionLabel = "+ Add Vendor", onAction, searchPlacehold
           className="pl-9 pr-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white w-[260px] text-[#374151] placeholder:text-[#94a3b8]"
         />
       </div>
-      <div className="flex items-center gap-3 ml-auto">
-        <button className="relative p-2 rounded-lg text-[#64748b] hover:bg-gray-100 transition-colors">
-          <Bell size={18} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
-        <button className="p-2 rounded-lg text-[#64748b] hover:bg-gray-100 transition-colors">
-          <HelpCircle size={18} />
-        </button>
-        {actionLabel && (
-          <button className="inline-flex items-center gap-2 font-medium rounded-lg transition-all bg-[#006e2f] text-white hover:bg-[#005a26] shadow-sm px-4 py-2 text-[13px]">
-            {actionLabel}
-          </button>
-        )}
+      <div className="flex items-center gap-3 ml-auto">     
+{secondActionLabel && (
+  <button
+    onClick={onSecondAction}
+    className="inline-flex items-center gap-2 font-medium rounded-lg transition-all bg-[#006e2f] text-white hover:bg-[#005a26] shadow-sm px-4 py-2 text-[13px]"
+  >
+    {secondActionLabel}
+  </button>
+)}
+
+{actionLabel && (
+  <button
+    onClick={onAction}
+    className="inline-flex items-center gap-2 font-medium rounded-lg transition-all bg-[#006e2f] text-white hover:bg-[#005a26] shadow-sm px-4 py-2 text-[13px]"
+  >
+    {actionLabel}
+  </button>
+)}
+     
         <div className="flex items-center gap-2 pl-2 border-l border-[#e2e8f0]">
           <div className="text-right">
             <p className="text-[12px] font-semibold text-[#0b1c30]">Alex Rivera</p>

@@ -1,20 +1,35 @@
-// Auth context — single source for session state across all domains.
-// Swap login/signup bodies for real Axios calls; nothing else changes.
-
-import { createContext, useContext, useState, useEffect } from "react";
-
-const AuthContext = createContext(null);
-
-const MOCK_USERS = [
-  { id: "u-001", firstName: "Sophea", lastName: "Meng", email: "sophea@patheat.app", phone: "012-345-678", role_scope: "CONSUMER" },
-  { id: "u-002", firstName: "Dara",   lastName: "Vuth", email: "dara@patheat.app",   phone: "098-765-432", role_scope: "CONSUMER" },
-];
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import api from "../services/axiosService";
 
 const SESSION_KEY = "patheat_user";
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; }
+interface AuthUser {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  role_scope: string;
+  token: string;
+}
+
+interface AuthContextValue {
+  user: AuthUser | null;
+  isLoggedIn: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (data: { firstName: string; lastName: string; email: string; password?: string; phone?: string }) => Promise<void>;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+    } catch {
+      return null;
+    }
   });
 
   useEffect(() => {
@@ -22,21 +37,21 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem(SESSION_KEY);
   }, [user]);
 
-  async function login(email, _password) {
-    // TODO: POST /api/auth/login
-    const found = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!found) throw new Error("No account found with that email.");
-    setUser(found);
+  async function login(email: string, password: string) {
+    const response = await api.post("/auth/login", { email, password });
+    const { user: account, token } = response.data.data;
+    setUser({ ...account, token });
   }
 
-  async function signup({ firstName, lastName, email }) {
-    // TODO: POST /api/auth/register
-    const newUser = { id: `u-${Date.now()}`, firstName, lastName, email, phone: "", role_scope: "CONSUMER" };
-    MOCK_USERS.push(newUser);
-    setUser(newUser);
+  async function signup({ firstName, lastName, email, password = "ChangeMe123!", phone }: { firstName: string; lastName: string; email: string; password?: string; phone?: string }) {
+    const response = await api.post("/auth/register", { firstName, lastName, email, password, phone });
+    const { user: account, token } = response.data.data;
+    setUser({ ...account, token });
   }
 
-  function logout() { setUser(null); }
+  function logout() {
+    setUser(null);
+  }
 
   return (
     <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, signup, logout }}>

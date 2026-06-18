@@ -1,81 +1,65 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import db from "../config/db.js";
 import AppError from "../utils/AppError.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  process.env.JWT_ACCESS_SECRET ||
+  "dev-secret-change-in-production";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || process.env.JWT_ACCESS_EXPIRY || "7d";
 
-/**
- * AuthService — handles registration, login, password hashing, JWT generation.
- *
- * Team members: replace the inline repository calls below with
- * your actual UserRepository methods once they are implemented.
- */
 class AuthService {
-  /**
-   * Register a new user.
-   * @param {{ email: string, password: string, firstName: string, lastName: string, phone?: string }} data
-   * @returns {{ user: object, token: string }}
-   */
   async register(data) {
     const { email, password, firstName, lastName, phone } = data;
+    const normalizedEmail = email.toLowerCase().trim();
 
-    // 1. Check if email already exists
-    // TODO: const existing = await userRepo.findByEmail(email);
-    // if (existing) throw new AppError("Email already registered", 409);
+    const existing = await db.query("SELECT id FROM users WHERE email = $1", [normalizedEmail]);
+    if (existing.rows.length > 0) {
+      throw new AppError("Email already registered", 409);
+    }
 
-    // 2. Hash the password
-    const salt = await bcrypt.genSalt(12);
-    const password_hash = await bcrypt.hash(password, salt);
+    const password_hash = await bcrypt.hash(password, 12);
+    const result = await db.query(
+      `
+      INSERT INTO users (email, password_hash, first_name, last_name, phone, role_scope, is_banned)
+      VALUES ($1,$2,$3,$4,$5,'CONSUMER',false)
+      RETURNING id::text, email, first_name, last_name, phone, role_scope, is_banned
+      `,
+      [normalizedEmail, password_hash, firstName, lastName, phone ?? null]
+    );
 
-    // 3. Insert user
-    // TODO: const user = await userRepo.create({
-    //   email, password_hash, first_name: firstName,
-    //   last_name: lastName, phone, role_scope: "CONSUMER",
-    // });
-
-    // Placeholder until UserRepository is wired
-    const user = {
-      id: "placeholder-uuid",
-      email: email.toLowerCase().trim(),
-      first_name: firstName,
-      last_name: lastName,
-      role_scope: "CONSUMER",
-    };
-
-    // 4. Generate JWT
+    const user = result.rows[0];
     const token = this._signToken(user.id, user.email, user.role_scope);
 
     return { user, token };
   }
 
-  /**
-   * Login with email and password.
-   * @param {{ email: string, password: string }}
-   * @returns {{ user: object, token: string }}
-   */
   async login(email, password) {
-    // 1. Find user by email
-    // TODO: const user = await userRepo.findByEmail(email);
-    const user = { id: "placeholder-uuid", email: email.toLowerCase().trim(), role_scope: "CONSUMER", password_hash: "" };
+    const normalizedEmail = email.toLowerCase().trim();
+    const result = await db.query(
+      `
+      SELECT id::text, email, password_hash, first_name, last_name, phone, role_scope, is_banned
+      FROM users
+      WHERE email = $1
+      `,
+      [normalizedEmail]
+    );
+
+    const user = result.rows[0];
     if (!user) throw new AppError("Invalid email or password", 401);
 
-    // 2. Compare password
-    // const valid = await bcrypt.compare(password, user.password_hash);
-    // if (!valid) throw new AppError("Invalid email or password", 401);
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) throw new AppError("Invalid email or password", 401);
 
-    // 3. Check ban
     if (user.is_banned) throw new AppError("Account has been suspended", 403);
 
-    // 4. Generate JWT
     const token = this._signToken(user.id, user.email, user.role_scope);
+    delete user.password_hash;
 
-    return { user: { id: user.id, email: user.email, role_scope: user.role_scope }, token };
+    return { user, token };
   }
 
-  /**
-   * Sign a JWT token.
-   */
   _signToken(userId, email, roleScope) {
     return jwt.sign(
       { sub: userId, email, role_scope: roleScope },

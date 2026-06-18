@@ -5,6 +5,7 @@ import vendorRoutes from "./vendorRoutes.js";
 import adminRoutes from "./adminRoutes.js";
 import csRoutes from "./csRoutes.js";
 import devRoutes from "./devRoutes.js";
+import db from "../config/db.js";
 
 const router = Router();
 
@@ -19,10 +20,19 @@ const router = Router();
  *       200:
  *         description: API is running
  */
-router.get("/health", (req, res) => {
+router.get("/health", async (req, res) => {
+  let database = "disconnected";
+  try {
+    await db.query("SELECT 1");
+    database = "connected";
+  } catch {
+    database = "disconnected";
+  }
+
   res.json({
     success: true,
     message: "PathEat API running",
+    database,
     timestamp: new Date().toISOString(),
   });
 });

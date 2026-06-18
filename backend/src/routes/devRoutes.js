@@ -1,95 +1,55 @@
 import { Router } from "express";
+import developerController from "../controllers/developerController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import { catchAsync } from "../utils/catchAsync.js";
 
 const router = Router();
 
-router.use(authMiddleware);
-router.use(restrictToRoles("DEVELOPER_ADMIN"));
+const devBypass = (req, res, next) => {
+  if (process.env.NODE_ENV !== "production") {
+    req.user = {
+      id: "local-developer",
+      email: "developer@patheat.local",
+      role_scope: "DEVELOPER_ADMIN",
+    };
+    return next();
+  }
 
-/**
- * @swagger
- * /api/dev/health:
- *   get:
- *     tags: [Developer]
- *     summary: System health check (DB, API, uptime)
- *     security: [{ BearerAuth: [] }]
- */
-router.get("/health", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { status: "healthy", uptime: process.uptime() } });
-}));
+  return authMiddleware(req, res, next);
+};
 
-/**
- * @swagger
- * /api/dev/backups:
- *   get:
- *     tags: [Developer]
- *     summary: List backup records
- *     security: [{ BearerAuth: [] }]
- */
-router.get("/backups", catchAsync(async (req, res) => {
-  res.json({ success: true, data: [] });
-}));
+router.use(devBypass);
+router.use(restrictToRoles("DEVELOPER_ADMIN", "GLOBAL_ADMIN"));
 
-/**
- * @swagger
- * /api/dev/backups:
- *   post:
- *     tags: [Developer]
- *     summary: Trigger a new backup
- *     security: [{ BearerAuth: [] }]
- */
-router.post("/backups", catchAsync(async (req, res) => {
-  res.status(201).json({ success: true, data: { message: "Trigger backup — implement" } });
-}));
+router.get("/health", catchAsync(developerController.health));
 
-/**
- * @swagger
- * /api/dev/database:
- *   get:
- *     tags: [Developer]
- *     summary: Database table stats and health
- *     security: [{ BearerAuth: [] }]
- */
+router.get("/users", catchAsync(developerController.getUsers));
+router.post("/users", catchAsync(developerController.createUser));
+router.patch("/users/:id", catchAsync(developerController.updateUser));
+router.post("/users/:id/ban", catchAsync(developerController.banUser));
+router.post("/users/:id/unban", catchAsync(developerController.unbanUser));
+router.delete("/users/:id", catchAsync(developerController.deleteUser));
+
+router.get("/vendors", catchAsync(developerController.getVendors));
+router.post("/vendors", catchAsync(developerController.createVendor));
+router.patch("/vendors/:id", catchAsync(developerController.updateVendor));
+router.post("/vendors/:id/ban", catchAsync(developerController.banVendor));
+router.post("/vendors/:id/unban", catchAsync(developerController.unbanVendor));
+router.delete("/vendors/:id", catchAsync(developerController.deleteVendor));
+router.get("/place-categories", catchAsync(developerController.getPlaceCategories));
+router.get("/database/tables/:tableName/columns", catchAsync(developerController.getTableColumns));
+
+router.get("/backups", catchAsync(developerController.getBackups));
+router.post("/backups", catchAsync(developerController.createBackup));
+router.post("/backups/:id/recover", catchAsync(developerController.recoverBackup));
+
 router.get("/database", catchAsync(async (req, res) => {
-  res.json({ success: true, data: [] });
+  res.json({ success: true, data: { message: "Use /api/dev/backups for logical database/table/row backups." } });
 }));
 
-/**
- * @swagger
- * /api/dev/logs:
- *   get:
- *     tags: [Developer]
- *     summary: Recent error logs (filter by severity)
- *     security: [{ BearerAuth: [] }]
- */
 router.get("/logs", catchAsync(async (req, res) => {
   res.json({ success: true, data: [] });
-}));
-
-/**
- * @swagger
- * /api/dev/seed:
- *   post:
- *     tags: [Developer]
- *     summary: Run database seed script
- *     security: [{ BearerAuth: [] }]
- */
-router.post("/seed", catchAsync(async (req, res) => {
-  res.status(201).json({ success: true, data: { message: "Seed — implement" } });
-}));
-
-/**
- * @swagger
- * /api/dev/api-metrics:
- *   get:
- *     tags: [Developer]
- *     summary: API latency and request metrics
- *     security: [{ BearerAuth: [] }]
- */
-router.get("/api-metrics", catchAsync(async (req, res) => {
-  res.json({ success: true, data: {} });
 }));
 
 export default router;

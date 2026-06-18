@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "create-admin": "node src/db/createAdmin.js",
+    "check-db": "node src/db/checkConnection.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
