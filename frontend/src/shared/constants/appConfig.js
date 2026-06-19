@@ -1,6 +1,15 @@
 // PathEat app-wide configuration constants
 
+export { ALL_VENDORS } from "./vendorData";
+
 export const PHNOM_PENH_CENTER = [11.5564, 104.9282];
+
+// Vector tile styles (MapLibre GL style JSON URLs)
+export const LIGHT_VECTOR_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+export const DARK_VECTOR_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+
+// OSRM routing backend
+export const OSRM_BASE_URL = "https://router.project-osrm.org";
 
 export const PLACES = [
   { name: "Phnom Penh International Airport", lat: 11.5466, lng: 104.8442 },
@@ -20,7 +29,9 @@ export const PLACES = [
   { name: "Russian Market (Toul Tom Pong)", lat: 11.5398, lng: 104.9084 },
 ];
 
-export const VENDOR_RANGE_DEFAULT = 4;
+export const VENDOR_RANGE_DEFAULT = 300;
+export const VENDOR_RANGE_MIN = 10;
+export const VENDOR_RANGE_MAX = 500;
 
 export const PRICE_LABELS = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" };
 
@@ -30,8 +41,7 @@ export const CUISINE_OPTIONS = [
   "Dessert", "Beverage", "Street Food",
 ];
 
-export const ROADMAP_TILE = "https://tiles.openfreemap.org/styles/liberty";
-export const DARK_TILE = "https://tiles.openfreemap.org/styles/liberty";
-export const VENDOR_RANGE_MIN = 1;
-export const VENDOR_RANGE_MAX = 10;
-export const CUISINES = ["All", "Khmer", "Chinese", "Vietnamese", "Thai", "Japanese", "Korean", "Indian", "Western", "Mexican", "Italian", "Seafood", "Dessert", "Beverage", "Street Food", "Noodles"];
+export const CUISINES = [
+  "Khmer", "Noodles", "BBQ", "Rice", "Banh Mi", "Chinese",
+  "Dessert", "Drinks",
+];

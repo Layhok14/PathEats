@@ -11,3 +11,4 @@ coverage/      # test coverage
 .commandcode
 .vscode
 **.sql
+to-integrate/
