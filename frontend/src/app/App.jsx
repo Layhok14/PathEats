@@ -1,3 +1,4 @@
+import "maplibre-gl/dist/maplibre-gl.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider } from "../shared/hooks/useAuth";

@@ -1,37 +1,51 @@
-// PathEat app-wide configuration constants
+// Spatial constants, UI enums, and named place list for Phnom Penh.
+// Vendor seed data lives in vendorData.ts to keep this file scannable.
 
-export const PHNOM_PENH_CENTER = [11.5564, 104.9282];
+export { ALL_VENDORS } from "./vendorData";
+
+export const PHNOM_PENH_CENTER = [11.5572, 104.918];
+
+// Vector tile styles (MapLibre GL style JSON URLs)
+export const LIGHT_VECTOR_STYLE =
+  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+export const DARK_VECTOR_STYLE =
+  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+
+// OSRM routing backend
+export const OSRM_BASE_URL = "http://router.project-osrm.org";
+export const VENDOR_RANGE_DEFAULT = 300;
+export const VENDOR_RANGE_MIN = 10;
+export const VENDOR_RANGE_MAX = 500;
+
+export const CUISINES = [
+  "Khmer",
+  "Noodles",
+  "BBQ",
+  "Rice",
+  "Banh Mi",
+  "Chinese",
+  "Dessert",
+  "Drinks",
+];
+export const PRICE_LABELS = ["", "$", "$$", "$$$", "$$$$"];
 
 export const PLACES = [
-  { name: "Phnom Penh International Airport", lat: 11.5466, lng: 104.8442 },
-  { name: "Olympic Stadium", lat: 11.5589, lng: 104.9011 },
-  { name: "Royal Palace", lat: 11.5631, lng: 104.9425 },
-  { name: "Central Market (Psar Thmei)", lat: 11.5696, lng: 104.9187 },
-  { name: "AEON Mall Phnom Penh", lat: 11.5394, lng: 104.9222 },
-  { name: "Tuol Sleng Museum", lat: 11.5523, lng: 104.9177 },
-  { name: "Independence Monument", lat: 11.5524, lng: 104.9222 },
-  { name: "Riverside (Sisowath Quay)", lat: 11.5686, lng: 104.9305 },
-  { name: "Orussey Market", lat: 11.5676, lng: 104.9067 },
-  { name: "Boeung Kak Lake", lat: 11.5738, lng: 104.8956 },
-  { name: "Tuol Kork", lat: 11.5846, lng: 104.8885 },
-  { name: "Chbar Ampov", lat: 11.5305, lng: 104.9494 },
-  { name: "Koh Pich (Diamond Island)", lat: 11.5432, lng: 104.9241 },
-  { name: "Bak Touk", lat: 11.5761, lng: 104.8718 },
-  { name: "Russian Market (Toul Tom Pong)", lat: 11.5398, lng: 104.9084 },
+  { name: "Central Market (Phsar Thmei)", lat: 11.5699, lng: 104.917 },
+  {
+    name: "Russian Market (Phsar Toul Tom Poung)",
+    lat: 11.5445,
+    lng: 104.9186,
+  },
+  { name: "Royal Palace", lat: 11.5642, lng: 104.9302 },
+  { name: "Independence Monument", lat: 11.5533, lng: 104.9283 },
+  { name: "Olympic Stadium", lat: 11.553, lng: 104.9139 },
+  { name: "BKK1 (Boeung Keng Kang 1)", lat: 11.5564, lng: 104.9282 },
+  { name: "Riverside (Sisowath Quay)", lat: 11.57, lng: 104.9313 },
+  { name: "AEON Mall 1", lat: 11.5425, lng: 104.9025 },
+  { name: "Wat Phnom", lat: 11.5769, lng: 104.9214 },
+  { name: "Toul Sleng Museum", lat: 11.5494, lng: 104.9186 },
+  { name: "Phnom Penh International Airport", lat: 11.5466, lng: 104.844 },
+  { name: "Night Market (Sisowath Quay)", lat: 11.564, lng: 104.9307 },
+  { name: "Sorya Shopping Center", lat: 11.5677, lng: 104.9167 },
+  { name: "Toul Kork Market", lat: 11.5783, lng: 104.9227 },
 ];
-
-export const VENDOR_RANGE_DEFAULT = 4;
-
-export const PRICE_LABELS = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" };
-
-export const CUISINE_OPTIONS = [
-  "All", "Khmer", "Chinese", "Vietnamese", "Thai", "Japanese",
-  "Korean", "Indian", "Western", "Mexican", "Italian", "Seafood",
-  "Dessert", "Beverage", "Street Food",
-];
-
-export const ROADMAP_TILE = "https://tiles.openfreemap.org/styles/liberty";
-export const DARK_TILE = "https://tiles.openfreemap.org/styles/liberty";
-export const VENDOR_RANGE_MIN = 1;
-export const VENDOR_RANGE_MAX = 10;
-export const CUISINES = ["All", "Khmer", "Chinese", "Vietnamese", "Thai", "Japanese", "Korean", "Indian", "Western", "Mexican", "Italian", "Seafood", "Dessert", "Beverage", "Street Food", "Noodles"];
