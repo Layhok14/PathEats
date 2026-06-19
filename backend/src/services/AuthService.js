@@ -74,6 +74,7 @@ class AuthService {
 
     // 4. Sign JWT
     const token = this._signToken(user.id, user.email, user.role_scope);
+    delete user.password_hash;
 
     return {
       user: {

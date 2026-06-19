@@ -67,6 +67,9 @@ export function AuthProvider({ children }) {
   function logout() {
     setUser(null);
   }
+  function logout() {
+    setUser(null);
+  }
 
   return (
     <AuthContext.Provider

@@ -31,7 +31,7 @@ export const ENDPOINTS = {
   VENDOR_ONBOARD: `${API_BASE}/vendor/onboard`,
 
   // Admin
-  ADMIN_TELEMETRY: `${API_BASE}/admin/telemetry/main`,
+  ADMIN_TELEMETRY: `${API_BASE}/admin/telemetry`,
   ADMIN_USERS: `${API_BASE}/admin/users/mod`,
   ADMIN_VENDORS: `${API_BASE}/admin/vendors/mod`,
   ADMIN_ROLES: `${API_BASE}/admin/roles/grant`,

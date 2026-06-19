@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  process.env.JWT_ACCESS_SECRET ||
+  "dev-secret-change-in-production";
 
 /**
  * JWT verification middleware.

@@ -26,7 +26,15 @@ api.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem("patheat_user");
-      window.location.href = "/user";
+
+      const isAdminArea =
+        window.location.pathname.startsWith("/admin") ||
+        window.location.pathname.startsWith("/customer-service") ||
+        window.location.pathname.startsWith("/developer");
+
+      if (!isAdminArea) {
+        window.location.href = "/user";
+      }
     }
     return Promise.reject(err);
   }
