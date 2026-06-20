@@ -63,25 +63,21 @@ There are no lint, typecheck, or test scripts. `npm run build` is the only autom
 - Backend: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` required
 - See `backend/.env.example` for all variables
 
-## Database schema (15 tables)
+## Database schema (11 tables)
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
 | `users` | Auth + profiles | role_scope CHECK (CONSUMER/VENDOR/GLOBAL_ADMIN/DEVELOPER_ADMIN) |
 | `user_preferences` | Theme, radius per user | UNIQUE per user_id |
-| `roles` | Admin-defined role registry | name UNIQUE, no FK from users |
 | `place_categories` | Stall type taxonomy | slug UNIQUE |
-| `places` | Stalls + venues | GEOGRAPHY(POINT, 4326), owner_id, category_id, is_approved |
+| `places` | Stalls + venues | GEOGRAPHY(POINT, 4326), owner_id, category_id, status CHECK, rating_avg, rating_count |
 | `place_hours` | Operating hours | day_of_week 0-6, UNIQUE(place_id, day_of_week) |
 | `menu_items` | Menu items per stall | place_id FK, price DECIMAL, category CHECK |
 | `routes` | Saved consumer routes | origin/dest/waypoints as JSONB |
 | `bookmarks` | Favorites | UNIQUE(user_id, place_id) |
 | `search_history` | Consumer route searches | filters JSONB |
-| `reviews` | Ratings + moderation | rating 1-5, is_moderated for CS |
-| `backups` | Logical backup run history | level: all_database/specific_database/table/row_condition |
-| `backup_schedules` | Named scheduled backups (CRUD) | cron_expr, level same as backups |
-| `audit_logs` | Admin overview + dev self-view | actor_id, action, target_type, details JSONB |
-| `general_logs` | General activity logging | metadata JSONB |
+| `reviews` | Ratings + moderation + soft delete | rating 1-5, is_moderated, deleted_at |
+| `place_images` | Image metadata (files in Supabase Storage) | place_id FK, storage_path, display_order |
 
 ## Gotchas
 
@@ -95,6 +91,11 @@ There are no lint, typecheck, or test scripts. `npm run build` is the only autom
 - **Vendor data is mock only** — location data centers on Phnom Penh (~11.55–11.57, 104.91–104.92)
 - **`patheat_user`** localStorage key holds serialized user with `token`; cleared on 401
 - **Map markers** use an in-memory marker pool (ID-based diffing) — markers are updated in-place instead of destroyed/recreated; event listeners on route-line are cleaned up on every route change to prevent leaks
-- **`roles` table is a registry only** — `users.role_scope` is still a CHECK constraint on 4 built-in values. Roles created via admin UI need Supabase CLI for actual assignment.
-- **Backups are logical only** — level determines scope: `all_database`/`specific_database`/`table`/`row_condition`. `backup_schedules` have a `cron_expr` text field and CRUD via API. No incremental/differential.
+- **No RLS, BYPASSRLS, or role hierarchy** — authorization is application-layer only (JWT → middleware → pg.Pool).
+- **`places.status` replaces `is_approved`** — uses TEXT CHECK (PENDING/APPROVED/REJECTED/SUSPENDED).
+- **`places.rating_avg` / `rating_count`** — pre-computed, updated via `refresh_place_rating()`.
+- **`reviews.deleted_at`** — soft delete; rating aggregates filter `WHERE deleted_at IS NULL`.
+- **Place images store paths only** — actual files live in Supabase Storage.
+- **Backup tables removed** — backups use `pg_dump` + cron + Supabase built-in features.
+- **`roles`, `audit_logs`, `general_logs` tables removed** — unused.
 - **No `orders` or `support_tickets` tables** — `VendorRepository.getOrderStats()` was removed. CS domain is eliminated (no more `/customer-service/*` routes).
