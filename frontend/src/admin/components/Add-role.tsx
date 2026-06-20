@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import api from "../../shared/services/axiosService";
+import type { AdminRole } from "../services/adminDashboardService";
 
 interface CreateRoleModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: () => void;
+  role?: AdminRole | null;
 }
 
 const availablePrivileges = [
@@ -20,27 +22,35 @@ const availablePrivileges = [
 ];
 
 const availableTables = [
-  "audit_logs",
   "bookmarks",
   "menu_items",
   "place_categories",
   "place_hours",
+  "place_images",
   "places",
   "reviews",
+  "role",
   "routes",
   "search_history",
-  "support_tickets",
-  "support_tips",
   "user_preferences",
   "users",
 ];
 
-export default function CreateRoleModal({ isOpen, onClose, onCreated }: CreateRoleModalProps) {
+export default function CreateRoleModal({ isOpen, onClose, onCreated, role }: CreateRoleModalProps) {
   const [roleName, setRoleName] = useState("");
   const [privileges, setPrivileges] = useState<string[]>([]);
   const [tables, setTables] = useState<string[]>([]);
   const [grantOption, setGrantOption] = useState(false);
   const [loading, setLoading] = useState(false);
+  const isEditing = Boolean(role);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setRoleName(role?.name ?? "");
+    setPrivileges(role?.privileges ?? []);
+    setTables(role?.tables ?? []);
+    setGrantOption(role?.grantOption ?? false);
+  }, [isOpen, role]);
 
   const togglePrivilege = (item: string) => {
     setPrivileges((prev) =>
@@ -62,15 +72,18 @@ export default function CreateRoleModal({ isOpen, onClose, onCreated }: CreateRo
 
     try {
       setLoading(true);
-      const response = await api.post("/admin/roles", {
+      const payload = {
         name: roleName.trim(),
         privileges,
         tables,
         grantOption,
-      });
+      };
+      const response = isEditing && role
+        ? await api.patch(`/admin/roles/${role.id}`, payload)
+        : await api.post("/admin/roles", payload);
 
       if (response.data.success) {
-        toast.success(`Role "${roleName.trim()}" created.`);
+        toast.success(`Role "${roleName.trim()}" ${isEditing ? "updated" : "created"}.`);
         setRoleName("");
         setPrivileges([]);
         setTables([]);
@@ -85,7 +98,7 @@ export default function CreateRoleModal({ isOpen, onClose, onCreated }: CreateRo
         error && typeof error === "object" && "response" in error
           ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
           : undefined;
-      toast.error(message || "Create role failed.");
+      toast.error(message || `${isEditing ? "Update" : "Create"} role failed.`);
     } finally {
       setLoading(false);
     }
@@ -97,7 +110,7 @@ export default function CreateRoleModal({ isOpen, onClose, onCreated }: CreateRo
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div className="relative z-50 bg-white rounded-xl shadow-xl w-full max-w-[700px] max-h-[calc(100vh-32px)] overflow-y-auto p-6">
         <div className="flex justify-between items-center mb-5">
-          <h2 className="text-xl font-bold text-[#0b1c30]">Create New Role</h2>
+          <h2 className="text-xl font-bold text-[#0b1c30]">{isEditing ? "Edit Role" : "Create New Role"}</h2>
           <button
             onClick={onClose}
             className="h-8 w-8 rounded-lg flex items-center justify-center text-[#334155] hover:bg-[#f1f5f9]"
@@ -173,7 +186,7 @@ export default function CreateRoleModal({ isOpen, onClose, onCreated }: CreateRo
             onClick={handleSubmit}
             className="bg-[#006e2f] text-white px-4 py-2 rounded-lg hover:bg-[#005a26] disabled:opacity-60"
           >
-            {loading ? "Creating..." : "Create"}
+            {loading ? "Saving..." : isEditing ? "Save" : "Create"}
           </button>
         </div>
       </div>

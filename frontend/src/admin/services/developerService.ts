@@ -14,17 +14,16 @@ export interface DeveloperBackup {
 }
 
 export const PROJECT_TABLES = [
-  "audit_logs",
   "bookmarks",
   "menu_items",
   "place_categories",
   "place_hours",
+  "place_images",
   "places",
   "reviews",
+  "role",
   "routes",
   "search_history",
-  "support_tickets",
-  "support_tips",
   "user_preferences",
   "users",
 ];

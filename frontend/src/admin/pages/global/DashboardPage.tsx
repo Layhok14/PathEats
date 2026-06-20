@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyRound, ShieldCheck, Table2, Unlock } from "lucide-react";
+import { KeyRound, Pencil, ShieldCheck, Table2, Trash2, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { TopBar } from "../../components/TopBar";
 import { MetricCard } from "../../components/MetricCard";
 import CreateRoleModal from "../../components/Add-role";
-import { getAdminRoles, type AdminRole } from "../../services/adminDashboardService";
+import { deleteAdminRole, getAdminRoles, type AdminRole } from "../../services/adminDashboardService";
 
 const PAGE_SIZE = 6;
 
@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
 
   const loadRoles = async () => {
     try {
@@ -60,12 +61,38 @@ export default function DashboardPage() {
   const grantableRoles = roles.filter((role) => role.grantOption).length;
   const totalPrivileges = roles.reduce((sum, role) => sum + role.privileges.length, 0);
 
+  const openCreateRole = () => {
+    setEditingRole(null);
+    setShowRoleModal(true);
+  };
+
+  const openEditRole = (role: AdminRole) => {
+    setEditingRole(role);
+    setShowRoleModal(true);
+  };
+
+  const handleDeleteRole = async (role: AdminRole) => {
+    if (!confirm(`Delete role "${role.name}"?`)) return;
+
+    try {
+      await deleteAdminRole(role.id);
+      toast.success(`Role "${role.name}" deleted.`);
+      await loadRoles();
+    } catch {
+      toast.error("Could not delete role.");
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <TopBar actionLabel="" />
       <CreateRoleModal
         isOpen={showRoleModal}
-        onClose={() => setShowRoleModal(false)}
+        role={editingRole}
+        onClose={() => {
+          setShowRoleModal(false);
+          setEditingRole(null);
+        }}
         onCreated={loadRoles}
       />
 
@@ -78,7 +105,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <button
-            onClick={() => setShowRoleModal(true)}
+            onClick={openCreateRole}
             className="inline-flex items-center gap-2 font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] shadow-sm px-3 py-1.5 text-[12px]"
           >
             Create role
@@ -122,7 +149,7 @@ export default function DashboardPage() {
           <table className="w-full">
             <thead>
               <tr className="bg-[#f8fafc]">
-                {["ROLE", "PRIVILEGES", "TABLE ACCESS", "GRANT OPTION", "CREATED"].map((header) => (
+                {["ROLE", "PRIVILEGES", "TABLE ACCESS", "GRANT OPTION", "CREATED", "ACTIONS"].map((header) => (
                   <th key={header} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{header}</th>
                 ))}
               </tr>
@@ -161,6 +188,24 @@ export default function DashboardPage() {
                     </span>
                   </td>
                   <td className="px-6 py-3 text-[13px] text-[#64748b]">{formatDate(role.createdAt)}</td>
+                  <td className="px-6 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditRole(role)}
+                        className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"
+                        title="Grant or revoke privileges"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRole(role)}
+                        className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"
+                        title="Delete role"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -46,6 +46,8 @@ router.get("/telemetry", catchAsync(adminController.getDashboardTelemetry));
  */
 router.get("/roles", catchAsync(adminController.getRoles));
 router.post("/roles", catchAsync(adminController.createRole));
+router.patch("/roles/:id", catchAsync(adminController.updateRoleRecord));
+router.delete("/roles/:id", catchAsync(adminController.deleteRoleRecord));
 
 /**
  * @swagger
@@ -56,6 +58,7 @@ router.post("/roles", catchAsync(adminController.createRole));
  *     security: [{ BearerAuth: [] }]
  */
 router.get("/users", catchAsync(adminController.getUsers));
+router.get("/user-management/overview", catchAsync(adminController.getUserManagementOverview));
 
 router.post("/users", catchAsync(adminController.createUser));
 
@@ -93,6 +96,7 @@ router.post("/users/:id/ban", catchAsync(async (req, res, next) => {
  *     security: [{ BearerAuth: [] }]
  */
 router.get("/vendors", catchAsync(adminController.getVendors));
+router.get("/vendor-management/overview", catchAsync(adminController.getVendorManagementOverview));
 
 router.get("/place-categories", catchAsync(adminController.getPlaceCategories));
 
@@ -105,6 +109,18 @@ router.get("/place-categories", catchAsync(adminController.getPlaceCategories));
  *     security: [{ BearerAuth: [] }]
  */
 router.post("/vendors/:id/approve", catchAsync(adminController.approveVendor));
+
+router.get("/stall-management/options", catchAsync(adminController.getStallManagementOptions));
+router.post("/stalls", catchAsync(adminController.createStall));
+router.delete("/stalls/:id", catchAsync(adminController.deleteStall));
+router.post("/stalls/:placeId/menu-items", catchAsync(adminController.createStallMenuItem));
+router.delete("/stalls/menu-items/:id", catchAsync(adminController.deleteStallMenuItem));
+router.post("/stalls/place-categories", catchAsync(adminController.createStallCategory));
+router.delete("/stalls/place-categories/:id", catchAsync(adminController.deleteStallCategory));
+router.post("/stalls/:placeId/place-hours", catchAsync(adminController.createStallPlaceHour));
+router.delete("/stalls/place-hours/:id", catchAsync(adminController.deleteStallPlaceHour));
+router.post("/stalls/:placeId/reviews", catchAsync(adminController.createStallReview));
+router.delete("/stalls/reviews/:id", catchAsync(adminController.deleteStallReview));
 
 /**
  * @swagger
