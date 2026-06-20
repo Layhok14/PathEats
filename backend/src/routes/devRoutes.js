@@ -22,30 +22,6 @@ router.get("/health", catchAsync(async (req, res) => {
 
 /**
  * @swagger
- * /api/dev/backups:
- *   get:
- *     tags: [Developer]
- *     summary: List backup records
- *     security: [{ BearerAuth: [] }]
- */
-router.get("/backups", catchAsync(async (req, res) => {
-  res.json({ success: true, data: [] });
-}));
-
-/**
- * @swagger
- * /api/dev/backups:
- *   post:
- *     tags: [Developer]
- *     summary: Trigger a new backup
- *     security: [{ BearerAuth: [] }]
- */
-router.post("/backups", catchAsync(async (req, res) => {
-  res.status(201).json({ success: true, data: { message: "Trigger backup — implement" } });
-}));
-
-/**
- * @swagger
  * /api/dev/database:
  *   get:
  *     tags: [Developer]

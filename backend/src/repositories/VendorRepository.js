@@ -50,7 +50,7 @@ class VendorRepository {
         data.price_range || null,
         data.longitude || 104.9282,
         data.latitude || 11.5564,
-        data.status || "active",
+        data.status || "APPROVED",
         data.is_open !== false,
       ]
     );
@@ -98,14 +98,40 @@ class VendorRepository {
   }
 
   /**
+   * Find a stall by id (admin — no ownership check).
+   */
+  async findById(id) {
+    const { rows } = await db.query(
+      `SELECT p.*, pc.slug AS category_slug, pc.name AS category_name
+       FROM places p
+       LEFT JOIN place_categories pc ON pc.id = p.category_id
+       WHERE p.id = $1
+       LIMIT 1`,
+      [id]
+    );
+    return rows[0] || null;
+  }
+
+  /**
+   * Update stall status (approve/reject/suspend).
+   */
+  async updateStatus(id, status) {
+    const { rows } = await db.query(
+      `UPDATE places SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [status, id]
+    );
+    return rows[0] || null;
+  }
+
+  /**
    * Get dashboard metrics for a vendor.
    */
   async getDashboardMetrics(ownerId) {
     const { rows } = await db.query(
       `SELECT
          COUNT(*)::int AS total_stalls,
-         COUNT(*) FILTER (WHERE status = 'active' AND is_open = TRUE)::int AS open_stalls,
-         COALESCE(AVG(rating), 0)::float AS avg_rating
+         COUNT(*) FILTER (WHERE status = 'APPROVED' AND is_open = TRUE)::int AS open_stalls,
+         COALESCE(AVG(rating_avg), 0)::float AS avg_rating
        FROM places
        WHERE owner_id = $1`,
       [ownerId]
