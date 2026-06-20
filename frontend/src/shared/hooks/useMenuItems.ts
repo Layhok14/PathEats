@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import type { VendorMenuItem as MenuItem, MenuCategory } from "../types";
 
 const INITIAL: MenuItem[] = [
@@ -28,21 +28,21 @@ export function getMenuItemById(id: string): MenuItem | undefined {
 export function useMenuItems(filterCategory: MenuCategory = "All") {
   const [items, setItems] = useState<MenuItem[]>(menuDb);
 
-  const refresh = useCallback(() => setItems([...menuDb]), []);
+  const refresh = () => setItems([...menuDb]);
 
   const filtered = (filterCategory === "All" ? items : items.filter((i) => i.category === filterCategory));
   const allItems = items;
 
-  const createItem = useCallback(async (data: MenuItemFormData): Promise<MenuItem> => {
+  const createItem = async (data: MenuItemFormData): Promise<MenuItem> => {
     await new Promise((r) => setTimeout(r, 300));
     const item: MenuItem = { ...data, id: `mi-${Date.now()}` };
     menuDb = [...menuDb, item];
     setItems([...menuDb]);
     return item;
-  }, []);
+  }
 
   // Fork: creates a new item with modified properties (used when editing from stall context)
-  const forkItem = useCallback(async (sourceId: string, changes: Partial<MenuItemFormData>): Promise<MenuItem> => {
+  const forkItem = async (sourceId: string, changes: Partial<MenuItemFormData>): Promise<MenuItem> => {
     const source = menuDb.find((m) => m.id === sourceId);
     if (!source) throw new Error("Item not found");
     await new Promise((r) => setTimeout(r, 300));
@@ -50,19 +50,19 @@ export function useMenuItems(filterCategory: MenuCategory = "All") {
     menuDb = [...menuDb, forked];
     setItems([...menuDb]);
     return forked;
-  }, []);
+  }
 
-  const updateItem = useCallback(async (id: string, data: Partial<MenuItemFormData>): Promise<void> => {
+  const updateItem = async (id: string, data: Partial<MenuItemFormData>): Promise<void> => {
     await new Promise((r) => setTimeout(r, 300));
     menuDb = menuDb.map((m) => m.id === id ? { ...m, ...data } : m);
     setItems([...menuDb]);
-  }, []);
+  }
 
-  const deleteItem = useCallback(async (id: string): Promise<void> => {
+  const deleteItem = async (id: string): Promise<void> => {
     await new Promise((r) => setTimeout(r, 300));
     menuDb = menuDb.filter((m) => m.id !== id);
     setItems([...menuDb]);
-  }, []);
+  }
 
   return { items: filtered, allItems, refresh, createItem, forkItem, updateItem, deleteItem };
 }

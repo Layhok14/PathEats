@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import maplibregl from "maplibre-gl";
 import {
   PHNOM_PENH_CENTER,
@@ -271,13 +271,6 @@ export function useMaplibreMap({
       }
     });
   }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleWaypointAdded = useCallback(
-    (lat, lng) => {
-      onWaypointAdded(lat, lng);
-    },
-    [onWaypointAdded],
-  );
 
   return { mapDivRef, mapReady };
 }

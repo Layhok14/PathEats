@@ -1,10 +1,6 @@
 import db from "../config/db.js";
-import BaseRepository from "./BaseRepository.js";
 
-class UserRepository extends BaseRepository {
-  constructor() {
-    super("users");
-  }
+class UserRepository {
 
   /**
    * Find a user by email (case-insensitive).

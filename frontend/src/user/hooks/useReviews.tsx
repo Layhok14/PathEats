@@ -1,7 +1,7 @@
 // Mock data hook — manages reviews for a single vendor.
 // Replace STORE with real API calls (GET /api/review/:vendorId, POST /api/review).
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 
 // In-memory store resets on page reload; sufficient until backend is wired
 const STORE = [
@@ -48,17 +48,14 @@ const STORE = [
  * @returns {{ reviews: object[], submit: (payload: object) => Promise<void>, submitting: boolean }}
  */
 export function useReviews(vendorId) {
-  const [reviews, setReviews] = useState([]);
+  const [version, setVersion] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    // TODO: replace with GET /api/review/:vendorId
-    setReviews(
-      STORE.filter((r) => r.vendor_id === vendorId).sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at),
-      ),
+  const reviews = useMemo(() => {
+    return STORE.filter((r) => r.vendor_id === vendorId).sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at),
     );
-  }, [vendorId]);
+  }, [vendorId, version]);
 
   async function submit(payload) {
     // TODO: replace with POST /api/review
@@ -74,7 +71,7 @@ export function useReviews(vendorId) {
         created_at: new Date().toISOString(),
       };
       STORE.unshift(review);
-      setReviews((prev) => [review, ...prev]);
+      setVersion((v) => v + 1);
     } finally {
       setSubmitting(false);
     }

@@ -3,7 +3,7 @@
 
 // MapLibre GL styles
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { PenLine, Eye, BookmarkPlus, HelpCircle, X, Loader2 } from "lucide-react";
 
@@ -161,7 +161,7 @@ export default function UserSearchPage() {
     setLeftNavTab("route");
   }
 
-  const handleWaypointAdded = useCallback((lat, lng) => {
+  function handleWaypointAdded(lat, lng) {
     setRoutePoints((prev) => {
       let bestIdx = 1,
         bestDist = Infinity;
@@ -179,7 +179,7 @@ export default function UserSearchPage() {
       n.splice(bestIdx, 0, [lat, lng]);
       return n;
     });
-  }, []);
+  }
 
     const { mapDivRef } = useMaplibreMap({
     darkMode,

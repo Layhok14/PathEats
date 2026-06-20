@@ -12,3 +12,6 @@ coverage/      # test coverage
 .vscode
 **.sql
 to-integrate/
+
+.opencode/
+opencode.json

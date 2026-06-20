@@ -1,10 +1,6 @@
 import db from "../config/db.js";
-import BaseRepository from "./BaseRepository.js";
 
-class VendorRepository extends BaseRepository {
-  constructor() {
-    super("places");
-  }
+class VendorRepository {
 
   /**
    * Find all stalls owned by a vendor.
@@ -117,25 +113,6 @@ class VendorRepository extends BaseRepository {
     return rows[0];
   }
 
-  /**
-   * Get dashboard order stats (if orders table exists).
-   */
-  async getOrderStats(ownerId) {
-    try {
-      const { rows } = await db.query(
-        `SELECT
-           COUNT(*)::int AS total_orders,
-           COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_orders
-         FROM orders o
-         JOIN places p ON p.id = o.place_id
-         WHERE p.owner_id = $1`,
-        [ownerId]
-      );
-      return rows[0];
-    } catch {
-      return { total_orders: 0, pending_orders: 0 };
-    }
-  }
 }
 
 export default VendorRepository;

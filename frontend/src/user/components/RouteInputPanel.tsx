@@ -1,6 +1,5 @@
 // Route input panel — origin/dest autocomplete, range slider, recent saved routes.
 
-import { useMemo } from "react";
 import { Search, Navigation2, Clock, ChevronRight, Loader2 } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import {

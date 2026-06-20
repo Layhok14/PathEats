@@ -12,13 +12,7 @@ class VendorService {
    * @param {string} ownerId — the vendor's user ID
    */
   async getDashboard(ownerId) {
-    const metrics = await this.vendorRepo.getDashboardMetrics(ownerId);
-    const orderStats = await this.vendorRepo.getOrderStats(ownerId);
-
-    return {
-      ...metrics,
-      ...orderStats,
-    };
+    return this.vendorRepo.getDashboardMetrics(ownerId);
   }
 
   /**

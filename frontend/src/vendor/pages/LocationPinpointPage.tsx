@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { useStalls } from "../../shared/hooks/useStalls";
@@ -77,23 +77,21 @@ export function LocationPinpointPage() {
     setDragging(true);
   }
 
-  const onMouseMove = useCallback((e: MouseEvent) => {
-    if (!dragging || !mapRef.current) return;
-    setPin(getRelativePos(e));
-  }, [dragging]);
-
-  const onMouseUp = useCallback(() => setDragging(false), []);
-
   useEffect(() => {
-    if (dragging) {
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-    }
+    if (!dragging || !mapRef.current) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      setPin(getRelativePos(e));
+    };
+    const onMouseUp = () => setDragging(false);
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [dragging, onMouseMove, onMouseUp]);
+  }, [dragging]);
 
   async function handleConfirm() {
     if (id && stall) {
