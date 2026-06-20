@@ -6,11 +6,26 @@ function isValidCoord(obj) {
     && isFinite(obj.lat) && isFinite(obj.lng);
 }
 
+const PHNOM_PENH_CENTER = { lat: 11.5564, lng: 104.9282 };
+
+function createFallbackRoute(origin, destination) {
+  const validOrigin = isValidCoord(origin) ? origin : PHNOM_PENH_CENTER;
+  const validDest = isValidCoord(destination) ? destination : PHNOM_PENH_CENTER;
+  
+  if (validOrigin.lat === validDest.lat && validOrigin.lng === validDest.lng) {
+    const offset = 0.01;
+    return interpolateRoute(validOrigin, { 
+      lat: validDest.lat + offset, 
+      lng: validDest.lng + offset 
+    });
+  }
+  return interpolateRoute(validOrigin, validDest);
+}
+
 export async function getRoute(origin, destination) {
   if (!isValidCoord(origin) || !isValidCoord(destination)) {
-    console.warn("[routeService] Invalid origin/destination — using Phnom Penh center as fallback");
-    const pp = { lat: 11.5564, lng: 104.9282 };
-    return interpolateRoute(pp, pp);
+    console.warn("[routeService] Invalid origin/destination — using fallback route");
+    return createFallbackRoute(origin, destination);
   }
 
   const coords = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
@@ -28,6 +43,6 @@ export async function getRoute(origin, destination) {
     return pts;
   } catch (err) {
     console.warn("[routeService] OSRM unavailable, using interpolated route:", err.message);
-    return interpolateRoute(origin, destination);
+    return createFallbackRoute(origin, destination);
   }
 }

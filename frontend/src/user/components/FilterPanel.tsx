@@ -1,12 +1,13 @@
-// Filter sidebar — search, cuisine chips, price tier, open-now toggle.
-// Vendor cards moved to the horizontal map strip; this panel only handles filters.
+// Filter sidebar — search, cuisine chips, price tier, open-now toggle, and vendor list.
 
 import { Filter, Search, ArrowLeft, X } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { CUISINES, PRICE_LABELS } from "../../shared/constants/appConfig";
+import { VendorCard } from "./VendorCard";
 
 /**
  * @param {{ originText:string, destText:string, vendorCount:number,
+ *           scoredVendors:object[], onSelectVendor:(v:object)=>void,
  *           filterCuisine:string, setFilterCuisine:(c:string)=>void,
  *           filterMaxPrice:number, setFilterMaxPrice:(p:number)=>void,
  *           filterOpenNow:boolean, setFilterOpenNow:(v:boolean)=>void,
@@ -17,6 +18,8 @@ export function FilterPanel({
   originText,
   destText,
   vendorCount,
+  scoredVendors,
+  onSelectVendor,
   filterCuisine,
   setFilterCuisine,
   filterMaxPrice,
@@ -193,6 +196,29 @@ export function FilterPanel({
           <p className="text-xs text-center py-4" style={{ color: tm.text4 }}>
             No vendors match these filters.
           </p>
+        )}
+
+        {/* Vendor list */}
+        {scoredVendors && scoredVendors.length > 0 && (
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: tm.border }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: tm.text4 }}>
+                Vendors ({scoredVendors.length})
+              </span>
+            </div>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto [&::-webkit-scrollbar]:w-1">
+              {scoredVendors.map((v, i) => (
+                <VendorCard
+                  key={v.id}
+                  vendor={v}
+                  rank={i + 1}
+                  isFavorite={false}
+                  onSelect={() => onSelectVendor(v)}
+                  onToggleFavorite={(e) => { e.stopPropagation(); }}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

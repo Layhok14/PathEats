@@ -1,5 +1,6 @@
 // Route input panel — origin/dest autocomplete, range slider, recent saved routes.
 
+import { useMemo } from "react";
 import { Search, Navigation2, Clock, ChevronRight, Loader2 } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import {
@@ -20,6 +21,10 @@ import {
  *           onLoadRoute:(r:object)=>void,
  *           onViewMoreHistory:()=>void, onFindRoute:()=>void }} props
  */
+function findPlaceByName(name) {
+  return PLACES.find((p) => p.name.toLowerCase() === name.toLowerCase());
+}
+
 export function RouteInputPanel({
   originText,
   setOriginText,
@@ -49,6 +54,26 @@ export function RouteInputPanel({
     p.name.toLowerCase().includes(destText.toLowerCase()),
   );
   const recentRoutes = savedRoutes.slice(0, 5);
+
+  const handleOriginChange = (value) => {
+    setOriginText(value);
+    const matched = findPlaceByName(value);
+    if (matched) setOriginPlace(matched);
+  };
+
+  const handleDestChange = (value) => {
+    setDestText(value);
+    const matched = findPlaceByName(value);
+    if (matched) setDestPlace(matched);
+  };
+
+  const handleFindRouteClick = () => {
+    const originMatched = findPlaceByName(originText);
+    const destMatched = findPlaceByName(destText);
+    if (originMatched) setOriginPlace(originMatched);
+    if (destMatched) setDestPlace(destMatched);
+    onFindRoute();
+  };
 
   const inp = {
     background: tm.inputBg,
@@ -85,7 +110,7 @@ export function RouteInputPanel({
         <div className="w-2 h-2 rounded-full absolute left-3 top-1/2 -translate-y-1/2 shrink-0 bg-emerald-400" />
         <input
           value={originText}
-          onChange={(e) => setOriginText(e.target.value)}
+          onChange={(e) => handleOriginChange(e.target.value)}
           onFocus={() => setOriginFocus(true)}
           onBlur={() => setTimeout(() => setOriginFocus(false), 150)}
           placeholder="From — start point"
@@ -122,7 +147,7 @@ export function RouteInputPanel({
         <div className="w-2 h-2 rounded-full absolute left-3 top-1/2 -translate-y-1/2 shrink-0 bg-red-400" />
         <input
           value={destText}
-          onChange={(e) => setDestText(e.target.value)}
+          onChange={(e) => handleDestChange(e.target.value)}
           onFocus={() => setDestFocus(true)}
           onBlur={() => setTimeout(() => setDestFocus(false), 150)}
           placeholder="To — destination"
@@ -156,7 +181,7 @@ export function RouteInputPanel({
 
       <button
         disabled={!originText.trim() || !destText.trim() || loadingRoute}
-        onClick={onFindRoute}
+        onClick={handleFindRouteClick}
         className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: tm.primary, color: tm.primaryText }}
       >

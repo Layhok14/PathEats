@@ -200,6 +200,7 @@ export default function UserSearchPage() {
   });
 
   const stripVisible = routeReady && !editRouteMode && scoredVendors.length > 0;
+  const hasRoute = routeReady && routePoints.length >= 2;
 
   return (
     <div
@@ -343,6 +344,8 @@ export default function UserSearchPage() {
                 originText={originText}
                 destText={destText}
                 vendorCount={scoredVendors.length}
+                scoredVendors={scoredVendors}
+                onSelectVendor={setSelectedVendor}
                 filterCuisine={filterCuisine}
                 setFilterCuisine={setFilterCuisine}
                 filterMaxPrice={filterMaxPrice}
@@ -370,7 +373,7 @@ export default function UserSearchPage() {
         <div
           ref={mapDivRef}
           className="w-full transition-[height] duration-200"
-          style={{ height: stripVisible ? "calc(100% - 116px)" : "100%" }}
+          style={{ height: hasRoute ? "calc(100% - 116px)" : "100%" }}
         />
 
         {/* Edit mode banner */}
@@ -481,7 +484,7 @@ export default function UserSearchPage() {
         </div>
 
         {/* Horizontal vendor strip */}
-        {stripVisible && (
+        {hasRoute && (
           <div
             className="absolute bottom-0 left-0 right-0 z-[300]"
             style={{
@@ -494,58 +497,67 @@ export default function UserSearchPage() {
             <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden">
               <div
                 className="flex gap-2 px-4 py-3"
-                style={{ width: "max-content" }}
+                style={{ width: "max-content", minWidth: "100%" }}
               >
-                {scoredVendors.map((v, i) => {
-                  const isSelected = selectedVendor?.id === v.id;
-                  return (
-                    <button
-                      key={v.id}
-                      onClick={() => setSelectedVendor(v)}
-                      className="relative shrink-0 rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95"
-                      style={{
-                        width: 72,
-                        height: 92,
-                        outline: isSelected ? `2.5px solid #22c55e` : "none",
-                        outlineOffset: 1,
-                      }}
-                    >
-                      <img
-                        src={v.photo_url}
-                        alt={v.name}
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <div
-                        className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold text-white"
+                {scoredVendors.length > 0 ? (
+                  scoredVendors.map((v, i) => {
+                    const isSelected = selectedVendor?.id === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setSelectedVendor(v)}
+                        className="relative shrink-0 rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95"
                         style={{
-                          background: "#10b981",
-                          boxShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                          width: 72,
+                          height: 92,
+                          outline: isSelected ? `2.5px solid #22c55e` : "none",
+                          outlineOffset: 1,
                         }}
                       >
-                        {i + 1}
-                      </div>
-                      <div
-                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
-                        style={{
-                          background: v.open_now
-                            ? "#00d492"
-                            : "rgba(255,255,255,0.3)",
-                        }}
-                      />
-                      <div
-                        className="absolute bottom-0 left-0 right-0 pt-6 pb-1 px-1.5"
-                        style={{
-                          background:
-                            "linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0))",
-                        }}
-                      >
-                        <p className="text-[6.5px] font-semibold text-white text-center leading-tight line-clamp-2">
-                          {v.name}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
+                        <img
+                          src={v.photo_url}
+                          alt={v.name}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                        <div
+                          className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold text-white"
+                          style={{
+                            background: "#10b981",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          {i + 1}
+                        </div>
+                        <div
+                          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
+                          style={{
+                            background: v.open_now
+                              ? "#00d492"
+                              : "rgba(255,255,255,0.3)",
+                          }}
+                        />
+                        <div
+                          className="absolute bottom-0 left-0 right-0 pt-6 pb-1 px-1.5"
+                          style={{
+                            background:
+                              "linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0))",
+                          }}
+                        >
+                          <p className="text-[6.5px] font-semibold text-white text-center leading-tight line-clamp-2">
+                            {v.name}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div
+                    className="flex items-center justify-center text-sm px-4"
+                    style={{ color: tm.text4, minWidth: "200px" }}
+                  >
+                    No vendors found. Try adjusting filters or range.
+                  </div>
+                )}
               </div>
             </div>
           </div>
