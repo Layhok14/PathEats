@@ -46,6 +46,13 @@ export function scoreColor(score) {
 
 /** Linear interpolation with a subtle sine bow to suggest a real road path */
 export function interpolateRoute(from, to) {
+  // Guard against NaN inputs
+  if (!from || !to || !isFinite(from.lat) || !isFinite(from.lng) || !isFinite(to.lat) || !isFinite(to.lng)) {
+    console.warn("[geoUtils] interpolateRoute received invalid coords, using fallback");
+    const pp = { lat: 11.5564, lng: 104.9282 };
+    from = pp;
+    to = pp;
+  }
   const steps = 10;
   return Array.from({ length: steps + 1 }, (_, i) => {
     const t = i / steps;

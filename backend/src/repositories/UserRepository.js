@@ -1,10 +1,6 @@
 import db from "../config/db.js";
-import BaseRepository from "./BaseRepository.js";
 
-class UserRepository extends BaseRepository {
-  constructor() {
-    super("users");
-  }
+class UserRepository {
 
   /**
    * Find a user by email (case-insensitive).
@@ -38,6 +34,60 @@ class UserRepository extends BaseRepository {
     const { rows } = await db.query(
       `SELECT id, email, first_name, last_name, phone_number, role_scope, is_banned, created_at FROM users WHERE id = $1`,
       [id]
+    );
+    return rows[0] || null;
+  }
+
+  /**
+   * List all users with pagination and optional role filter.
+   */
+  async findAll({ page = 1, limit = 20, role_scope } = {}) {
+    const offset = (page - 1) * limit;
+    let whereClause = "";
+    const params = [];
+    let idx = 1;
+
+    if (role_scope) {
+      whereClause = `WHERE role_scope = $${idx++}`;
+      params.push(role_scope);
+    }
+
+    const { rows: users } = await db.query(
+      `SELECT id, email, first_name, last_name, phone_number, role_scope, is_banned, created_at, updated_at
+       FROM users ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT $${idx++} OFFSET $${idx++}`,
+      [...params, limit, offset]
+    );
+
+    const { rows: countResult } = await db.query(
+      `SELECT COUNT(*)::int AS total FROM users ${whereClause}`,
+      params
+    );
+
+    return { users, total: countResult[0].total, page, limit };
+  }
+
+  /**
+   * Update a user's role_scope.
+   */
+  async updateRole(id, role_scope) {
+    const { rows } = await db.query(
+      `UPDATE users SET role_scope = $1, updated_at = NOW() WHERE id = $2
+       RETURNING id, email, first_name, last_name, role_scope, is_banned, created_at`,
+      [role_scope, id]
+    );
+    return rows[0] || null;
+  }
+
+  /**
+   * Set a user's ban status.
+   */
+  async setBanStatus(id, banned) {
+    const { rows } = await db.query(
+      `UPDATE users SET is_banned = $1, updated_at = NOW() WHERE id = $2
+       RETURNING id, email, first_name, last_name, role_scope, is_banned, created_at`,
+      [banned, id]
     );
     return rows[0] || null;
   }

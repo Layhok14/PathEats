@@ -1,15 +1,4 @@
-/**
- * VendorModel — validates vendor/stall data shape.
- *
- * The `places` table stores all business locations.
- * A vendor "stall" is a `places` row with owner_id = vendor's user id.
- */
 class VendorModel {
-  /**
-   * Validate stall creation input.
-   * @param {object} data
-   * @returns {{ valid: boolean, errors: string[] }}
-   */
   static validateCreate(data) {
     const errors = [];
 
@@ -34,9 +23,6 @@ class VendorModel {
     return { valid: errors.length === 0, errors };
   }
 
-  /**
-   * Validate stall update input.
-   */
   static validateUpdate(data) {
     const errors = [];
 
@@ -53,9 +39,6 @@ class VendorModel {
     return { valid: errors.length === 0, errors };
   }
 
-  /**
-   * Shape of a stall returned to clients.
-   */
   static toResponse(row) {
     return {
       id: row.id,
@@ -67,9 +50,9 @@ class VendorModel {
       address: row.address,
       photo_url: row.photo_url,
       price_range: row.price_range,
-      rating: row.rating,
+      rating_avg: row.rating_avg,
+      rating_count: row.rating_count,
       is_open: row.is_open,
-      is_approved: row.is_approved,
       status: row.status,
       location: row.location
         ? { latitude: row.location.y, longitude: row.location.x }

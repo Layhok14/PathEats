@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import api from "../services/axiosService";
 import type { Stall, StallFormData } from "../types";
 
@@ -12,7 +12,7 @@ export function useStalls() {
     fetchStalls();
   }, []);
 
-  const fetchStalls = useCallback(async () => {
+  const fetchStalls = async () => {
     setLoading(true);
     setError(null);
     try {
@@ -23,14 +23,11 @@ export function useStalls() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  const getStall = useCallback(
-    (id: string) => stalls.find((s) => s.id === id) ?? null,
-    [stalls]
-  );
+  const getStall = (id: string) => stalls.find((s) => s.id === id) ?? null;
 
-  const createStall = useCallback(async (formData: StallFormData): Promise<Stall> => {
+  const createStall = async (formData: StallFormData): Promise<Stall> => {
     setLoading(true);
     setError(null);
     try {
@@ -54,9 +51,9 @@ export function useStalls() {
       setLoading(false);
       throw err;
     }
-  }, []);
+  }
 
-  const updateStall = useCallback(async (id: string, formData: Partial<StallFormData>): Promise<void> => {
+  const updateStall = async (id: string, formData: Partial<StallFormData>): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -69,9 +66,9 @@ export function useStalls() {
       setLoading(false);
       throw err;
     }
-  }, []);
+  }
 
-  const deleteStall = useCallback(async (id: string): Promise<void> => {
+  const deleteStall = async (id: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
@@ -83,7 +80,7 @@ export function useStalls() {
       setLoading(false);
       throw err;
     }
-  }, []);
+  }
 
   return { stalls, loading, error, getStall, createStall, updateStall, deleteStall, refetch: fetchStalls };
 }

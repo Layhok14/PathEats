@@ -1,13 +1,10 @@
 import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
-import {
-  getDashboard,
-  getStalls,
-  createStall,
-  getStallById,
-} from "../controllers/vendorController.js";
+import { catchAsync } from "../utils/catchAsync.js";
+import VendorService from "../services/VendorService.js";
 
+const vendorService = new VendorService();
 const router = Router();
 
 // All vendor routes require authentication + VENDOR role
@@ -25,7 +22,11 @@ router.use(restrictToRoles("VENDOR"));
  *       200:
  *         description: Dashboard stats (total_stalls, open_stalls, avg_rating, orders)
  */
-router.get("/dashboard", getDashboard);
+router.get("/dashboard", catchAsync(async (req, res) => {
+  const ownerId = req.user.sub;
+  const data = await vendorService.getDashboard(ownerId);
+  res.json({ success: true, data });
+}));
 
 /**
  * @swagger
@@ -38,7 +39,11 @@ router.get("/dashboard", getDashboard);
  *       200:
  *         description: Array of stalls
  */
-router.get("/stalls", getStalls);
+router.get("/stalls", catchAsync(async (req, res) => {
+  const ownerId = req.user.sub;
+  const stalls = await vendorService.getStalls(ownerId);
+  res.json({ success: true, data: stalls });
+}));
 
 /**
  * @swagger
@@ -70,7 +75,11 @@ router.get("/stalls", getStalls);
  *       400:
  *         description: Validation error
  */
-router.post("/stalls", createStall);
+router.post("/stalls", catchAsync(async (req, res) => {
+  const ownerId = req.user.sub;
+  const stall = await vendorService.createStall(ownerId, req.body);
+  res.status(201).json({ success: true, data: stall });
+}));
 
 /**
  * @swagger
@@ -90,6 +99,10 @@ router.post("/stalls", createStall);
  *       404:
  *         description: Stall not found
  */
-router.get("/stalls/:id", getStallById);
+router.get("/stalls/:id", catchAsync(async (req, res) => {
+  const ownerId = req.user.sub;
+  const stall = await vendorService.getStallById(ownerId, req.params.id);
+  res.json({ success: true, data: stall });
+}));
 
 export default router;

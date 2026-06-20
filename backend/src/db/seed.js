@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import paths from '../utils/path.js';
+import { fileURLToPath } from 'url';
 import db from '../config/db.js';
 
-const seeder_file = path.join(paths.db,'new-seed.sql')
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const seeder_file = path.join(__dirname, 'seed-data.sql');
 
 async function runSeed() {
     console.log('Reading seed file...');
