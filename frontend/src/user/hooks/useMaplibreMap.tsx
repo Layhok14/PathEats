@@ -71,10 +71,11 @@ export function useMaplibreMap({
 }) {
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
-  const vendorMarkersRef = useRef([]);
+  const vendorMarkersRef = useRef(new Map());
   const endpointMarkersRef = useRef([]);
   const ghostMarkerRef = useRef(null);
   const editModeRef = useRef(false);
+  const routeListenersRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
 
@@ -113,36 +114,53 @@ export function useMaplibreMap({
     });
   }, [darkMode]);
 
-  // Helper to convert points [lat,lng] -> [lng,lat]
   const toLngLat = (pt) => [pt[1], pt[0]];
 
   // Route polyline
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
-    // remove existing source/layer if present
-    if (map.getLayer("route-line")) map.removeLayer("route-line");
-    if (map.getSource("route")) map.removeSource("route");
 
-    if (!routePoints || routePoints.length < 2) return;
+    // Cleanup previous listeners
+    if (routeListenersRef.current) {
+      const { mousemove, mouseleave, click } = routeListenersRef.current;
+      map.off("mousemove", "route-line", mousemove);
+      map.off("mouseleave", "route-line", mouseleave);
+      map.off("click", "route-line", click);
+      routeListenersRef.current = null;
+    }
+
+    if (!routePoints || routePoints.length < 2) {
+      if (map.getLayer("route-line")) map.removeLayer("route-line");
+      if (map.getSource("route")) map.removeSource("route");
+      return;
+    }
 
     const coords = routePoints.map((p) => toLngLat(p));
-    map.addSource("route", {
-      type: "geojson",
-      data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } },
-    });
-    map.addLayer({
-      id: "route-line",
-      type: "line",
-      source: "route",
-      layout: { "line-join": "round", "line-cap": "round" },
-      paint: { "line-color": "#3B82F6", "line-width": 4, "line-opacity": 0.85 },
-    });
+
+    // Add or update route source+layer
+    if (map.getSource("route")) {
+      map.getSource("route").setData({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: coords },
+      });
+    } else {
+      map.addSource("route", {
+        type: "geojson",
+        data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } },
+      });
+      map.addLayer({
+        id: "route-line",
+        type: "line",
+        source: "route",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": "#3B82F6", "line-width": 4, "line-opacity": 0.85 },
+      });
+    }
 
     // Endpoint markers
     endpointMarkersRef.current.forEach((m) => m.remove());
     endpointMarkersRef.current = [];
-    // Guard against NaN coordinates from failed route calculations
     const first = coords[0];
     const last = coords[coords.length - 1];
     if (!first || !last || isNaN(first[0]) || isNaN(first[1]) || isNaN(last[0]) || isNaN(last[1])) {
@@ -184,18 +202,22 @@ export function useMaplibreMap({
     const ghostMarker = new maplibregl.Marker(ghostEl).setLngLat(coords[0]);
     ghostMarkerRef.current = ghostMarker;
 
-    map.on("mousemove", "route-line", (e) => {
+    const onMouseMove = (e) => {
       if (!editModeRef.current) return;
-      const lnglat = e.lngLat;
-      ghostMarker.setLngLat(lnglat);
+      ghostMarker.setLngLat(e.lngLat);
       if (!ghostMarker._map) ghostMarker.addTo(map);
-    });
-    map.on("mouseleave", "route-line", () => {
+    };
+    const onMouseLeave = () => {
       ghostMarker.remove();
-    });
-    map.on("click", "route-line", (e) => {
+    };
+    const onClick = (e) => {
       if (editModeRef.current) onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
-    });
+    };
+
+    map.on("mousemove", "route-line", onMouseMove);
+    map.on("mouseleave", "route-line", onMouseLeave);
+    map.on("click", "route-line", onClick);
+    routeListenersRef.current = { mousemove: onMouseMove, mouseleave: onMouseLeave, click: onClick };
 
     // Fit bounds
     const bounds = coords.reduce(
@@ -205,22 +227,50 @@ export function useMaplibreMap({
     map.fitBounds(bounds, { padding: 40 });
   }, [mapReady, routePoints, styleVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vendor markers
+  // Vendor markers — marker pool with ID-based diffing
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
-    const map = mapRef.current;
-    // remove old markers
-    vendorMarkersRef.current.forEach((m) => m.remove());
-    vendorMarkersRef.current = [];
-    if (!routeReady || editRouteMode) return;
+    if (!routeReady || editRouteMode) {
+      vendorMarkersRef.current.forEach((entry) => entry.marker.remove());
+      vendorMarkersRef.current.clear();
+      return;
+    }
 
-    scoredVendors.forEach((v, i) => {
-      const el = makeVendorElement(i + 1, v.final_score, selectedVendorId === v.id);
-      const marker = new maplibregl.Marker(el).setLngLat([v.lng, v.lat]).addTo(map);
-      el.addEventListener("click", () => onSelectVendor(v));
-      vendorMarkersRef.current.push(marker);
+    const map = mapRef.current;
+    const prev = vendorMarkersRef.current;
+    const ids = new Set(scoredVendors.map((v) => v.id));
+
+    // Remove stale markers
+    prev.forEach((entry, id) => {
+      if (!ids.has(id)) {
+        entry.marker.remove();
+        prev.delete(id);
+      }
     });
-  }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode, styleVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Add/update current vendors
+    scoredVendors.forEach((v, i) => {
+      const existing = prev.get(v.id);
+      const isSelected = selectedVendorId === v.id;
+      const bg = isSelected ? "#3B82F6" : scoreColor(v.final_score);
+
+      if (existing) {
+        existing.marker.setLngLat([v.lng, v.lat]);
+        const el = existing.marker.getElement();
+        if (el.style.background !== bg) el.style.background = bg;
+        el.style.boxShadow = isSelected
+          ? "0 0 0 4px rgba(59,130,246,0.35),0 3px 12px rgba(0,0,0,0.6)"
+          : "0 3px 12px rgba(0,0,0,0.5)";
+        const span = el.querySelector("span");
+        if (span) span.textContent = String(i + 1);
+      } else {
+        const el = makeVendorElement(i + 1, v.final_score, isSelected);
+        const marker = new maplibregl.Marker(el).setLngLat([v.lng, v.lat]).addTo(map);
+        el.addEventListener("click", () => onSelectVendor(v));
+        prev.set(v.id, { marker });
+      }
+    });
+  }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleWaypointAdded = useCallback(
     (lat, lng) => {
