@@ -46,6 +46,23 @@ class PlaceRepository {
     return rows;
   }
 
+  async getMenuItemsForPlaces(placeIds) {
+    if (placeIds.length === 0) return {};
+    const { rows } = await db.query(
+      `SELECT place_id, name, price, description, category
+       FROM menu_items
+       WHERE place_id = ANY($1::uuid[]) AND is_available = TRUE
+       ORDER BY category, name`,
+      [placeIds]
+    );
+    const grouped = {};
+    for (const row of rows) {
+      if (!grouped[row.place_id]) grouped[row.place_id] = [];
+      grouped[row.place_id].push({ name: row.name, price: row.price, description: row.description, category: row.category });
+    }
+    return grouped;
+  }
+
   async getReviews(placeId) {
     const { rows } = await db.query(
       `SELECT r.id, r.place_id AS vendor_id, r.user_id, r.rating AS stars,

@@ -59,7 +59,9 @@ export default function UserSearchPage() {
   const [savedRoutes, setSavedRoutes] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
 
-  const scoredVendors = useVendors({
+  const [debugShowAll, setDebugShowAll] = useState(false);
+
+  const { scoredVendors, allVendors } = useVendors({
     routePoints,
     vendorRange,
     filterCuisine,
@@ -197,6 +199,7 @@ export default function UserSearchPage() {
       else setDestPlace(newDest);
       handleFindRoute(newOrigin, newDest);
     },
+    debugPlaces: debugShowAll ? allVendors : [],
   });
 
   const stripVisible = routeReady && !editRouteMode && scoredVendors.length > 0;
@@ -220,6 +223,7 @@ export default function UserSearchPage() {
           setWaypointMode(false);
           setSelectedVendor(null);
         }}
+        onAuthRequired={() => setShowAuthModal(true)}
       />
 
       <aside
@@ -463,11 +467,36 @@ export default function UserSearchPage() {
           </div>
         )}
 
+        {/* Debug toggle — shows all vendors */}
+        <button
+          onClick={() => setDebugShowAll((v) => !v)}
+          title="Toggle all vendors"
+          className="absolute top-4 right-4 z-[500] w-fit px-2.5 h-9 rounded-xl flex items-center justify-center gap-1.5 hover:bg-white/10 transition-colors"
+          style={{
+            background: debugShowAll ? "rgba(34,197,94,0.15)" : tm.glassCard,
+            backdropFilter: "blur(12px)",
+            border: `1px solid ${debugShowAll ? "#22c55e" : tm.border}`,
+          }}
+        >
+          <div
+            style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: debugShowAll ? "#22c55e" : tm.text3,
+            }}
+          />
+          <span
+            className="text-[10px] font-semibold"
+            style={{ color: debugShowAll ? "#22c55e" : tm.text3 }}
+          >
+            {debugShowAll ? "All On" : "All Vendors"}
+          </span>
+        </button>
+
         {/* Tutorial toggle */}
         <button
           onClick={() => setShowAuthModal((v) => !v)}
           title="How it works"
-          className="absolute top-4 right-4 z-[500] w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
+          className="absolute top-4 right-[88px] z-[500] w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
           style={{
             background: tm.glassCard,
             backdropFilter: "blur(12px)",

@@ -1,4 +1,5 @@
-import { Route } from "react-router";
+import { Route, Navigate } from "react-router";
+import { AuthGuard } from "../../shared/components/AuthGuard";
 import { VendorLayout } from "../layouts/VendorLayout";
 import { VendorLoginPage } from "../pages/VendorLoginPage";
 import { VendorRegisterPage } from "../pages/VendorRegisterPage";
@@ -19,17 +20,18 @@ export function VendorRoutes() {
       <Route path="/vendor/login" element={<VendorLoginPage />} />
       <Route path="/vendor/register" element={<VendorRegisterPage />} />
       <Route path="/vendor" element={<VendorLayout />}>
-        <Route index element={<DashboardPage />} />
-        <Route path="stalls" element={<StallListPage />} />
-        <Route path="stalls/new" element={<StallCreatePage />} />
-        <Route path="stalls/:id" element={<StallDetailPage />} />
-        <Route path="stalls/:id/view" element={<StallViewPage />} />
-        <Route path="stalls/:id/location" element={<LocationPinpointPage />} />
-        <Route path="menu" element={<MenuItemsPage />} />
-        <Route path="reviews" element={<ReviewsPage />} />
-        <Route path="support" element={<SupportPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route index element={<AuthGuard><DashboardPage /></AuthGuard>} />
+        <Route path="stalls" element={<AuthGuard><StallListPage /></AuthGuard>} />
+        <Route path="stalls/new" element={<AuthGuard><StallCreatePage /></AuthGuard>} />
+        <Route path="stalls/:id" element={<AuthGuard><StallDetailPage /></AuthGuard>} />
+        <Route path="stalls/:id/view" element={<AuthGuard><StallViewPage /></AuthGuard>} />
+        <Route path="stalls/:id/location" element={<AuthGuard><LocationPinpointPage /></AuthGuard>} />
+        <Route path="menu" element={<AuthGuard><MenuItemsPage /></AuthGuard>} />
+        <Route path="reviews" element={<AuthGuard><ReviewsPage /></AuthGuard>} />
+        <Route path="support" element={<AuthGuard><SupportPage /></AuthGuard>} />
+        <Route path="settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
       </Route>
+      <Route path="/vendor/*" element={<Navigate to="/vendor/stalls" replace />} />
     </>
   );
 }

@@ -3,8 +3,7 @@ import AdminMainLayout from "../layouts/AdminMainLayout";
 import DashboardPage from "../pages/global/DashboardPage";
 import UserManagementPage from "../pages/global/UserManagementPage";
 import RestaurantManagementPage from "../pages/global/RestaurantManagementPage";
-import SystemSettingsPage from "../pages/global/SystemSettingsPage";
-
+import AdminStallManagePage from "../pages/global/AdminStallManagePage";
 const adminRoutes: RouteObject = {
   path: "/admin",
   element: <AdminMainLayout />,
@@ -12,7 +11,7 @@ const adminRoutes: RouteObject = {
     { index: true, element: <DashboardPage /> },
     { path: "users", element: <UserManagementPage /> },
     { path: "restaurants", element: <RestaurantManagementPage /> },
-    { path: "settings", element: <SystemSettingsPage /> },
+    { path: "restaurants/manage/:stallId", element: <AdminStallManagePage /> },
   ],
 };
 

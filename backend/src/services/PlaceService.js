@@ -20,12 +20,10 @@ class PlaceService {
 
   async getAll() {
     const rows = await this.placeRepo.findAllApproved();
-    const result = [];
-    for (const row of rows) {
-      const menu = await this.placeRepo.getMenuItems(row.id);
-      result.push(this.toVendor(row, menu));
-    }
-    return result;
+    if (rows.length === 0) return [];
+    const placeIds = rows.map((r) => r.id);
+    const menuMap = await this.placeRepo.getMenuItemsForPlaces(placeIds);
+    return rows.map((row) => this.toVendor(row, menuMap[row.id] || []));
   }
 
   async getById(id) {

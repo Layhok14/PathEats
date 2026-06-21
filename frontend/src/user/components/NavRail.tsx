@@ -38,6 +38,8 @@ const TABS = [
   { id: "trips", Icon: Clock, label: "History" },
 ];
 
+const GATED_TABS = new Set(["favorite", "savedRoutes", "trips"]);
+
 export function NavRail({
   activeTab,
   onTabChange,
@@ -45,9 +47,17 @@ export function NavRail({
   onSettingsToggle,
   onProfileOpen,
   onHomeReset,
+  onAuthRequired,
 }) {
   const { darkMode, setDarkMode, tm } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, isGuest, logout } = useAuth();
+  function handleTabClick(id: string) {
+    if (isGuest && GATED_TABS.has(id)) {
+      onAuthRequired?.();
+      return;
+    }
+    onTabChange(id);
+  }
 
   // Rail is always deep green regardless of theme
   const railBg = "#004b1e";
@@ -67,12 +77,24 @@ export function NavRail({
         <MapPin size={18} className="text-white" />
       </button>
 
+      {isGuest && (
+        <button
+          onClick={() => onAuthRequired?.()}
+          className="flex flex-col items-center justify-center gap-1 w-[56px] py-2.5 rounded-xl transition-all hover:brightness-110 active:scale-95"
+          style={{ background: "#22c55e", color: "white" }}
+        >
+          <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.25)" }}>
+            <span className="text-[11px] font-bold text-white">+</span>
+          </div>
+          <span className="text-[8px] font-bold tracking-wide text-white">Sign In</span>
+        </button>
+      )}
       {TABS.map(({ id, Icon, label }) => {
         const active = activeTab === id;
         return (
           <button
             key={id}
-            onClick={() => onTabChange(id)}
+            onClick={() => handleTabClick(id)}
             className="flex flex-col items-center justify-center gap-1 w-[56px] py-2.5 rounded-xl transition-all"
             style={
               active
@@ -165,6 +187,10 @@ export function NavRail({
               <button
                 onClick={() => {
                   onSettingsToggle();
+                  if (isGuest) {
+                    onAuthRequired?.();
+                    return;
+                  }
                   onProfileOpen();
                 }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-black/5"
@@ -224,17 +250,45 @@ export function NavRail({
               </div>
             </div>
 
-            <div style={{ borderTop: `1px solid ${tm.border}` }}>
-              <button
-                onClick={logout}
-                className="w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-red-500/10"
-              >
-                <LogOut size={13} className="text-red-400" />
-                <span className="text-xs font-medium text-red-400">
-                  Sign out
-                </span>
-              </button>
-            </div>
+            {user && (
+              <div style={{ borderTop: `1px solid ${tm.border}` }}>
+                <button
+                  onClick={logout}
+                  className="w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-red-500/10"
+                >
+                  <LogOut size={13} className="text-red-400" />
+                  <span className="text-xs font-medium text-red-400">
+                    Sign out
+                  </span>
+                </button>
+              </div>
+            )}
+            {isGuest && (
+              <div style={{ borderTop: `1px solid ${tm.border}` }}>
+                <button
+                  onClick={() => {
+                    onSettingsToggle();
+                    onAuthRequired?.();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-black/5"
+                >
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: tm.surface2 }}
+                  >
+                    <User size={13} style={{ color: tm.text3 }} />
+                  </div>
+                  <div className="flex-1 text-left">
+                    <div className="text-xs font-medium" style={{ color: tm.text1 }}>
+                      Sign In
+                    </div>
+                    <div className="text-[10px]" style={{ color: tm.text4 }}>
+                      Access all features
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

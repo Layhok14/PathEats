@@ -9,12 +9,13 @@ import { PHNOM_PENH_CENTER, LIGHT_VECTOR_STYLE } from "../../shared/constants/ap
 export function LocationPinpointPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { getStall, updateStall } = useStalls();
+  const { getStall, updateStall, stalls } = useStalls();
 
   const stall = id ? getStall(id) : null;
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const initialLng = stall?.location?.longitude ?? 104.9282;
   const initialLat = stall?.location?.latitude ?? 11.5564;
@@ -50,20 +51,39 @@ export function LocationPinpointPage() {
       });
 
       markerRef.current = marker;
-    });
 
-    map.on("click", (e) => {
-      if (markerRef.current) {
-        markerRef.current.setLngLat(e.lngLat);
-        setCoords({ lat: e.lngLat.lat, lng: e.lngLat.lng });
-      }
+      map.on("click", (e) => {
+        if (markerRef.current) {
+          markerRef.current.setLngLat(e.lngLat);
+          setCoords({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+        }
+      });
+
+      // Show other stalls as grey dots
+      stalls.forEach((s) => {
+        if (s.id === id) return;
+        if (!s.location?.latitude || !s.location?.longitude) return;
+        const dot = document.createElement("div");
+        dot.style.width = "12px";
+        dot.style.height = "12px";
+        dot.style.borderRadius = "50%";
+        dot.style.background = "#94a3b8";
+        dot.style.border = "2px solid white";
+        dot.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+        const m = new maplibregl.Marker(dot)
+          .setLngLat([s.location.longitude, s.location.latitude])
+          .addTo(map);
+        otherMarkersRef.current.push(m);
+      });
     });
 
     return () => {
+      otherMarkersRef.current.forEach((m) => m.remove());
+      otherMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleConfirm() {
     if (id && stall) {
@@ -82,10 +102,8 @@ export function LocationPinpointPage() {
 
   return (
     <div className="relative overflow-hidden" style={{ height: "calc(100vh - 64px)" }}>
-      {/* Map */}
       <div ref={mapDivRef} className="absolute inset-0" />
 
-      {/* Floating action panel */}
       <div
         style={{
           position: "absolute", bottom: "32px", left: "32px", width: "400px",
@@ -116,10 +134,14 @@ export function LocationPinpointPage() {
               CURRENT SELECTION
             </p>
             <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 500, color: "#0b1c30", margin: 0 }}>
-              {coords.lat.toFixed(4)}° N, {coords.lng.toFixed(4)}° E
+              {coords.lat.toFixed(4)}\u00b0 N, {coords.lng.toFixed(4)}\u00b0 E
             </p>
           </div>
         </div>
+
+        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "11px", color: "#94a3b8", fontStyle: "italic", margin: 0 }}>
+          Grey dots show your other stalls.
+        </p>
 
         <div style={{ paddingTop: "12px", display: "flex", gap: "12px", justifyContent: "center" }}>
           <button onClick={handleCancel}
@@ -144,7 +166,6 @@ export function LocationPinpointPage() {
         </div>
       </div>
 
-      {/* Hint */}
       <div
         style={{
           position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)",

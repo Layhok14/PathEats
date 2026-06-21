@@ -28,7 +28,7 @@ export function GrowthChart({ data }: Props) {
         <BarChart data={data} barCategoryGap="30%" margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
           <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
           <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-          <Tooltip cursor={{ fill: "rgba(0,110,47,0.06)" }} contentStyle={{ border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v, "Orders"]} />
+          <Tooltip cursor={{ fill: "rgba(0,110,47,0.06)" }} contentStyle={{ border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v, "Searches"]} />
           <Bar dataKey="orders" radius={[4, 4, 0, 0]}>
             {data.map((entry) => (<Cell key={entry.day} fill={entry.orders === max ? "#006e2f" : "#a7f3c0"} />))}
           </Bar>

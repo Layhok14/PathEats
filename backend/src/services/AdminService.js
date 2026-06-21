@@ -1,63 +1,132 @@
-import UserRepository from "../repositories/UserRepository.js";
-import VendorRepository from "../repositories/VendorRepository.js";
-import db from "../config/db.js";
-import AppError from "../utils/AppError.js";
+import bcrypt from "bcryptjs";
+import * as adminRepository from "../repositories/adminRepository.js";
 
-class AdminService {
-  constructor() {
-    this.userRepo = new UserRepository();
-    this.vendorRepo = new VendorRepository();
-  }
+export const checkDatabaseConnection = async () => {
+  return adminRepository.checkDatabaseConnection();
+};
 
-  async listUsers({ page, limit, role_scope } = {}) {
-    return this.userRepo.findAll({ page, limit, role_scope });
-  }
+export const getDashboardTelemetry = async () => {
+  return adminRepository.getDashboardTelemetry();
+};
 
-  async getUserById(id) {
-    const user = await this.userRepo.findById(id);
-    if (!user) throw new AppError("User not found", 404);
-    return user;
-  }
+export const getUsers = async (page, limit) => {
+  const [users, total] = await Promise.all([
+    adminRepository.findAllUsers(page, limit),
+    adminRepository.countUsers(),
+  ]);
 
-  async updateUserRole(id, role_scope, requesterId) {
-    if (id === requesterId) throw new AppError("Cannot change your own role", 400);
-    const user = await this.userRepo.findById(id);
-    if (!user) throw new AppError("User not found", 404);
-    return this.userRepo.updateRole(id, role_scope);
-  }
+  return {
+    users,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
 
-  async toggleBan(id, requesterId) {
-    if (id === requesterId) throw new AppError("Cannot ban or unban yourself", 400);
-    const user = await this.userRepo.findById(id);
-    if (!user) throw new AppError("User not found", 404);
-    return this.userRepo.setBanStatus(id, !user.is_banned);
-  }
+export const getUserManagementOverview = async (search = "") => {
+  return adminRepository.getUserManagementOverview(search);
+};
 
-  async listVendors({ page, limit } = {}) {
-    const offset = (page - 1) * limit;
-    const { rows: places } = await db.query(
-      `SELECT p.*, pc.name AS category_name, u.email AS owner_email, u.first_name AS owner_first_name, u.last_name AS owner_last_name
-       FROM places p
-       LEFT JOIN place_categories pc ON pc.id = p.category_id
-       LEFT JOIN users u ON u.id = p.owner_id
-       ORDER BY p.created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
-    const { rows: countResult } = await db.query(
-      `SELECT COUNT(*)::int AS total FROM places`
-    );
-    return { places, total: countResult[0].total, page, limit };
-  }
+export const getVendorManagementOverview = async (search = "") => {
+  return adminRepository.getVendorManagementOverview(search);
+};
 
-  async approveStall(stallId, status) {
-    if (!["APPROVED", "REJECTED", "SUSPENDED"].includes(status)) {
-      throw new AppError("Status must be APPROVED, REJECTED, or SUSPENDED", 400);
-    }
-    const stall = await this.vendorRepo.findById(stallId);
-    if (!stall) throw new AppError("Stall not found", 404);
-    return this.vendorRepo.updateStatus(stallId, status);
-  }
-}
+export const createUser = async (userData) => {
+  const temporaryPassword = userData.password || "ChangeMe123!";
+  const password_hash = await bcrypt.hash(temporaryPassword, 12);
 
-export default AdminService;
+  const [firstName = "", ...rest] = String(userData.name ?? "").trim().split(" ");
+  const lastName = rest.join(" ");
+
+  return adminRepository.createUser({
+    email: userData.email,
+    password_hash,
+    first_name: userData.first_name ?? userData.firstName ?? firstName,
+    last_name: userData.last_name ?? userData.lastName ?? (lastName || "User"),
+    phone: userData.phone,
+    role_scope: userData.role_scope ?? userData.role ?? "CONSUMER",
+  });
+};
+
+export const updateRole = async (id, role) => {
+  return adminRepository.updateRole(id, role);
+};
+
+export const updateStatus = async (id, status) => {
+  return adminRepository.updateStatus(id, status);
+};
+
+export const getVendors = async () => {
+  return adminRepository.findAllVendors();
+};
+
+export const getPlaceCategories = async () => {
+  return adminRepository.findPlaceCategories();
+};
+
+export const approveVendor = async (id, approved) => {
+  return adminRepository.approveVendor(id, approved);
+};
+
+export const getStallManagementOptions = async () => {
+  return adminRepository.getStallManagementOptions();
+};
+
+export const createStall = async (payload) => {
+  return adminRepository.createStall(payload);
+};
+
+export const deleteStall = async (id) => {
+  return adminRepository.deleteStall(id);
+};
+
+export const createStallMenuItem = async (placeId, payload) => {
+  return adminRepository.createStallMenuItem(placeId, payload);
+};
+
+export const deleteStallMenuItem = async (id) => {
+  return adminRepository.deleteStallMenuItem(id);
+};
+
+export const createStallCategory = async (payload) => {
+  return adminRepository.createStallCategory(payload);
+};
+
+export const deleteStallCategory = async (id) => {
+  return adminRepository.deleteStallCategory(id);
+};
+
+export const createStallPlaceHour = async (placeId, payload) => {
+  return adminRepository.createStallPlaceHour(placeId, payload);
+};
+
+export const deleteStallPlaceHour = async (id) => {
+  return adminRepository.deleteStallPlaceHour(id);
+};
+
+export const createStallReview = async (placeId, payload) => {
+  return adminRepository.createStallReview(placeId, payload);
+};
+
+export const deleteStallReview = async (id) => {
+  return adminRepository.deleteStallReview(id);
+};
+
+export const createRole = async (roleData) => {
+  return adminRepository.createRole(roleData);
+};
+
+export const getRoles = async () => {
+  return adminRepository.findAllRoles();
+};
+
+export const updateRoleRecord = async (id, roleData) => {
+  return adminRepository.updateRoleRecord(id, roleData);
+};
+
+export const deleteRoleRecord = async (id) => {
+  return adminRepository.deleteRoleRecord(id);
+};

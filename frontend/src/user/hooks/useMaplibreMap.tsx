@@ -68,6 +68,7 @@ export function useMaplibreMap({
   onSelectVendor,
   onWaypointAdded,
   onEndpointDrag,
+  debugPlaces = [],
 }) {
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
@@ -76,6 +77,7 @@ export function useMaplibreMap({
   const ghostMarkerRef = useRef(null);
   const editModeRef = useRef(false);
   const routeListenersRef = useRef(null);
+  const debugMarkersRef = useRef([]);
   const [mapReady, setMapReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
 
@@ -271,6 +273,31 @@ export function useMaplibreMap({
       }
     });
   }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debug places — grey dots for all vendors
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    debugMarkersRef.current.forEach((m) => m.remove());
+    debugMarkersRef.current = [];
+
+    if (debugPlaces.length === 0) return;
+
+    debugPlaces.forEach((v) => {
+      if (!v.lat || !v.lng) return;
+      const dot = document.createElement("div");
+      dot.style.width = "10px";
+      dot.style.height = "10px";
+      dot.style.borderRadius = "50%";
+      dot.style.background = "#94a3b8";
+      dot.style.border = "2px solid rgba(255,255,255,0.7)";
+      dot.style.boxShadow = "0 1px 4px rgba(0,0,0,0.25)";
+      dot.style.cursor = "default";
+      const marker = new maplibregl.Marker(dot).setLngLat([v.lng, v.lat]).addTo(map);
+      debugMarkersRef.current.push(marker);
+    });
+  }, [mapReady, debugPlaces]);
 
   return { mapDivRef, mapReady };
 }

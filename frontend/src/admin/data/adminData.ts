@@ -1,3 +1,12 @@
+export const MOCK_TICKETS = [
+  { id: "TK-88210", user: "John Doe", userType: "Premium User", subject: "Payment Failed", description: "Checkout error on Route 12 Visa card…", priority: "Critical", status: "Open", timeOpen: "12 mins ago" },
+  { id: "TK-88209", user: "Burger Barn", userType: "Gold Vendor", subject: "Wrong Price", description: "Menu price mismatch between app and…", priority: "High", status: "Open", timeOpen: "24 mins ago" },
+  { id: "TK-88205", user: "Sarah Ross", userType: "Standard User", subject: "App Crash", description: "App crashed during map loading on iOS…", priority: "Medium", status: "In Progress", timeOpen: "1 hour ago" },
+  { id: "TK-88198", user: "Mama's Curry", userType: "Silver Vendor", subject: "Profile Update", description: "Request to change closing hours on…", priority: "Low", status: "Open", timeOpen: "3 hours ago" },
+  { id: "TK-88190", user: "Alex Kim", userType: "Standard User", subject: "Missing Order", description: "Order delivered to wrong address…", priority: "High", status: "In Progress", timeOpen: "4 hours ago" },
+  { id: "TK-88185", user: "The Brew Lab", userType: "Gold Vendor", subject: "Payout Delay", description: "Weekly payout not received for last week…", priority: "Critical", status: "Open", timeOpen: "5 hours ago" },
+];
+
 export const MOCK_USERS = [
   { id: "u1", name: "Sarah Jenkins", email: "sarah.j@university.edu", role: "Student", status: "Active", avatarInitials: "SJ", avatarColor: "#e0f2fe" },
   { id: "u2", name: "Green Thai Kitchen", email: "orders@greenthai.com", role: "Vendor", status: "Pending", avatarInitials: "GT", avatarColor: "#dcfce7" },

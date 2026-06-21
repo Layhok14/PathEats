@@ -1,7 +1,7 @@
 import { MapPin, Mail, Clock } from "lucide-react";
 
-interface Restaurant { id: string; name: string; category: string; location: string; email: string; submittedAt: string }
-interface Props { restaurant: Restaurant; onApprove: (id: string) => void; onReject: (id: string) => void }
+interface Vendor { id: string; name: string; category: string; location: string; email: string; submittedAt: string }
+interface Props { restaurant: Vendor; onApprove: (id: string) => void; onReject: (id: string) => void }
 
 export function ApprovalCard({ restaurant, onApprove, onReject }: Props) {
   return (

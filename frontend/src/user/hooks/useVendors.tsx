@@ -17,7 +17,7 @@ export function useVendors({
   filterMaxPrice: number;
   filterOpenNow: boolean;
   vendorSearch: string;
-}): Vendor[] {
+}): { scoredVendors: Vendor[]; allVendors: Vendor[] } {
   const [allVendors, setAllVendors] = useState<Vendor[]>([]);
   const fetched = useRef(false);
 
@@ -27,10 +27,10 @@ export function useVendors({
     api.get("/places").then(({ data }) => setAllVendors(data.data)).catch((err) => {console.log("error:",err.message)});
   }, []);
 
-  if (routePoints.length < 2) return [];
+  if (routePoints.length < 2) return { scoredVendors: [], allVendors };
   const q = vendorSearch.toLowerCase().trim();
 
-  return allVendors
+  const scoredVendors = allVendors
     .map((v) => {
       const dist = distToRouteM(v.lat, v.lng, routePoints);
       if (dist > vendorRange) return null;
@@ -51,4 +51,6 @@ export function useVendors({
         v.menu.some((m) => m.name.toLowerCase().includes(q)),
     )
     .sort((a, b) => b.final_score - a.final_score) as Vendor[];
+
+  return { scoredVendors, allVendors };
 }
