@@ -1,0 +1,79 @@
+import PlaceRepository from "../repositories/PlaceRepository.js";
+import AppError from "../utils/AppError.js";
+
+const CATEGORY_TO_CUISINE = {
+  "Rice": "Rice",
+  "Nom Banh Chok": "Nom Banh Chok",
+  "Kuytev": "Kuytev",
+  "Nompang": "Nompang",
+  "Chek Chen": "Chek Chen",
+  "Cafe": "Cafe",
+  "Banh Sung": "Banh Sung",
+  "Banh Xeo": "Banh Xeo",
+  "Others": "Others",
+};
+
+class PlaceService {
+  constructor() {
+    this.placeRepo = new PlaceRepository();
+  }
+
+  async getAll() {
+    const rows = await this.placeRepo.findAllApproved();
+    const result = [];
+    for (const row of rows) {
+      const menu = await this.placeRepo.getMenuItems(row.id);
+      result.push(this.toVendor(row, menu));
+    }
+    return result;
+  }
+
+  async getById(id) {
+    const row = await this.placeRepo.findById(id);
+    if (!row) throw new AppError("Place not found", 404);
+    const menu = await this.placeRepo.getMenuItems(id);
+    return this.toVendor(row, menu);
+  }
+
+  async getReviews(placeId) {
+    const place = await this.placeRepo.findById(placeId);
+    if (!place) throw new AppError("Place not found", 404);
+    return this.placeRepo.getReviews(placeId);
+  }
+
+  async createReview(placeId, userId, data) {
+    if (!data.rating || data.rating < 1 || data.rating > 5) {
+      throw new AppError("Rating must be between 1 and 5", 400);
+    }
+    const place = await this.placeRepo.findById(placeId);
+    if (!place) throw new AppError("Place not found", 404);
+    return this.placeRepo.createReview(placeId, userId, data);
+  }
+
+  toVendor(row, menu) {
+    return {
+      id: row.id,
+      name: row.name,
+      cuisine: CATEGORY_TO_CUISINE[row.category_name] || row.category_name || "Other",
+      price_range: row.price_range || 1,
+      rating: parseFloat(row.rating) || 0,
+      rating_count: row.rating_count || 0,
+      wait_time_est: 0,
+      lat: parseFloat(row.lat),
+      lng: parseFloat(row.lng),
+      photo_url: row.photo_url || "",
+      description: row.description || "",
+      open_now: row.open_now,
+      hours: "",
+      address: row.address || "",
+      menu: menu.map((m) => ({
+        name: m.name,
+        price: parseFloat(m.price),
+        desc: m.description || undefined,
+        category: m.category || undefined,
+      })),
+    };
+  }
+}
+
+export default PlaceService;

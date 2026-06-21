@@ -2,18 +2,22 @@
 
 import { Heart, Star } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
-import { ALL_VENDORS, PRICE_LABELS } from "../../shared/constants/appConfig";
+import { PRICE_LABELS } from "../../shared/constants/appConfig";
+import type { Vendor } from "../../shared/types";
 
-/**
- * @param {{ favorites: Set<number>, onSelectVendor: (v:object)=>void, onToggleFavorite: (id:number)=>void }} props
- */
 export function FavoritesPanel({
   favorites,
+  vendors,
   onSelectVendor,
   onToggleFavorite,
+}: {
+  favorites: Set<number>;
+  vendors: Vendor[];
+  onSelectVendor: (v: Vendor) => void;
+  onToggleFavorite: (id: number) => void;
 }) {
   const { tm } = useTheme();
-  const saved = ALL_VENDORS.filter((v) => favorites.has(v.id));
+  const saved = vendors.filter((v) => favorites.has(v.id));
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">

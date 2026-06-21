@@ -10,7 +10,6 @@ import {
   Phone,
   Bell,
   Check,
-  LogOut,
 } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
@@ -308,17 +307,14 @@ export function UserProfileModal({ onClose }) {
           </section>
 
           <button
-            onClick={() => {
-              logout();
-              onClose();
-            }}
+            onClick={onClose}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl text-[13px] font-semibold transition-colors hover:bg-red-500/10"
             style={{
               border: "1px solid rgba(239,68,68,0.25)",
               color: "#f87171",
             }}
           >
-            <LogOut size={13} /> Sign Out
+            Close
           </button>
         </div>
       </motion.div>

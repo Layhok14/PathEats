@@ -4,15 +4,16 @@ import { toast } from "sonner";
 import { MapPin, Trash2, CheckSquare, Plus, X, Pencil } from "lucide-react";
 import { PhotoUpload } from "../components/PhotoUpload";
 import { useStalls } from "../../shared/hooks/useStalls";
-import { useMenuItems, getAllMenuItems } from "../../shared/hooks/useMenuItems";
+import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import { STALL_CATEGORIES, MENU_CATEGORIES } from "../../shared/constants/categories";
 import { formatPrice } from "../../shared/utils/formatters";
 import type { StallFormData, StallCategory, VendorMenuItem as MenuItem, MenuCategory } from "../../shared/types";
 import type { MenuItemFormData } from "../../shared/hooks/useMenuItems";
+import api from "../../shared/services/axiosService";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../app/components/ui/dialog";
 
 const DEFAULT: StallFormData = {
-  name: "", photoUrl: "", category: "Rice Bowls", description: "",
+  name: "", photoUrl: "", category: "Rice", description: "",
   operatingHours: { weekdays: { open: "09:00 AM", close: "09:00 PM" }, weekends: { open: "09:00 AM", close: "09:00 PM" } },
   status: "open",
   location: { landmark: "", latitude: 11.5564, longitude: 104.9282 },
@@ -186,7 +187,7 @@ export function StallDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getStall, updateStall, deleteStall, loading } = useStalls();
-  const { forkItem, createItem, refresh } = useMenuItems();
+  const { allItems: catalogItems } = useMenuItems();
 
   const [form, setForm] = useState<StallFormData>(DEFAULT);
   const [tab, setTab] = useState<ActiveTab>("info");
@@ -194,6 +195,7 @@ export function StallDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null | "new">(null);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [stallItems, setStallItems] = useState<MenuItem[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -201,6 +203,13 @@ export function StallDetailPage() {
     if (!stall) { setNotFound(true); return; }
     setForm({ name: stall.name, photoUrl: stall.photoUrl, category: stall.category, description: stall.description, operatingHours: stall.operatingHours, status: stall.status, location: stall.location, menuItemIds: stall.menuItemIds });
   }, [id, getStall]);
+
+  useEffect(() => {
+    if (!id) return;
+    api.get(`/vendor/stalls/${id}/items`).then(({ data }) => {
+      setStallItems(data.data.map(mapItem));
+    }).catch(() => {});
+  }, [id]);
 
   function setHours(part: "weekdays" | "weekends", field: "open" | "close", val: string) {
     setForm((f) => ({ ...f, operatingHours: { ...f.operatingHours, [part]: { ...f.operatingHours[part], [field]: to12h(val) } } }));
@@ -219,50 +228,46 @@ export function StallDetailPage() {
     navigate("/vendor/stalls");
   }
 
-  // Save menu item: fork if editing existing, create if new
   async function handleSaveItem(data: MenuItemFormData) {
     if (!id) return;
     if (editingItem && editingItem !== "new" && editingItem.id) {
-      // Fork the item (creates new entry in catalog)
-      const forked = await forkItem(editingItem.id, data);
-      // Replace old id with forked id in stall
-      const newIds = form.menuItemIds.map((mid) => mid === editingItem.id ? forked.id : mid);
-      const updated = { ...form, menuItemIds: newIds };
-      setForm(updated);
-      await updateStall(id, updated);
-      toast.success("Menu item updated — new version added to catalog.");
+      const { data: res } = await api.put(`/vendor/stalls/${id}/items/${editingItem.id}`, data);
+      const updated = mapItem(res.data);
+      setStallItems((prev) => prev.map((m) => m.id === editingItem.id ? updated : m));
+      toast.success("Menu item updated.");
     } else {
-      // Brand new item
-      const created = await createItem(data);
-      const newIds = [...form.menuItemIds, created.id];
-      const updated = { ...form, menuItemIds: newIds };
-      setForm(updated);
-      await updateStall(id, updated);
-      toast.success("New menu item created and added to stall.");
+      const { data: res } = await api.post(`/vendor/stalls/${id}/items`, data);
+      const created = mapItem(res.data);
+      setStallItems((prev) => [...prev, created]);
+      toast.success("New menu item created.");
     }
-    refresh();
   }
 
   async function handleCatalogToggle(itemId: string) {
     if (!id) return;
-    const newIds = form.menuItemIds.includes(itemId)
-      ? form.menuItemIds.filter((x) => x !== itemId)
-      : [...form.menuItemIds, itemId];
-    const updated = { ...form, menuItemIds: newIds };
-    setForm(updated);
-    await updateStall(id, updated);
+    const exists = stallItems.find((m) => m.id === itemId);
+    if (exists) {
+      await api.delete(`/vendor/stalls/${id}/items/${itemId}`);
+      setStallItems((prev) => prev.filter((m) => m.id !== itemId));
+      toast.success("Item removed from stall.");
+    } else {
+      const source = catalogItems.find((m) => m.id === itemId);
+      if (!source) return;
+      const { data: res } = await api.post(`/vendor/stalls/${id}/items`, source);
+      const created = mapItem(res.data);
+      setStallItems((prev) => [...prev, created]);
+      toast.success("Item added to stall.");
+    }
   }
 
   async function removeItemFromStall(itemId: string) {
     if (!id) return;
-    const newIds = form.menuItemIds.filter((x) => x !== itemId);
-    const updated = { ...form, menuItemIds: newIds };
-    setForm(updated);
-    await updateStall(id, updated);
+    await api.delete(`/vendor/stalls/${id}/items/${itemId}`);
+    setStallItems((prev) => prev.filter((m) => m.id !== itemId));
     toast.success("Item removed from stall.");
   }
 
-  const linkedItems = getAllMenuItems().filter((m) => form.menuItemIds.includes(m.id));
+  const linkedItems = stallItems;
 
   if (notFound) return (
     <div className="p-6 flex flex-col items-center justify-center h-64 gap-4">
@@ -512,4 +517,16 @@ export function StallDetailPage() {
       )}
     </div>
   );
+}
+
+function mapItem(row: any): MenuItem {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    price: parseFloat(row.price),
+    imageUrl: row.image_url || "",
+    category: (row.category === "main course" ? "Main Course" : row.category === "snack" ? "Snack" : row.category === "drink" ? "Drink" : row.category === "dessert" ? "Dessert" : "All") as MenuCategory,
+    isAvailable: row.is_available,
+  };
 }

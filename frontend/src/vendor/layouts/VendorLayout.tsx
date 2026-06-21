@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useNavigate } from "react-router";
-import { LayoutDashboard, Store, UtensilsCrossed, HelpCircle, Settings, LogOut, Star } from "lucide-react";
+import { NavLink, Outlet } from "react-router";
+import { LayoutDashboard, Store, UtensilsCrossed, HelpCircle, Settings, Star } from "lucide-react";
+import { useAuth } from "../../shared/hooks/useAuth";
 
 const NAV = [
   { to: "/vendor", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -11,7 +12,9 @@ const NAV = [
 ];
 
 export function VendorLayout() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const initials = `${user?.firstName?.charAt(0) || ""}${user?.lastName?.charAt(0) || ""}`.toUpperCase() || "V";
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f8f9ff]">
@@ -40,16 +43,17 @@ export function VendorLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="px-4 py-4">
-          <button onClick={() => navigate("/")} className="flex items-center gap-3 px-4 py-2.5 text-white text-[13px] font-medium w-full hover:bg-white/10 rounded-lg">
-            <LogOut size={16} />
-            Logout
-          </button>
-        </div>
       </aside>
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="shrink-0 h-14 flex items-center justify-end px-6 bg-white border-b border-[#e2e8f0]">
-          <div className="w-7 h-7 rounded-full bg-[#006e2f] flex items-center justify-center text-white text-[11px] font-bold">V</div>
+        <header className="shrink-0 h-14 flex items-center justify-end gap-3 px-6 bg-white border-b border-[#e2e8f0]">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-medium text-[#374151]">
+              {user?.firstName ?? "Vendor"} {user?.lastName ?? ""}
+            </span>
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ background: "var(--brand-green, #006e2f)" }}>
+              {initials}
+            </div>
+          </div>
         </header>
         <main className="flex-1 overflow-y-auto bg-[#f8fafc]"><Outlet /></main>
       </div>

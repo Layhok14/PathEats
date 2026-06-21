@@ -243,6 +243,7 @@ export default function UserSearchPage() {
             >
               <FavoritesPanel
                 favorites={favorites}
+                vendors={scoredVendors}
                 onSelectVendor={setSelectedVendor}
                 onToggleFavorite={toggleFavorite}
               />

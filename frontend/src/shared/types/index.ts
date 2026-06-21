@@ -3,8 +3,8 @@
 
 // ── Enumerations ──────────────────────────────────────────────────────────────
 export type Cuisine =
-  | "Khmer" | "Noodles" | "BBQ" | "Rice" | "Banh Mi"
-  | "Chinese" | "Dessert" | "Drinks";
+  | "Rice" | "Nom Banh Chok" | "Kuytev" | "Nompang" | "Chek Chen"
+  | "Cafe" | "Banh Sung" | "Banh Xeo" | "Others";
 
 // ── User-domain types (consumer search, vendor detail, reviews) ───────────
 export interface Place {
@@ -79,8 +79,8 @@ export interface OperatingSchedule {
 }
 
 export type StallCategory =
-  | "Rice Bowls" | "Noodles & Stir-fry" | "Snacks"
-  | "Beverages" | "Desserts" | "Other";
+  | "Rice" | "Nom Banh Chok" | "Kuytev" | "Nompang" | "Chek Chen"
+  | "Cafe" | "Banh Sung" | "Banh Xeo" | "Others";
 
 export type StallStatus = "open" | "closed";
 
@@ -105,7 +105,7 @@ export interface Stall {
 }
 
 export type MenuCategory =
-  | "All" | "Rice" | "Noodles" | "Drinks" | "Snacks" | "Desserts";
+  | "All" | "Main Course" | "Snack" | "Drink" | "Dessert";
 
 export interface VendorMenuItem {
   id: string;

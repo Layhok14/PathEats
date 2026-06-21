@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { catchAsync } from "../utils/catchAsync.js";
+import { authMiddleware } from "../middlewares/authMiddleware.js";
 import AuthService from "../services/AuthService.js";
 
 const authService = new AuthService();
@@ -234,6 +235,41 @@ router.post("/reset-password", catchAsync(async (req, res) => {
     });
   }
   const result = await authService.resetPassword(email, otp, newPassword);
+  res.json({ success: true, data: result });
+}));
+
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Change password with current password (authenticated)
+ *     security: [{ BearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword: { type: string, example: "oldpassword123" }
+ *               newPassword:     { type: string, example: "newpassword456" }
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       401:
+ *         description: Current password is incorrect
+ */
+router.post("/change-password", authMiddleware, catchAsync(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      message: "Current password and new password are required",
+    });
+  }
+  const result = await authService.changePassword(req.user.sub, currentPassword, newPassword);
   res.json({ success: true, data: result });
 }));
 

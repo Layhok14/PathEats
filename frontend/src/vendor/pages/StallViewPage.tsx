@@ -2,20 +2,28 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, MapPin, Star, Edit } from "lucide-react";
 import { useStalls } from "../../shared/hooks/useStalls";
-import { getAllMenuItems } from "../../shared/hooks/useMenuItems";
 import { formatPrice } from "../../shared/utils/formatters";
-import type { Stall } from "../../shared/types";
+import api from "../../shared/services/axiosService";
+import type { Stall, VendorMenuItem as MenuItem } from "../../shared/types";
 
 export function StallViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getStall } = useStalls();
   const [stall, setStall] = useState<Stall | null>(null);
+  const [linkedItems, setLinkedItems] = useState<MenuItem[]>([]);
 
   useEffect(() => {
     if (!id) return;
     setStall(getStall(id));
   }, [id, getStall]);
+
+  useEffect(() => {
+    if (!id) return;
+    api.get(`/vendor/stalls/${id}/items`).then(({ data }) => {
+      setLinkedItems(data.data.map(mapItem));
+    }).catch(() => {});
+  }, [id]);
 
   if (!stall) {
     return (
@@ -28,7 +36,18 @@ export function StallViewPage() {
     );
   }
 
-  const linkedItems = getAllMenuItems().filter((m) => stall.menuItemIds.includes(m.id));
+  const linkedItemsForDisplay = linkedItems;
+  function mapItem(row: any): MenuItem {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description || "",
+      price: parseFloat(row.price),
+      imageUrl: row.image_url || "",
+      category: (row.category === "main course" ? "Main Course" : row.category === "snack" ? "Snack" : row.category === "drink" ? "Drink" : row.category === "dessert" ? "Dessert" : "All") as any,
+      isAvailable: row.is_available,
+    };
+  }
   const isOpen = stall.status === "open";
 
   const card: React.CSSProperties = {
@@ -136,13 +155,13 @@ export function StallViewPage() {
       {/* Menu Items */}
       <div style={card}>
         <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600, color: "var(--brand-text-dark)", marginBottom: "16px" }}>
-          Menu Items ({linkedItems.length})
+          Menu Items ({linkedItemsForDisplay.length})
         </p>
-        {linkedItems.length === 0 ? (
+        {linkedItemsForDisplay.length === 0 ? (
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)" }}>No menu items linked.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {linkedItems.map((item) => (
+            {linkedItemsForDisplay.map((item) => (
               <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: "var(--brand-card-border)", opacity: item.isAvailable ? 1 : 0.5 }}>
                 <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg shrink-0" />
                 <div>

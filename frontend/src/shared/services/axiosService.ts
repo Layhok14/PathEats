@@ -8,25 +8,19 @@ const api = axios.create({
   timeout: 15000,
 });
 
-// Attach JWT token from localStorage on every request
 api.interceptors.request.use((config) => {
-  try {
-    const session = localStorage.getItem("patheat_user");
-    if (session) {
-      const user = JSON.parse(session);
-      if (user.token) config.headers.Authorization = `Bearer ${user.token}`;
-    }
-  } catch { /* ignore parse errors */ }
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
-// Handle 401 globally — clear session and redirect
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem("patheat_user");
-      window.location.href = "/user";
+      localStorage.removeItem("auth_token");
     }
     return Promise.reject(err);
   }

@@ -1,29 +1,60 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { useAuth } from "../../shared/hooks/useAuth";
+import { Camera, Save, Lock } from "lucide-react";
 
 export function SettingsPage() {
-  const [profile, setProfile] = useState({
-    firstName: "David", lastName: "Chen",
-    email: "david.c@patheat-vendor.com", phone: "(555) 123-4567",
-  });
-  const [notifications, setNotifications] = useState({ orders: true, reviews: true, summary: true });
-  const [passwords, setPasswords] = useState({ current: "", newPass: "", confirm: "" });
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-    return (
-      <button
-        type="button"
-        onClick={onToggle}
-        style={{
-          width: "44px", height: "24px", borderRadius: "9999px", border: "none",
-          background: on ? "var(--brand-green)" : "#cbced4",
-          cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0,
-        }}
-      >
-        <div style={{ position: "absolute", top: "2px", left: on ? "22px" : "2px", width: "20px", height: "20px", borderRadius: "9999px", background: "white", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
-      </button>
-    );
+  const [firstName, setFirstName] = useState(user?.firstName || "");
+  const [lastName, setLastName] = useState(user?.lastName || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setAvatarPreview(reader.result as string);
+    reader.readAsDataURL(file);
   }
+
+  async function handleSaveProfile() {
+    setSaving(true);
+    await new Promise((r) => setTimeout(r, 500));
+    toast.success("Profile saved.");
+    setSaving(false);
+  }
+
+  async function handleChangePassword() {
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+    setChangingPassword(true);
+    await new Promise((r) => setTimeout(r, 500));
+    toast.success("Password updated.");
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setChangingPassword(false);
+  }
+
+  const initials = `${firstName?.charAt(0) || ""}${lastName?.charAt(0) || ""}`.toUpperCase() || "V";
 
   const sectionCard: React.CSSProperties = {
     background: "var(--card)", border: "1px solid var(--brand-card-border)",
@@ -44,7 +75,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="p-6 flex flex-col gap-5 max-w-[700px]">
+    <div className="p-6 flex flex-col gap-5 max-w-[700px] mx-auto">
       <div>
         <p style={{ color: "var(--brand-green-dark)", fontFamily: "Poppins, sans-serif", fontSize: "24px", fontWeight: 700 }}>Settings</p>
         <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginTop: "4px" }}>
@@ -54,12 +85,21 @@ export function SettingsPage() {
 
       {/* Profile Information */}
       <div style={sectionCard}>
-        <p style={sectionTitle}>👤 Profile Information</p>
+        <p style={sectionTitle}><Camera size={18} /> Profile Information</p>
 
-        {/* Avatar */}
         <div className="flex flex-col items-center gap-3 mb-6">
-          <img src={imgAvatar} alt="Profile" className="w-20 h-20 rounded-full object-cover" style={{ border: "2px solid var(--brand-card-border)" }} />
+          <div className="relative w-20 h-20">
+            {avatarPreview ? (
+              <img src={avatarPreview} alt="Profile" className="w-20 h-20 rounded-full object-cover" style={{ border: "2px solid var(--brand-card-border)" }} />
+            ) : (
+              <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold" style={{ background: "var(--brand-green)" }}>
+                {initials}
+              </div>
+            )}
+          </div>
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
           <button
+            onClick={() => fileInputRef.current?.click()}
             style={{ padding: "6px 16px", borderRadius: "6px", border: "1px solid var(--brand-green)", background: "white", color: "var(--brand-green)", fontFamily: "Poppins, sans-serif", fontSize: "13px", cursor: "pointer" }}
           >
             Change picture
@@ -69,17 +109,17 @@ export function SettingsPage() {
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label style={lbl}>First Name</label>
-            <input type="text" value={profile.firstName} onChange={(e) => setProfile((p) => ({ ...p, firstName: e.target.value }))} style={inp} />
+            <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={inp} />
           </div>
           <div>
             <label style={lbl}>Last Name</label>
-            <input type="text" value={profile.lastName} onChange={(e) => setProfile((p) => ({ ...p, lastName: e.target.value }))} style={inp} />
+            <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} style={inp} />
           </div>
         </div>
 
         <div className="mb-4">
           <label style={lbl}>Email Address</label>
-          <input type="email" value={profile.email} disabled style={{ ...inp, background: "var(--muted)", color: "var(--brand-text-muted)", cursor: "not-allowed" }} />
+          <input type="email" value={user?.email || ""} disabled style={{ ...inp, background: "var(--muted)", color: "var(--brand-text-muted)", cursor: "not-allowed" }} />
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", marginTop: "4px" }}>
             Contact support to change your primary email.
           </p>
@@ -89,62 +129,42 @@ export function SettingsPage() {
           <label style={lbl}>Phone Number</label>
           <div className="flex gap-2">
             <div style={{ ...inp, width: "60px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>+1</div>
-            <input type="tel" value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} style={inp} />
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} style={inp} />
           </div>
         </div>
 
         <button
-          onClick={() => toast.success("Profile saved.")}
-          style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
+          onClick={handleSaveProfile}
+          disabled={saving}
+          style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", opacity: saving ? 0.7 : 1 }}
         >
-          Save Changes
+          <Save size={16} style={{ display: "inline", marginRight: "6px", verticalAlign: "middle" }} />
+          {saving ? "Saving..." : "Save Changes"}
         </button>
-      </div>
-
-      {/* Notification Preferences */}
-      <div style={sectionCard}>
-        <p style={sectionTitle}>🔔 Notification Preferences</p>
-        {[
-          { key: "orders" as const, label: "New Order Alerts", desc: "Receive an immediate push notification for every new incoming order." },
-          { key: "reviews" as const, label: "Customer Review Alerts", desc: "Get notified when a customer leaves a review or rating for your stall." },
-          { key: "summary" as const, label: "Daily Summary Email", desc: "Receive a daily email wrap-up of total sales, top items, and traffic metrics." },
-        ].map((item) => (
-          <div key={item.key} className="flex items-center justify-between py-4 border-b last:border-0" style={{ borderColor: "var(--brand-card-border)" }}>
-            <div>
-              <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600, color: "var(--brand-text-dark)", margin: 0 }}>{item.label}</p>
-              <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)", marginTop: "2px" }}>{item.desc}</p>
-            </div>
-            <Toggle on={notifications[item.key]} onToggle={() => setNotifications((n) => ({ ...n, [item.key]: !n[item.key] }))} />
-          </div>
-        ))}
       </div>
 
       {/* Security */}
       <div style={sectionCard}>
-        <p style={sectionTitle}>🔒 Security</p>
+        <p style={sectionTitle}><Lock size={18} /> Change Password</p>
         <div className="flex flex-col gap-4">
           <div>
             <label style={lbl}>Current Password</label>
-            <input type="password" value={passwords.current} onChange={(e) => setPasswords((p) => ({ ...p, current: e.target.value }))} placeholder="••••••••" style={inp} />
+            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="••••••••" style={inp} />
           </div>
           <div>
             <label style={lbl}>New Password</label>
-            <input type="password" value={passwords.newPass} onChange={(e) => setPasswords((p) => ({ ...p, newPass: e.target.value }))} placeholder="Min. 8 characters" style={inp} />
+            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 8 characters" style={inp} />
           </div>
           <div>
             <label style={lbl}>Confirm New Password</label>
-            <input type="password" value={passwords.confirm} onChange={(e) => setPasswords((p) => ({ ...p, confirm: e.target.value }))} style={inp} />
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={inp} />
           </div>
           <button
-            onClick={() => {
-              if (passwords.newPass !== passwords.confirm) { toast.error("Passwords do not match."); return; }
-              if (passwords.newPass.length < 8) { toast.error("Password must be at least 8 characters."); return; }
-              toast.success("Password updated.");
-              setPasswords({ current: "", newPass: "", confirm: "" });
-            }}
-            style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-text-dark)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", alignSelf: "flex-start" }}
+            onClick={handleChangePassword}
+            disabled={changingPassword}
+            style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-text-dark)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", alignSelf: "flex-start", opacity: changingPassword ? 0.7 : 1 }}
           >
-            Update Password
+            {changingPassword ? "Sending OTP..." : "Update Password"}
           </button>
         </div>
       </div>

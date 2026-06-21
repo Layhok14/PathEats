@@ -74,7 +74,7 @@ class UserRepository {
   async updateRole(id, role_scope) {
     const { rows } = await db.query(
       `UPDATE users SET role_scope = $1, updated_at = NOW() WHERE id = $2
-       RETURNING id, email, first_name, last_name, role_scope, is_banned, created_at`,
+       RETURNING id, email, first_name, last_name, phone_number, role_scope, is_banned, created_at`,
       [role_scope, id]
     );
     return rows[0] || null;
@@ -88,6 +88,44 @@ class UserRepository {
       `UPDATE users SET is_banned = $1, updated_at = NOW() WHERE id = $2
        RETURNING id, email, first_name, last_name, role_scope, is_banned, created_at`,
       [banned, id]
+    );
+    return rows[0] || null;
+  }
+
+  /**
+   * Update user profile (name, phone, photo).
+   */
+  async updateProfile(id, data) {
+    const setClauses = [];
+    const values = [];
+    let idx = 1;
+
+    if (data.first_name !== undefined) {
+      setClauses.push(`first_name = $${idx++}`);
+      values.push(data.first_name);
+    }
+    if (data.last_name !== undefined) {
+      setClauses.push(`last_name = $${idx++}`);
+      values.push(data.last_name);
+    }
+    if (data.phone_number !== undefined) {
+      setClauses.push(`phone_number = $${idx++}`);
+      values.push(data.phone_number);
+    }
+    if (data.photo_url !== undefined) {
+      setClauses.push(`photo_url = $${idx++}`);
+      values.push(data.photo_url);
+    }
+
+    if (setClauses.length === 0) return null;
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const { rows } = await db.query(
+      `UPDATE users SET ${setClauses.join(", ")} WHERE id = $${idx}
+       RETURNING id, email, first_name, last_name, phone_number, role_scope`,
+      values
     );
     return rows[0] || null;
   }

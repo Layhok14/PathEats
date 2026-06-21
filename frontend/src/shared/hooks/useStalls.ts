@@ -39,7 +39,7 @@ export function useStalls() {
         photo_url: formData.photoUrl,
         latitude: formData.location.latitude,
         longitude: formData.location.longitude,
-        status: formData.status === "open" ? "active" : "inactive",
+        status: formData.status,
         is_open: formData.status === "open",
       });
       const newStall = data.data;

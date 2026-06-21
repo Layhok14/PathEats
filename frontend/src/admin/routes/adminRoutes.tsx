@@ -3,7 +3,6 @@ import AdminMainLayout from "../layouts/AdminMainLayout";
 import DashboardPage from "../pages/global/DashboardPage";
 import UserManagementPage from "../pages/global/UserManagementPage";
 import RestaurantManagementPage from "../pages/global/RestaurantManagementPage";
-import ComplaintsPage from "../pages/customer-service/ComplaintsPage";
 import SystemSettingsPage from "../pages/global/SystemSettingsPage";
 
 const adminRoutes: RouteObject = {
@@ -13,7 +12,6 @@ const adminRoutes: RouteObject = {
     { index: true, element: <DashboardPage /> },
     { path: "users", element: <UserManagementPage /> },
     { path: "restaurants", element: <RestaurantManagementPage /> },
-    { path: "complaints", element: <ComplaintsPage /> },
     { path: "settings", element: <SystemSettingsPage /> },
   ],
 };

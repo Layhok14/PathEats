@@ -2,9 +2,6 @@ import db from "../config/db.js";
 
 class VendorRepository {
 
-  /**
-   * Find all stalls owned by a vendor.
-   */
   async findByOwner(ownerId) {
     const { rows } = await db.query(
       `SELECT p.*, pc.slug AS category_slug, pc.name AS category_name
@@ -17,9 +14,6 @@ class VendorRepository {
     return rows;
   }
 
-  /**
-   * Find a single stall by id, ensuring ownership.
-   */
   async findOwnedById(id, ownerId) {
     const { rows } = await db.query(
       `SELECT p.*, pc.slug AS category_slug, pc.name AS category_name
@@ -32,9 +26,14 @@ class VendorRepository {
     return rows[0] || null;
   }
 
-  /**
-   * Create a new stall (places row).
-   */
+  async findCategory(input) {
+    const { rows } = await db.query(
+      `SELECT id FROM place_categories WHERE slug = $1 OR name = $1 LIMIT 1`,
+      [input]
+    );
+    return rows[0] || null;
+  }
+
   async create(data) {
     const { rows } = await db.query(
       `INSERT INTO places (owner_id, category_id, name, description, address, photo_url, price_range, location, status, is_open)
@@ -50,16 +49,13 @@ class VendorRepository {
         data.price_range || null,
         data.longitude || 104.9282,
         data.latitude || 11.5564,
-        data.status || "APPROVED",
-        data.is_open !== false,
+        "PENDING",
+        data.status === "open",
       ]
     );
     return rows[0];
   }
 
-  /**
-   * Update a stall.
-   */
   async update(id, data) {
     const setClauses = [];
     const values = [];
@@ -71,8 +67,7 @@ class VendorRepository {
       address: data.address,
       photo_url: data.photo_url,
       price_range: data.price_range,
-      status: data.status,
-      is_open: data.is_open,
+      is_open: data.status !== undefined ? data.status === "open" : data.is_open,
     };
 
     for (const [key, value] of Object.entries(fields)) {
@@ -97,9 +92,6 @@ class VendorRepository {
     return rows[0] || null;
   }
 
-  /**
-   * Find a stall by id (admin — no ownership check).
-   */
   async findById(id) {
     const { rows } = await db.query(
       `SELECT p.*, pc.slug AS category_slug, pc.name AS category_name
@@ -112,9 +104,6 @@ class VendorRepository {
     return rows[0] || null;
   }
 
-  /**
-   * Update stall status (approve/reject/suspend).
-   */
   async updateStatus(id, status) {
     const { rows } = await db.query(
       `UPDATE places SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
@@ -123,9 +112,6 @@ class VendorRepository {
     return rows[0] || null;
   }
 
-  /**
-   * Get dashboard metrics for a vendor.
-   */
   async getDashboardMetrics(ownerId) {
     const { rows } = await db.query(
       `SELECT
@@ -139,6 +125,157 @@ class VendorRepository {
     return rows[0];
   }
 
+  async getReviews(ownerId) {
+    const { rows } = await db.query(
+      `SELECT r.id, r.rating AS stars, r.body, r.created_at,
+              u.first_name || ' ' || u.last_name AS user_name,
+              p.name AS place_name, p.id AS place_id
+       FROM reviews r
+       JOIN places p ON p.id = r.place_id
+       JOIN users u ON u.id = r.user_id
+       WHERE p.owner_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT 10`,
+      [ownerId]
+    );
+    return rows;
+  }
+
+  async getAllMenuItems(ownerId) {
+    const { rows } = await db.query(
+      `SELECT mi.* FROM menu_items mi
+       JOIN places p ON p.id = mi.place_id
+       WHERE p.owner_id = $1
+       ORDER BY mi.created_at DESC`,
+      [ownerId]
+    );
+    return rows;
+  }
+
+  async getMenuItems(placeId, ownerId) {
+    const { rows } = await db.query(
+      `SELECT mi.* FROM menu_items mi
+       JOIN places p ON p.id = mi.place_id
+       WHERE mi.place_id = $1 AND p.owner_id = $2
+       ORDER BY mi.created_at DESC`,
+      [placeId, ownerId]
+    );
+    return rows;
+  }
+
+  async updateMenuItemGlobal(ownerId, itemId, data) {
+    const setClauses = [];
+    const values = [];
+    let idx = 1;
+
+    const fields = {
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      category: data.category,
+      image_url: data.image_url,
+      is_available: data.is_available,
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) {
+        setClauses.push(`${key} = $${idx++}`);
+        values.push(value);
+      }
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(itemId, ownerId);
+
+    const { rows } = await db.query(
+      `UPDATE menu_items mi
+       SET ${setClauses.join(", ")}
+       FROM places p
+       WHERE mi.id = $${idx} AND mi.place_id = p.id AND p.owner_id = $${idx + 1}
+       RETURNING mi.*`,
+      values
+    );
+    return rows[0] || null;
+  }
+
+  async deleteMenuItemGlobal(ownerId, itemId) {
+    const { rowCount } = await db.query(
+      `DELETE FROM menu_items mi
+       USING places p
+       WHERE mi.id = $1 AND mi.place_id = p.id AND p.owner_id = $2`,
+      [itemId, ownerId]
+    );
+    return rowCount > 0;
+  }
+
+  async createMenuItem(placeId, ownerId, data) {
+    const { rows } = await db.query(
+      `INSERT INTO menu_items (place_id, name, description, price, category, image_url, is_available)
+       SELECT $1, $2, $3, $4, $5, $6, $7
+       WHERE EXISTS (
+         SELECT 1 FROM places WHERE id = $1 AND owner_id = $8
+       )
+       RETURNING *`,
+      [
+        placeId,
+        data.name,
+        data.description || null,
+        data.price,
+        data.category || "snack",
+        data.image_url || null,
+        data.is_available !== false,
+        ownerId,
+      ]
+    );
+    return rows[0] || null;
+  }
+
+  async updateMenuItem(placeId, itemId, ownerId, data) {
+    const setClauses = [];
+    const values = [];
+    let idx = 1;
+
+    const fields = {
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      category: data.category,
+      image_url: data.image_url,
+      is_available: data.is_available,
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) {
+        setClauses.push(`${key} = $${idx++}`);
+        values.push(value);
+      }
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(itemId, placeId, ownerId);
+
+    const { rows } = await db.query(
+      `UPDATE menu_items mi
+       SET ${setClauses.join(", ")}
+       FROM places p
+       WHERE mi.id = $${idx} AND mi.place_id = $${idx + 1}
+         AND p.id = $${idx + 1} AND p.owner_id = $${idx + 2}
+       RETURNING mi.*`,
+      values
+    );
+    return rows[0] || null;
+  }
+
+  async deleteMenuItem(placeId, itemId, ownerId) {
+    const { rowCount } = await db.query(
+      `DELETE FROM menu_items mi
+       USING places p
+       WHERE mi.id = $1 AND mi.place_id = $2
+         AND p.id = $2 AND p.owner_id = $3`,
+      [itemId, placeId, ownerId]
+    );
+    return rowCount > 0;
+  }
 }
 
 export default VendorRepository;

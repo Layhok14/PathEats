@@ -1,7 +1,5 @@
 // PathEat app-wide configuration constants
 
-export { ALL_VENDORS } from "./vendorData";
-
 export const PHNOM_PENH_CENTER = [11.5564, 104.9282];
 
 // Vector tile styles (MapLibre GL style JSON URLs)
@@ -29,19 +27,18 @@ export const PLACES = [
   { name: "Russian Market (Toul Tom Pong)", lat: 11.5398, lng: 104.9084 },
 ];
 
-export const VENDOR_RANGE_DEFAULT = 300;
+export const VENDOR_RANGE_DEFAULT = 1000;
 export const VENDOR_RANGE_MIN = 10;
-export const VENDOR_RANGE_MAX = 500;
+export const VENDOR_RANGE_MAX = 3000;
 
 export const PRICE_LABELS = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" };
 
 export const CUISINE_OPTIONS = [
-  "All", "Khmer", "Chinese", "Vietnamese", "Thai", "Japanese",
-  "Korean", "Indian", "Western", "Mexican", "Italian", "Seafood",
-  "Dessert", "Beverage", "Street Food",
+  "All", "Rice", "Nom Banh Chok", "Kuytev", "Nompang", "Chek Chen",
+  "Cafe", "Banh Sung", "Banh Xeo", "Others",
 ];
 
 export const CUISINES = [
-  "Khmer", "Noodles", "BBQ", "Rice", "Banh Mi", "Chinese",
-  "Dessert", "Drinks",
+  "Rice", "Nom Banh Chok", "Kuytev", "Nompang", "Chek Chen",
+  "Cafe", "Banh Sung", "Banh Xeo", "Others",
 ];

@@ -5,6 +5,7 @@ import vendorRoutes from "./vendorRoutes.js";
 import adminRoutes from "./adminRoutes.js";
 import csRoutes from "./csRoutes.js";
 import devRoutes from "./devRoutes.js";
+import placesRoutes from "./placesRoutes.js";
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use("/vendor", vendorRoutes);   // VENDOR
 router.use("/admin", adminRoutes);     // GLOBAL_ADMIN
 router.use("/cs", csRoutes);           // CUSTOMER_SERVICE_ADMIN + GLOBAL_ADMIN
 router.use("/dev", devRoutes);         // DEVELOPER_ADMIN
+router.use("/places", placesRoutes);   // Public (reviews POST requires auth)
 
 export default router;

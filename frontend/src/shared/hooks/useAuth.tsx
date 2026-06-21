@@ -1,82 +1,81 @@
-// Auth context — single source for session state across all domains.
-// Switched from mock data to real API calls via axios.
-
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../services/axiosService";
 
-const AuthContext = createContext(null);
+interface AuthUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role_scope: string;
+}
 
-const SESSION_KEY = "patheat_user";
+interface AuthContextValue {
+  user: AuthUser | null;
+  isLoggedIn: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
+  vendorSignup: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
+  logout: () => void;
+}
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; }
-  });
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    else localStorage.removeItem(SESSION_KEY);
-  }, [user]);
+    const token = localStorage.getItem("auth_token");
+    const stored = localStorage.getItem("auth_user");
+    if (token && stored) {
+      try {
+        setUser(JSON.parse(stored));
+      } catch {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("auth_user");
+      }
+    }
+  }, []);
 
-  async function login(email, password) {
+  const login = useCallback(async (email: string, password: string) => {
     const { data } = await api.post("/auth/login", { email, password });
-    const session = data.data;
-    setUser({
-      id: session.user.id,
-      firstName: session.user.firstName,
-      lastName: session.user.lastName,
-      email: session.user.email,
-      role_scope: session.user.role_scope,
-      token: session.token,
-    });
-  }
+    const { user: u, token } = data.data;
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("auth_user", JSON.stringify(u));
+    setUser(u);
+  }, []);
 
-  async function signup({ firstName, lastName, email, password }) {
-    // Default to CONSUMER for user signup; vendor signup should use roleScope: "VENDOR"
-    const { data } = await api.post("/auth/register", {
-      email,
-      password,
-      firstName,
-      lastName,
-      roleScope: "CONSUMER",
-    });
-    const session = data.data;
-    setUser({
-      id: session.user.id,
-      firstName: session.user.firstName,
-      lastName: session.user.lastName,
-      email: session.user.email,
-      role_scope: session.user.role_scope,
-      token: session.token,
-    });
-  }
+  const signup = useCallback(async (reg: { email: string; password: string; firstName: string; lastName: string }) => {
+    const { data } = await api.post("/auth/register", { ...reg, roleScope: "CONSUMER" });
+    const { user: u, token } = data.data;
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("auth_user", JSON.stringify(u));
+    setUser(u);
+  }, []);
 
-  async function vendorSignup({ firstName, lastName, email, password }) {
-    const { data } = await api.post("/auth/register", {
-      email,
-      password,
-      firstName,
-      lastName,
-      roleScope: "VENDOR",
-    });
-    const session = data.data;
-    setUser({
-      id: session.user.id,
-      firstName: session.user.firstName,
-      lastName: session.user.lastName,
-      email: session.user.email,
-      role_scope: session.user.role_scope,
-      token: session.token,
-    });
-  }
+  const vendorSignup = useCallback(async (reg: { email: string; password: string; firstName: string; lastName: string }) => {
+    const { data } = await api.post("/auth/register", { ...reg, roleScope: "VENDOR" });
+    const { user: u, token } = data.data;
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("auth_user", JSON.stringify(u));
+    setUser(u);
+  }, []);
 
-  function logout() { setUser(null); }
+  const logout = useCallback(() => {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
+    setUser(null);
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, signup, vendorSignup, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value: AuthContextValue = {
+    user,
+    isLoggedIn: !!user,
+    login,
+    signup,
+    vendorSignup,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

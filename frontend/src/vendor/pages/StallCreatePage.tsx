@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { ChevronLeft, Check, MapPin } from "lucide-react";
+import { ChevronLeft, Check } from "lucide-react";
 import { PhotoUpload } from "../components/PhotoUpload";
 import { toast } from "sonner";
 import { MenuItemSelector } from "../components/MenuItemSelector";
@@ -9,11 +9,14 @@ import { useStalls } from "../../shared/hooks/useStalls";
 import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import { formatPrice } from "../../shared/utils/formatters";
 import { STALL_CATEGORIES } from "../../shared/constants/categories";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
 import type { StallFormData, StallCategory } from "../../shared/types";
 
 const STEPS = [{ label: "Stall Info" }, { label: "Menu Items" }, { label: "Review" }];
 const EMPTY: StallFormData = {
-  name: "", photoUrl: "", category: "Rice Bowls", description: "",
+  name: "", photoUrl: "",   category: "Rice", description: "",
   operatingHours: { weekdays: { open: "09:00 AM", close: "09:00 PM" }, weekends: { open: "10:00 AM", close: "08:00 PM" } },
   status: "open", location: { landmark: "", latitude: 11.5564, longitude: 104.9282 }, menuItemIds: [],
 };
@@ -34,10 +37,51 @@ function to24h(t: string) {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
-// Step 1: Stall Info form (replaces generic StallForm for create flow — has inline map)
+// Step 1: Stall Info form — has inline MapLibre map with draggable pin
 function StallInfoForm({ form, onChange }: { form: StallFormData; onChange: (f: StallFormData) => void }) {
   const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "4px", padding: "10px 14px", fontSize: "14px", fontFamily: "Poppins, sans-serif", color: "var(--brand-text-dark)", background: "var(--card)", outline: "none" };
   const lbl: React.CSSProperties = { fontFamily: "Poppins, sans-serif", fontSize: "13px", fontWeight: 500, color: "var(--brand-text-dark)", display: "block", marginBottom: "6px" };
+
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+
+  useEffect(() => {
+    if (mapRef.current || !mapDivRef.current) return;
+    const map = new maplibregl.Map({
+      container: mapDivRef.current,
+      style: LIGHT_VECTOR_STYLE,
+      center: [form.location.longitude, form.location.latitude],
+      zoom: 15,
+      attributionControl: false,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    mapRef.current = map;
+    map.on("load", () => {
+      const el = document.createElement("div");
+      el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
+      el.style.cursor = "grab";
+      el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
+      const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, draggable: true })
+        .setLngLat([form.location.longitude, form.location.latitude])
+        .addTo(map);
+      marker.on("dragend", () => {
+        const lngLat = marker.getLngLat();
+        onChange({ ...form, location: { ...form.location, latitude: lngLat.lat, longitude: lngLat.lng } });
+      });
+      markerRef.current = marker;
+    });
+    map.on("click", (e) => {
+      if (markerRef.current) {
+        markerRef.current.setLngLat(e.lngLat);
+        onChange({ ...form, location: { ...form.location, latitude: e.lngLat.lat, longitude: e.lngLat.lng } });
+      }
+    });
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-5">
@@ -91,23 +135,10 @@ function StallInfoForm({ form, onChange }: { form: StallFormData; onChange: (f: 
       {/* Location */}
       <div>
         <label style={{ ...lbl, marginBottom: "10px" }}>Location</label>
-        {/* Map preview placeholder — full pin-drop available after stall is created */}
-        <div style={{
-          height: "120px", borderRadius: "8px", border: "1px solid var(--brand-card-border)",
-          background: "#eff4ff", marginBottom: "10px",
-          backgroundImage: "linear-gradient(90deg,rgba(0,0,0,.04) 2.5%,transparent 2.5%),linear-gradient(rgba(0,0,0,.04) 2.5%,transparent 2.5%),linear-gradient(90deg,#e2e8f0,#e2e8f0)",
-          backgroundSize: "40px 40px, 40px 40px, 100% 100%",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" }}>
-            <div style={{ width: "32px", height: "32px", borderRadius: "9999px", background: "#006e2f", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <MapPin size={14} color="white" />
-            </div>
-            <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", background: "rgba(255,255,255,0.85)", padding: "3px 10px", borderRadius: "9999px" }}>
-              Precise pin-drop available after registration
-            </span>
-          </div>
-        </div>
+        <div ref={mapDivRef} style={{
+          height: "180px", borderRadius: "8px", border: "1px solid var(--brand-card-border)",
+          marginBottom: "10px", position: "relative", overflow: "hidden",
+        }} />
         <input type="text" placeholder="Landmark / Station" value={form.location.landmark} onChange={(e) => onChange({ ...form, location: { ...form.location, landmark: e.target.value } })} style={{ ...inp, marginBottom: "8px" }} />
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -136,9 +167,13 @@ export function StallCreatePage() {
   }
 
   async function handleConfirm() {
-    await createStall(form);
-    toast.success(`"${form.name}" registered successfully!`);
-    navigate("/vendor/stalls");
+    try {
+      await createStall(form);
+      toast.success(`"${form.name}" registered successfully!`);
+      navigate("/vendor/stalls");
+    } catch {
+      toast.error("Failed to register stall. Check your connection and try again.");
+    }
   }
 
   const selectedItems = allItems.filter((i) => form.menuItemIds.includes(i.id));

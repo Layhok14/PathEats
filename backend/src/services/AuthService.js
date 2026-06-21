@@ -153,6 +153,29 @@ class AuthService {
   }
 
   /**
+   * Change password (authenticated user with current password).
+   */
+  async changePassword(userId, currentPassword, newPassword) {
+    const user = await this.userRepo.findByEmailWithPassword(
+      (await this.userRepo.findById(userId)).email
+    );
+    if (!user) throw new AppError("User not found", 404);
+
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!valid) throw new AppError("Current password is incorrect", 401);
+
+    if (newPassword.length < 6) {
+      throw new AppError("New password must be at least 6 characters", 400);
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+    await this.userRepo.updatePassword(userId, passwordHash);
+
+    return { message: "Password changed successfully" };
+  }
+
+  /**
    * Sign a JWT access token.
    */
   _signToken(userId, email, roleScope) {

@@ -1,19 +1,21 @@
 import type { StallCategory, MenuCategory } from "../types";
 
 export const STALL_CATEGORIES: StallCategory[] = [
-  "Rice Bowls",
-  "Noodles & Stir-fry",
-  "Snacks",
-  "Beverages",
-  "Desserts",
-  "Other",
+  "Rice",
+  "Nom Banh Chok",
+  "Kuytev",
+  "Nompang",
+  "Chek Chen",
+  "Cafe",
+  "Banh Sung",
+  "Banh Xeo",
+  "Others",
 ];
 
 export const MENU_CATEGORIES: MenuCategory[] = [
   "All",
-  "Rice",
-  "Noodles",
-  "Drinks",
-  "Snacks",
-  "Desserts",
+  "Main Course",
+  "Snack",
+  "Drink",
+  "Dessert",
 ];

@@ -152,7 +152,7 @@ export function StallListPage() {
                       <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "15px", fontWeight: 600, color: "var(--brand-text-dark)" }}>{stall.name}</p>
                       <div className="flex items-center gap-1">
                         <Star size={13} fill="#22c55e" stroke="#22c55e" />
-                        <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)" }}>{stall.rating.toFixed(1)}</span>
+                        <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)" }}>{(stall.rating ?? 0).toFixed(1)}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 mb-4">

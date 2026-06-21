@@ -1,5 +1,7 @@
 import { Route } from "react-router";
 import { VendorLayout } from "../layouts/VendorLayout";
+import { VendorLoginPage } from "../pages/VendorLoginPage";
+import { VendorRegisterPage } from "../pages/VendorRegisterPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { StallListPage } from "../pages/StallListPage";
 import { StallCreatePage } from "../pages/StallCreatePage";
@@ -13,17 +15,21 @@ import { MenuItemsPage } from "../pages/MenuItemsPage";
 
 export function VendorRoutes() {
   return (
-    <Route path="/vendor" element={<VendorLayout />}>
-      <Route index element={<DashboardPage />} />
-      <Route path="stalls" element={<StallListPage />} />
-      <Route path="stalls/new" element={<StallCreatePage />} />
-      <Route path="stalls/:id" element={<StallDetailPage />} />
-      <Route path="stalls/:id/view" element={<StallViewPage />} />
-      <Route path="stalls/:id/location" element={<LocationPinpointPage />} />
-      <Route path="menu" element={<MenuItemsPage />} />
-      <Route path="reviews" element={<ReviewsPage />} />
-      <Route path="support" element={<SupportPage />} />
-      <Route path="settings" element={<SettingsPage />} />
-    </Route>
+    <>
+      <Route path="/vendor/login" element={<VendorLoginPage />} />
+      <Route path="/vendor/register" element={<VendorRegisterPage />} />
+      <Route path="/vendor" element={<VendorLayout />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="stalls" element={<StallListPage />} />
+        <Route path="stalls/new" element={<StallCreatePage />} />
+        <Route path="stalls/:id" element={<StallDetailPage />} />
+        <Route path="stalls/:id/view" element={<StallViewPage />} />
+        <Route path="stalls/:id/location" element={<LocationPinpointPage />} />
+        <Route path="menu" element={<MenuItemsPage />} />
+        <Route path="reviews" element={<ReviewsPage />} />
+        <Route path="support" element={<SupportPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+      </Route>
+    </>
   );
 }

@@ -1,45 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { useStalls } from "../../shared/hooks/useStalls";
-
-// Centre of the map (Phnom Penh area)
-const MAP_CENTER = { lat: 11.5564, lng: 104.9282 };
-const MAP_RANGE = { lat: 0.12, lng: 0.18 }; // degrees visible across the map
-
-function pinToCoords(xPct: number, yPct: number) {
-  return {
-    lat: MAP_CENTER.lat + (0.5 - yPct / 100) * MAP_RANGE.lat,
-    lng: MAP_CENTER.lng + (xPct / 100 - 0.5) * MAP_RANGE.lng,
-  };
-}
-
-function coordsToPin(lat: number, lng: number) {
-  return {
-    x: ((lng - MAP_CENTER.lng) / MAP_RANGE.lng + 0.5) * 100,
-    y: (-(lat - MAP_CENTER.lat) / MAP_RANGE.lat + 0.5) * 100,
-  };
-}
-
-// SVG pin icon (location marker)
-function PinIcon() {
-  return (
-    <svg width="20" height="25" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" fill="white" stroke="none" />
-    </svg>
-  );
-}
-
-// Location icon for coordinates display
-function LocationIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#565E74" strokeWidth="2">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
-}
+import { PHNOM_PENH_CENTER, LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
 
 export function LocationPinpointPage() {
   const navigate = useNavigate();
@@ -47,51 +12,58 @@ export function LocationPinpointPage() {
   const { getStall, updateStall } = useStalls();
 
   const stall = id ? getStall(id) : null;
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
 
-  // Initial pin position from stall's saved coordinates
-  const initialPin = stall
-    ? coordsToPin(stall.location.latitude, stall.location.longitude)
-    : { x: 50, y: 45 };
+  const initialLng = stall?.location?.longitude ?? 104.9282;
+  const initialLat = stall?.location?.latitude ?? 11.5564;
 
-  const [pin, setPin] = useState(initialPin);
-  const [dragging, setDragging] = useState(false);
-  const mapRef = useRef<HTMLDivElement>(null);
-
-  const coords = pinToCoords(pin.x, pin.y);
-
-  function getRelativePos(e: React.MouseEvent | MouseEvent) {
-    const rect = mapRef.current!.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)),
-      y: Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100)),
-    };
-  }
-
-  function handleMapClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (dragging) return;
-    setPin(getRelativePos(e));
-  }
-
-  function onPinMouseDown(e: React.MouseEvent) {
-    e.stopPropagation();
-    setDragging(true);
-  }
+  const [coords, setCoords] = useState({ lat: initialLat, lng: initialLng });
 
   useEffect(() => {
-    if (!dragging || !mapRef.current) return;
+    if (mapRef.current || !mapDivRef.current) return;
 
-    const onMouseMove = (e: MouseEvent) => {
-      setPin(getRelativePos(e));
-    };
-    const onMouseUp = () => setDragging(false);
+    const map = new maplibregl.Map({
+      container: mapDivRef.current,
+      style: LIGHT_VECTOR_STYLE,
+      center: [initialLng, initialLat],
+      zoom: 15,
+      attributionControl: false,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    mapRef.current = map;
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    map.on("load", () => {
+      const el = document.createElement("div");
+      el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
+      el.style.cursor = "grab";
+      el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
+
+      const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, draggable: true })
+        .setLngLat([initialLng, initialLat])
+        .addTo(map);
+
+      marker.on("dragend", () => {
+        const lngLat = marker.getLngLat();
+        setCoords({ lat: lngLat.lat, lng: lngLat.lng });
+      });
+
+      markerRef.current = marker;
+    });
+
+    map.on("click", (e) => {
+      if (markerRef.current) {
+        markerRef.current.setLngLat(e.lngLat);
+        setCoords({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+      }
+    });
+
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      map.remove();
+      mapRef.current = null;
     };
-  }, [dragging]);
+  }, []);
 
   async function handleConfirm() {
     if (id && stall) {
@@ -109,121 +81,36 @@ export function LocationPinpointPage() {
   }
 
   return (
-    <div
-      className="relative overflow-hidden"
-      style={{ height: "calc(100vh - 64px)" }}
-    >
-      {/* ── Map area ── */}
-      <div
-        ref={mapRef}
-        className="absolute inset-0"
-        style={{
-          background: "#eff4ff",
-          backgroundImage:
-            "linear-gradient(90deg, rgba(0,0,0,0.05) 2.5%, rgba(0,0,0,0) 2.5%), linear-gradient(rgba(0,0,0,0.05) 2.5%, rgba(0,0,0,0) 2.5%), linear-gradient(90deg, rgb(226,232,240) 0%, rgb(226,232,240) 100%)",
-          cursor: dragging ? "grabbing" : "crosshair",
-        }}
-        onClick={handleMapClick}
-      >
-        {/* Map background — grid pattern */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20" style={{ mixBlendMode: "multiply" }}>
-          <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#94a3b8" strokeWidth="0.5" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
-        </div>
+    <div className="relative overflow-hidden" style={{ height: "calc(100vh - 64px)" }}>
+      {/* Map */}
+      <div ref={mapDivRef} className="absolute inset-0" />
 
-        {/* Draggable pin */}
-        <div
-          style={{
-            position: "absolute",
-            left: `${pin.x}%`,
-            top: `${pin.y}%`,
-            transform: "translate(-50%, -100%)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            cursor: dragging ? "grabbing" : "grab",
-            filter: "drop-shadow(0px 2px 1px rgba(0,0,0,0.06)) drop-shadow(0px 4px 1.5px rgba(0,0,0,0.07))",
-            userSelect: "none",
-          }}
-          onMouseDown={onPinMouseDown}
-        >
-          {/* Green pin circle */}
-          <div
-            style={{
-              width: "44px",
-              height: "44px",
-              borderRadius: "9999px",
-              background: "#006e2f",
-              border: "2px solid white",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0px 1px 1px rgba(0,0,0,0.05)",
-            }}
-          >
-            <PinIcon />
-          </div>
-          {/* Shadow dot below */}
-          <div style={{ paddingTop: "4px", width: "8px", height: "8px" }}>
-            <div
-              style={{
-                width: "8px",
-                height: "8px",
-                borderRadius: "9999px",
-                background: "rgba(11,28,48,0.3)",
-                filter: "blur(0.5px)",
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Floating action panel — bottom-left ── */}
+      {/* Floating action panel */}
       <div
         style={{
-          position: "absolute",
-          bottom: "32px",
-          left: "32px",
-          width: "400px",
-          background: "#f8f9ff",
-          borderRadius: "12px",
-          border: "1px solid #bccbb9",
-          padding: "25px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-          zIndex: 10,
+          position: "absolute", bottom: "32px", left: "32px", width: "400px",
+          background: "#f8f9ff", borderRadius: "12px",
+          border: "1px solid #bccbb9", padding: "25px",
+          display: "flex", flexDirection: "column", gap: "16px", zIndex: 10,
         }}
       >
-        {/* Title + description */}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "20px", fontWeight: 500, color: "#0b1c30", margin: 0 }}>
             Set Stall Location
           </p>
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "16px", color: "#565e74", margin: 0, lineHeight: "24px" }}>
-            Drag the pin to your stall's exact location on the path.
+            Drag the pin or click on the map to set your stall's exact location.
           </p>
         </div>
 
-        {/* Coordinates display */}
-        <div
-          style={{
-            background: "#e5eeff",
-            border: "1px solid #bccbb9",
-            borderRadius: "8px",
-            padding: "17px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}
-        >
-          <LocationIcon />
+        <div style={{
+          background: "#e5eeff", border: "1px solid #bccbb9", borderRadius: "8px",
+          padding: "17px", display: "flex", alignItems: "center", gap: "12px",
+        }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#565E74" strokeWidth="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+            <circle cx="12" cy="10" r="3" />
+          </svg>
           <div>
             <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "#565e74", textTransform: "uppercase", letterSpacing: "0.6px", margin: "0 0 2px 0" }}>
               CURRENT SELECTION
@@ -234,38 +121,21 @@ export function LocationPinpointPage() {
           </div>
         </div>
 
-        {/* Action buttons */}
         <div style={{ paddingTop: "12px", display: "flex", gap: "12px", justifyContent: "center" }}>
-          <button
-            onClick={handleCancel}
+          <button onClick={handleCancel}
             style={{
-              flex: 1,
-              padding: "13px 17px",
-              borderRadius: "4px",
-              border: "1px solid #6d7b6c",
-              background: "#f8f9ff",
-              color: "#0b1c30",
-              fontFamily: "Poppins, sans-serif",
-              fontSize: "14px",
-              fontWeight: 500,
-              cursor: "pointer",
+              flex: 1, padding: "13px 17px", borderRadius: "4px",
+              border: "1px solid #6d7b6c", background: "#f8f9ff", color: "#0b1c30",
+              fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 500, cursor: "pointer",
             }}
           >
             Cancel
           </button>
-          <button
-            onClick={handleConfirm}
+          <button onClick={handleConfirm}
             style={{
-              flex: 1,
-              padding: "13px 16px",
-              borderRadius: "4px",
-              border: "none",
-              background: "#22c55e",
-              color: "white",
-              fontFamily: "Poppins, sans-serif",
-              fontSize: "14px",
-              fontWeight: 700,
-              cursor: "pointer",
+              flex: 1, padding: "13px 16px", borderRadius: "4px", border: "none",
+              background: "#22c55e", color: "white", fontFamily: "Poppins, sans-serif",
+              fontSize: "14px", fontWeight: 700, cursor: "pointer",
               boxShadow: "0px 1px 1px rgba(0,0,0,0.05)",
             }}
           >
@@ -274,24 +144,16 @@ export function LocationPinpointPage() {
         </div>
       </div>
 
-      {/* Hint overlay */}
+      {/* Hint */}
       <div
         style={{
-          position: "absolute",
-          top: "20px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "rgba(0,0,0,0.55)",
-          color: "white",
-          fontFamily: "Poppins, sans-serif",
-          fontSize: "13px",
-          padding: "7px 16px",
-          borderRadius: "20px",
-          pointerEvents: "none",
-          zIndex: 10,
+          position: "absolute", top: "20px", left: "50%", transform: "translateX(-50%)",
+          background: "rgba(0,0,0,0.55)", color: "white", fontFamily: "Poppins, sans-serif",
+          fontSize: "13px", padding: "7px 16px", borderRadius: "20px",
+          pointerEvents: "none", zIndex: 10,
         }}
       >
-        Click anywhere on the map or drag the pin to set location
+        Drag the pin or click on the map to set location
       </div>
     </div>
   );
