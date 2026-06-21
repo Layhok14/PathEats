@@ -46,7 +46,9 @@ export function VendorDetail({
     textDim: darkMode ? "rgba(255,255,255,0.2)" : "#BEC6E0",
     surface: darkMode ? "rgba(255,255,255,0.05)" : "#FFFFFF",
     scoreCard: darkMode ? "rgba(255,255,255,0.04)" : "#F0FDF4",
-    scoreCardBorder: darkMode ? "rgba(255,255,255,0.07)" : "#D1D5DB",
+    scoreCardBorder: darkMode
+      ? "rgba(255,255,255,0.07)"
+      : "#D1D5DB",
     scoreBarBg: darkMode ? "rgba(255,255,255,0.08)" : "#D1D5DB",
     rowBorder: darkMode ? "rgba(255,255,255,0.05)" : "#D1D5DB",
     backBtn: darkMode ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)",
@@ -58,7 +60,7 @@ export function VendorDetail({
         className="absolute inset-0 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-white/10"
         style={{ background: c.bg }}
       >
-        {/* Hero */}
+        {/* Hero photo — no buttons here so they don't scroll away */}
         <div className="relative h-56 shrink-0">
           <img
             src={vendor.photo_url}
@@ -71,67 +73,68 @@ export function VendorDetail({
               background: `linear-gradient(to top, ${c.bg} 0%, rgba(0,0,0,0.35) 60%, transparent 100%)`,
             }}
           />
-          <button
-            onClick={onClose}
-            className="absolute top-4 left-4 w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-            style={{ background: c.backBtn, backdropFilter: "blur(8px)" }}
-          >
-            <ArrowLeft size={17} className="text-white" />
-          </button>
-          <button
-            onClick={onToggleFavorite}
-            className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-            style={{ background: c.backBtn, backdropFilter: "blur(8px)" }}
-          >
-            <Heart
-              size={17}
-              className={
-                isFavorite ? "fill-red-400 text-red-400" : "text-white"
-              }
-            />
-          </button>
-          <div className="absolute bottom-3 left-4 right-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span
-                className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                style={{
-                  background: "rgba(255,255,255,0.15)",
-                  color: "rgba(255,255,255,0.85)",
-                  backdropFilter: "blur(8px)",
-                }}
-              >
-                {vendor.cuisine}
-              </span>
-              <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${vendor.open_now ? "bg-emerald-500/25 text-emerald-400" : "bg-red-500/20 text-red-400"}`}
-              >
-                {vendor.open_now ? "● Open" : "● Closed"}
-              </span>
-            </div>
-            <h2 className="text-xl font-bold text-white leading-snug">
-              {vendor.name}
-            </h2>
-          </div>
         </div>
 
-        <div className="px-4 py-4 space-y-5">
-          {/* Quick stats */}
+        {/* Sticky vendor name strip — pins when scrolling through the menu */}
+        <div
+          className="px-4 py-3 border-b"
+          style={{
+            background: c.bg,
+            borderBottomColor: c.scoreCardBorder,
+          }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+              style={{
+                background: c.surface,
+                color: c.textMid,
+              }}
+            >
+              {vendor.cuisine}
+            </span>
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${vendor.open_now ? "bg-emerald-500/15 text-emerald-500" : "bg-red-500/15 text-red-400"}`}
+            >
+              {vendor.open_now ? "● Open" : "● Closed"}
+            </span>
+          </div>
+          <h2
+            className="text-lg font-bold leading-snug"
+            style={{ color: c.text }}
+          >
+            {vendor.name}
+          </h2>
+        </div>
+
+        <div className="px-4 pb-4 space-y-5 pt-4">
+          {/* Stats row — no longer sticky, sits below the name strip */}
           <div className="grid grid-cols-3 gap-2">
             {[
               {
                 icon: (
-                  <Star size={14} className="text-amber-400 fill-amber-400" />
+                  <Star
+                    size={14}
+                    className="text-amber-400 fill-amber-400"
+                  />
                 ),
                 val: vendor.rating.toFixed(1),
                 label: "Rating",
               },
               {
-                icon: <Timer size={14} className="text-blue-400" />,
+                icon: (
+                  <Timer size={14} className="text-blue-400" />
+                ),
                 val: `~${vendor.wait_time_est}m`,
                 label: "Wait",
               },
               {
-                icon: <Wallet size={14} className="text-emerald-400" />,
+                icon: (
+                  <Wallet
+                    size={14}
+                    className="text-emerald-400"
+                  />
+                ),
                 val: PRICE_LABELS[vendor.price_range],
                 label: "Price",
               },
@@ -141,8 +144,13 @@ export function VendorDetail({
                 className="rounded-xl p-3 text-center"
                 style={{ background: c.surface }}
               >
-                <div className="flex justify-center mb-1">{icon}</div>
-                <div className="font-bold text-base" style={{ color: c.text }}>
+                <div className="flex justify-center mb-1">
+                  {icon}
+                </div>
+                <div
+                  className="font-bold text-base"
+                  style={{ color: c.text }}
+                >
                   {val}
                 </div>
                 <div
@@ -155,7 +163,10 @@ export function VendorDetail({
             ))}
           </div>
 
-          <p className="text-sm leading-relaxed" style={{ color: c.textMid }}>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: c.textMid }}
+          >
             {vendor.description}
           </p>
 
@@ -203,10 +214,19 @@ export function VendorDetail({
                 </span>
                 <span
                   className="font-bold text-sm"
-                  style={{ color: scoreColor(vendor.final_score) }}
+                  style={{
+                    color: scoreColor(vendor.final_score),
+                  }}
                 >
-                  {Math.round((vendor.final_score / 0.85) * 100)}
-                  <span style={{ color: c.textDim, fontWeight: 400 }}>
+                  {Math.round(
+                    (vendor.final_score / 0.85) * 100,
+                  )}
+                  <span
+                    style={{
+                      color: c.textDim,
+                      fontWeight: 400,
+                    }}
+                  >
                     /100
                   </span>
                 </span>
@@ -242,6 +262,35 @@ export function VendorDetail({
           />
         </div>
       </div>
+
+      {/* Sticky overlay buttons — outside scroll container so they never scroll away */}
+      <button
+        onClick={onClose}
+        className="absolute top-4 left-4 z-[20] w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+        style={{
+          background: c.backBtn,
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <ArrowLeft size={17} className="text-white" />
+      </button>
+      <button
+        onClick={onToggleFavorite}
+        className="absolute top-4 right-4 z-[20] w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
+        style={{
+          background: c.backBtn,
+          backdropFilter: "blur(8px)",
+        }}
+      >
+        <Heart
+          size={17}
+          className={
+            isFavorite
+              ? "fill-red-400 text-red-400"
+              : "text-white"
+          }
+        />
+      </button>
 
       {showAuth && (
         <AuthModal

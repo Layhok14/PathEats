@@ -1,9 +1,9 @@
-// Main consumer page — composes sidebar panels with the MapLibre map.
-// Map lifecycle delegated to useMaplibreMap; vendor scoring to useVendors.
+// Main consumer page — composes sidebar panels with the Leaflet map.
+// Map lifecycle delegated to useLeafletMap; vendor scoring to useVendors.
 
 // MapLibre GL styles
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { PenLine, Eye, BookmarkPlus, HelpCircle, X, Loader2 } from "lucide-react";
 
@@ -12,6 +12,7 @@ import { PLACES, VENDOR_RANGE_DEFAULT } from "../../shared/constants/appConfig";
 import { getRoute } from "../../shared/services/routeService";
 import { useVendors } from "../hooks/useVendors";
 import { useMaplibreMap } from "../hooks/useMaplibreMap";
+import { useAuth } from "../../shared/hooks/useAuth";
 
 import { NavRail } from "../components/NavRail";
 import { RouteInputPanel } from "../components/RouteInputPanel";
@@ -21,10 +22,18 @@ import { HistoryPanel } from "../components/HistoryPanel";
 import { SearchHistoryPanel } from "../components/SearchHistoryPanel";
 import { VendorDetail } from "../components/VendorDetail";
 import { UserProfileModal } from "../components/UserProfileModal";
-import { AuthModal } from "../components/AuthModal";
+import { LoginModal } from "../components/LoginModal";
+import { SupportModal } from "../components/SupportModal";
 
 export default function UserSearchPage() {
   const { darkMode, tm } = useTheme();
+  const { showAuthGate, isLoggedIn } = useAuth();
+
+  // true once the user has authenticated at least once this session — drives logged-out screen
+  const hadSession = useRef(false);
+  useEffect(() => {
+    if (isLoggedIn) hadSession.current = true;
+  }, [isLoggedIn]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const [page, setPage] = useState("home");
@@ -32,6 +41,7 @@ export default function UserSearchPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
 
   // ── Route ─────────────────────────────────────────────────────────────────
   const [originText, setOriginText] = useState("");
@@ -51,7 +61,9 @@ export default function UserSearchPage() {
   const [filterMaxPrice, setFilterMaxPrice] = useState(4);
   const [filterOpenNow, setFilterOpenNow] = useState(false);
   const [vendorSearch, setVendorSearch] = useState("");
-  const [vendorRange, setVendorRange] = useState(VENDOR_RANGE_DEFAULT);
+  const [vendorRange, setVendorRange] = useState(
+    VENDOR_RANGE_DEFAULT,
+  );
 
   // ── User data ─────────────────────────────────────────────────────────────
   const [selectedVendor, setSelectedVendor] = useState(null);
@@ -72,7 +84,9 @@ export default function UserSearchPage() {
     (filterMaxPrice < 4 ? 1 : 0) +
     (filterOpenNow ? 1 : 0);
 
+  // Guests cannot save — silently block (VendorDetail shows "Sign in" prompt itself)
   function toggleFavorite(id) {
+    if (!isLoggedIn) return;
     setFavorites((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
@@ -80,14 +94,14 @@ export default function UserSearchPage() {
     });
   }
 
-  async function handleFindRoute(overrideOrigin, overrideDest) {
+  async function handleFindRoute() {
     setLoadingRoute(true);
     try {
-      const pts = await getRoute(overrideOrigin ?? originPlace, overrideDest ?? destPlace);
-      setRoutePoints(pts);
-      setRouteReady(true);
-      setSelectedVendor(null);
-      setPage("filter");
+      const points = await getRoute (originPlace, destPlace);
+        setRoutePoints (points);
+        setRouteReady(true);
+        setSelectedVendor (null);
+        setPage("filter");
       // Record every search so the History tab and recent strip stay current
       if (originText.trim() && destText.trim()) {
         const searchedAt = new Date().toLocaleString("en-US", {
@@ -108,7 +122,11 @@ export default function UserSearchPage() {
           [
             entry,
             ...prev.filter(
-              (s) => !(s.origin === entry.origin && s.dest === entry.dest),
+              (s) =>
+                !(
+                  s.origin === entry.origin &&
+                  s.dest === entry.dest
+                ),
             ),
           ].slice(0, 50),
         );
@@ -119,7 +137,7 @@ export default function UserSearchPage() {
       setLoadingRoute(false);
     }
   }
-
+  
   function handleBack() {
     setPage("home");
     setRouteReady(false);
@@ -129,8 +147,11 @@ export default function UserSearchPage() {
   }
 
   function handleSaveRoute() {
+    if (!isLoggedIn) return; // guests cannot save routes
     const label =
-      originText && destText ? `${originText} → ${destText}` : "Custom Route";
+      originText && destText
+        ? `${originText} → ${destText}`
+        : "Custom Route";
     const savedAt = new Date().toLocaleString("en-US", {
       month: "short",
       day: "numeric",
@@ -161,7 +182,7 @@ export default function UserSearchPage() {
     setLeftNavTab("route");
   }
 
-  function handleWaypointAdded(lat, lng) {
+  const handleWaypointAdded = useCallback((lat, lng) => {
     setRoutePoints((prev) => {
       let bestIdx = 1,
         bestDist = Infinity;
@@ -179,9 +200,9 @@ export default function UserSearchPage() {
       n.splice(bestIdx, 0, [lat, lng]);
       return n;
     });
-  }
+  }, []);
 
-    const { mapDivRef } = useMaplibreMap({
+  const { mapDivRef } = useMaplibreMap({
     darkMode,
     routePoints,
     routeReady,
@@ -190,17 +211,10 @@ export default function UserSearchPage() {
     selectedVendorId: selectedVendor?.id ?? null,
     onSelectVendor: setSelectedVendor,
     onWaypointAdded: handleWaypointAdded,
-    onEndpointDrag: (type, lat, lng) => {
-      const newOrigin = type === "origin" ? { ...originPlace, lat, lng } : originPlace;
-      const newDest = type === "dest" ? { ...destPlace, lat, lng } : destPlace;
-      if (type === "origin") setOriginPlace(newOrigin);
-      else setDestPlace(newDest);
-      handleFindRoute(newOrigin, newDest);
-    },
   });
 
-  const stripVisible = routeReady && !editRouteMode && scoredVendors.length > 0;
-  const hasRoute = routeReady && routePoints.length >= 2;
+  const stripVisible =
+    routeReady && !editRouteMode && scoredVendors.length > 0;
 
   return (
     <div
@@ -268,7 +282,9 @@ export default function UserSearchPage() {
                   setPage("home");
                 }}
                 onDelete={(id) =>
-                  setSearchHistory((prev) => prev.filter((h) => h.id !== id))
+                  setSearchHistory((prev) =>
+                    prev.filter((h) => h.id !== id),
+                  )
                 }
                 onClearAll={() => setSearchHistory([])}
               />
@@ -287,7 +303,9 @@ export default function UserSearchPage() {
                 savedRoutes={savedRoutes}
                 onLoadRoute={handleLoadRoute}
                 onDeleteRoute={(id) =>
-                  setSavedRoutes((prev) => prev.filter((r) => r.id !== id))
+                  setSavedRoutes((prev) =>
+                    prev.filter((r) => r.id !== id),
+                  )
                 }
                 onClearAll={() => setSavedRoutes([])}
               />
@@ -324,7 +342,7 @@ export default function UserSearchPage() {
                   setDestText(e.dest);
                   setOriginPlace(e.originPlace);
                   setDestPlace(e.destPlace);
-                  handleFindRoute(e.originPlace, e.destPlace);
+                  handleFindRoute();
                 }}
                 onViewMoreHistory={() => setLeftNavTab("trips")}
                 onFindRoute={handleFindRoute}
@@ -344,8 +362,6 @@ export default function UserSearchPage() {
                 originText={originText}
                 destText={destText}
                 vendorCount={scoredVendors.length}
-                scoredVendors={scoredVendors}
-                onSelectVendor={setSelectedVendor}
                 filterCuisine={filterCuisine}
                 setFilterCuisine={setFilterCuisine}
                 filterMaxPrice={filterMaxPrice}
@@ -373,7 +389,11 @@ export default function UserSearchPage() {
         <div
           ref={mapDivRef}
           className="w-full transition-[height] duration-200"
-          style={{ height: hasRoute ? "calc(100% - 116px)" : "100%" }}
+          style={{
+            height: stripVisible
+              ? "calc(100% - 116px)"
+              : "100%",
+          }}
         />
 
         {/* Edit mode banner */}
@@ -386,7 +406,10 @@ export default function UserSearchPage() {
               boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
             }}
           >
-            <PenLine size={13} className="text-white/70 shrink-0" />
+            <PenLine
+              size={13}
+              className="text-white/70 shrink-0"
+            />
             <span className="text-white text-[11px] font-medium">
               Click route to add waypoints
             </span>
@@ -427,7 +450,8 @@ export default function UserSearchPage() {
                   ? {
                       background: "rgba(99,102,241,0.9)",
                       backdropFilter: "blur(12px)",
-                      boxShadow: "0 0 0 3px rgba(99,102,241,0.3)",
+                      boxShadow:
+                        "0 0 0 3px rgba(99,102,241,0.3)",
                     }
                   : {
                       background: tm.glassCard,
@@ -438,7 +462,10 @@ export default function UserSearchPage() {
             >
               {editRouteMode ? (
                 <>
-                  <Eye size={14} className="text-white shrink-0" />
+                  <Eye
+                    size={14}
+                    className="text-white shrink-0"
+                  />
                   <span className="text-[11px] font-semibold text-white">
                     Show Vendors
                   </span>
@@ -462,10 +489,10 @@ export default function UserSearchPage() {
           </div>
         )}
 
-        {/* Tutorial toggle */}
+        {/* Support / Feedback button */}
         <button
-          onClick={() => setShowAuthModal((v) => !v)}
-          title="How it works"
+          onClick={() => setShowSupport(true)}
+          title="Send feedback"
           className="absolute top-4 right-4 z-[500] w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
           style={{
             background: tm.glassCard,
@@ -484,7 +511,7 @@ export default function UserSearchPage() {
         </div>
 
         {/* Horizontal vendor strip */}
-        {hasRoute && (
+        {stripVisible && (
           <div
             className="absolute bottom-0 left-0 right-0 z-[300]"
             style={{
@@ -497,70 +524,73 @@ export default function UserSearchPage() {
             <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden">
               <div
                 className="flex gap-2 px-4 py-3"
-                style={{ width: "max-content", minWidth: "100%" }}
+                style={{ width: "max-content" }}
               >
-                {scoredVendors.length > 0 ? (
-                  scoredVendors.map((v, i) => {
-                    const isSelected = selectedVendor?.id === v.id;
-                    return (
-                      <button
-                        key={v.id}
-                        onClick={() => setSelectedVendor(v)}
-                        className="relative shrink-0 rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95"
+                {scoredVendors.map((v, i) => {
+                  const isSelected =
+                    selectedVendor?.id === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVendor(v)}
+                      className="relative shrink-0 rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95"
+                      style={{
+                        width: 72,
+                        height: 92,
+                        outline: isSelected
+                          ? `2.5px solid #22c55e`
+                          : "none",
+                        outlineOffset: 1,
+                      }}
+                    >
+                      <img
+                        src={v.photo_url}
+                        alt={v.name}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                      <div
+                        className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold text-white"
                         style={{
-                          width: 72,
-                          height: 92,
-                          outline: isSelected ? `2.5px solid #22c55e` : "none",
-                          outlineOffset: 1,
+                          background: "#10b981",
+                          boxShadow:
+                            "0 1px 2px rgba(0,0,0,0.5)",
                         }}
                       >
-                        <img
-                          src={v.photo_url}
-                          alt={v.name}
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                        <div
-                          className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold text-white"
-                          style={{
-                            background: "#10b981",
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.5)",
-                          }}
-                        >
-                          {i + 1}
-                        </div>
-                        <div
-                          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
-                          style={{
-                            background: v.open_now
-                              ? "#00d492"
-                              : "rgba(255,255,255,0.3)",
-                          }}
-                        />
-                        <div
-                          className="absolute bottom-0 left-0 right-0 pt-6 pb-1 px-1.5"
-                          style={{
-                            background:
-                              "linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0))",
-                          }}
-                        >
-                          <p className="text-[6.5px] font-semibold text-white text-center leading-tight line-clamp-2">
-                            {v.name}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div
-                    className="flex items-center justify-center text-sm px-4"
-                    style={{ color: tm.text4, minWidth: "200px" }}
-                  >
-                    No vendors found. Try adjusting filters or range.
-                  </div>
-                )}
+                        {i + 1}
+                      </div>
+                      <div
+                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
+                        style={{
+                          background: v.open_now
+                            ? "#00d492"
+                            : "rgba(255,255,255,0.3)",
+                        }}
+                      />
+                      <div
+                        className="absolute bottom-0 left-0 right-0 pt-6 pb-1 px-1.5"
+                        style={{
+                          background:
+                            "linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0))",
+                        }}
+                      >
+                        <p className="text-[6.5px] font-semibold text-white text-center leading-tight line-clamp-2">
+                          {v.name}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
+        )}
+
+        {/* Click-outside backdrop — fixed so clicks on NavRail/sidebar also close the panel */}
+        {selectedVendor && (
+          <div
+            className="fixed inset-0 z-[999]"
+            onClick={() => setSelectedVendor(null)}
+          />
         )}
 
         {/* Vendor detail slide-in */}
@@ -568,7 +598,9 @@ export default function UserSearchPage() {
           className="absolute top-0 right-0 bottom-0 z-[1000] transition-transform duration-300"
           style={{
             width: 360,
-            transform: selectedVendor ? "translateX(0)" : "translateX(100%)",
+            transform: selectedVendor
+              ? "translateX(0)"
+              : "translateX(100%)",
             boxShadow: "-8px 0 32px rgba(0,0,0,0.35)",
           }}
         >
@@ -577,16 +609,27 @@ export default function UserSearchPage() {
               vendor={selectedVendor}
               onClose={() => setSelectedVendor(null)}
               isFavorite={favorites.has(selectedVendor.id)}
-              onToggleFavorite={() => toggleFavorite(selectedVendor.id)}
+              onToggleFavorite={() =>
+                toggleFavorite(selectedVendor.id)
+              }
             />
           )}
         </div>
       </div>
 
       {showProfile && (
-        <UserProfileModal onClose={() => setShowProfile(false)} />
+        <UserProfileModal
+          onClose={() => setShowProfile(false)}
+        />
       )}
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      {showSupport && (
+        <SupportModal onClose={() => setShowSupport(false)} />
+      )}
+
+      {/* Auth gate — show logged-out screen when returning from an active session, login screen on first load */}
+      {showAuthGate && (
+        <LoginModal showLoggedOut={hadSession.current} />
+      )}
     </div>
   );
 }

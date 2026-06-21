@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch { return null; }
   });
+  const [isGuest, setIsGuest] = useState(false);
 
   useEffect(() => {
     if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
@@ -29,6 +30,7 @@ export function AuthProvider({ children }) {
       role_scope: session.user.role_scope,
       token: session.token,
     });
+    setIsGuest(false);
   }
 
   async function signup({ firstName, lastName, email, password }) {
@@ -49,7 +51,10 @@ export function AuthProvider({ children }) {
       role_scope: session.user.role_scope,
       token: session.token,
     });
+    setIsGuest(false);
   }
+
+  async function continueAsGuest() { setIsGuest(true); setUser(null); }
 
   async function vendorSignup({ firstName, lastName, email, password }) {
     const { data } = await api.post("/auth/register", {
@@ -72,8 +77,11 @@ export function AuthProvider({ children }) {
 
   function logout() { setUser(null); }
 
+  // showAuthGate: true when the user hasn't authenticated or chosen guest
+  const showAuthGate = !user && !isGuest;
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, signup, vendorSignup, logout }}>
+    <AuthContext.Provider value={{ user, isLoggedIn: !!user, isGuest, showAuthGate,continueAsGuest, login, signup, vendorSignup, logout }}>
       {children}
     </AuthContext.Provider>
   );
