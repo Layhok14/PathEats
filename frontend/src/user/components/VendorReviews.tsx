@@ -57,7 +57,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
   const avg =
     reviews.length > 0
       ? (reviews.reduce((s, r) => s + r.stars, 0) / reviews.length).toFixed(1)
-      : vendor.rating.toFixed(1);
+      : Number(vendor.rating).toFixed(1);
 
   async function handleSubmit(e) {
     e.preventDefault();

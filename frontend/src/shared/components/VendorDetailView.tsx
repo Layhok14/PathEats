@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Search, Star, ListOrdered, Store, Plus, X } from "lucide-react";
+import { ArrowLeft, Search, Star, ListOrdered, Store, Plus, X, Eye } from "lucide-react";
 import { toast } from "sonner";
 import api from "../services/axiosService";
 import { ReviewsManager } from "./ReviewsManager";
@@ -290,7 +290,7 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
                           {stall.description && <p className="text-[11px] text-[#94a3b8]">{stall.description}</p>}
                         </td>
                         <td className="px-5 py-3 text-[12px] text-[#64748b]">{stall.category?.name || "—"}</td>
-                        <td className="px-5 py-3 text-[13px] text-[#64748b]">{stall.rating != null ? stall.rating.toFixed(1) : "—"}</td>
+                        <td className="px-5 py-3 text-[13px] text-[#64748b]">{stall.rating != null ? Number(stall.rating).toFixed(1) : "—"}</td>
                         <td className="px-5 py-3">
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${stall.isOpen ? "bg-green-50 text-[#006e2f]" : "bg-red-50 text-[#ba1a1a]"}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${stall.isOpen ? "bg-[#006e2f]" : "bg-[#ba1a1a]"}`} />
@@ -301,6 +301,12 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
                         <td className="px-5 py-3">
                           {!readonly && (
                             <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => navigate(`/admin/restaurants/stall/${stall.id}`)}
+                                className="px-2.5 py-1 rounded text-[11px] font-semibold bg-[#e8f5e9] text-[#006e2f] hover:bg-[#c8e6c9] flex items-center gap-1"
+                              >
+                                <Eye size={12} /> View
+                              </button>
                               <button
                                 onClick={() => handleToggleStall(stall)}
                                 className={`px-2.5 py-1 rounded text-[11px] font-semibold ${stall.isOpen ? "bg-red-50 text-[#ba1a1a] hover:bg-red-100" : "bg-green-50 text-[#006e2f] hover:bg-green-100"}`}

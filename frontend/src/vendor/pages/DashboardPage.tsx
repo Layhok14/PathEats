@@ -84,7 +84,7 @@ export function DashboardPage() {
   const statCards = [
     { label: "Total Stalls", value: stats?.total_stalls ?? "—", icon: "🏪", color: "#22c55e" },
     { label: "Open Stalls", value: stats?.open_stalls ?? "—", icon: "👁", color: "#3b82f6" },
-    { label: "Average Rating", value: stats ? stats.avg_rating.toFixed(1) : "—", icon: "⭐", color: "#f59e0b" },
+    { label: "Average Rating", value: stats ? Number(stats.avg_rating).toFixed(1) : "—", icon: "⭐", color: "#f59e0b" },
   ];
 
   return (

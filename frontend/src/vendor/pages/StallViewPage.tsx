@@ -101,7 +101,7 @@ export function StallViewPage() {
 
             <div className="flex items-center gap-1.5 mt-3">
               <Star size={14} fill="#22c55e" stroke="#22c55e" />
-              <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600, color: "var(--brand-text-dark)" }}>{(stall.rating ?? 0).toFixed(1)}</span>
+              <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600, color: "var(--brand-text-dark)" }}>{Number(stall.rating ?? 0).toFixed(1)}</span>
               <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)" }}>({stall.reviewCount ?? 0} reviews)</span>
             </div>
 

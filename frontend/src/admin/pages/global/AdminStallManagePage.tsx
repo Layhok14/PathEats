@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
-import { Plus, Search, List, Map, X } from "lucide-react";
+import { Plus, Search, List, Map, X, Eye, Expand } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
@@ -86,6 +87,7 @@ function StallMap({ stalls, loading = false, onPinClick }: { stalls: AdminStallR
 }
 
 export default function AdminStallManagePage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("stalls");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
 
@@ -384,7 +386,7 @@ export default function AdminStallManagePage() {
                               <p className="text-[12px] text-[#0b1c30]">{stall.ownerName || stall.ownerEmail || "—"}</p>
                             </td>
                             <td className="px-5 py-3 text-[12px] text-[#64748b]">{stall.category?.name || "—"}</td>
-                            <td className="px-5 py-3 text-[13px] text-[#64748b]">{stall.rating != null ? stall.rating.toFixed(1) : "—"}</td>
+                            <td className="px-5 py-3 text-[13px] text-[#64748b]">{stall.rating != null ? Number(stall.rating).toFixed(1) : "—"}</td>
                             <td className="px-5 py-3">
                               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${stall.isOpen ? "bg-green-50 text-[#006e2f]" : "bg-red-50 text-[#ba1a1a]"}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${stall.isOpen ? "bg-[#006e2f]" : "bg-[#ba1a1a]"}`} />
@@ -393,6 +395,12 @@ export default function AdminStallManagePage() {
                             </td>
                             <td className="px-5 py-3">
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => navigate(`/admin/restaurants/stall/${stall.id}`)}
+                                  className="px-2.5 py-1 rounded text-[11px] font-semibold bg-[#e8f5e9] text-[#006e2f] hover:bg-[#c8e6c9] flex items-center gap-1"
+                                >
+                                  <Eye size={12} /> View
+                                </button>
                                 <button
                                   onClick={() => handleToggleStall(stall)}
                                   className={`px-2.5 py-1 rounded text-[11px] font-semibold ${stall.isOpen ? "bg-red-50 text-[#ba1a1a] hover:bg-red-100" : "bg-green-50 text-[#006e2f] hover:bg-green-100"}`}

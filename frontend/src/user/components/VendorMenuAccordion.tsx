@@ -101,7 +101,7 @@ export function VendorMenuAccordion({ menu, colors: c }) {
                         )}
                       </div>
                       <span className="text-sm font-semibold shrink-0 text-emerald-400">
-                        ${item.price.toFixed(2)}
+                        ${Number(item.price).toFixed(2)}
                       </span>
                     </div>
                   ))}

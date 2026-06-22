@@ -122,7 +122,7 @@ export function VendorDetail({
                 icon: (
                   <Star size={14} className="text-amber-400 fill-amber-400" />
                 ),
-                val: vendor.rating.toFixed(1),
+                val: Number(vendor.rating).toFixed(1),
                 label: "Rating",
               },
               {
