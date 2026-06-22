@@ -22,11 +22,11 @@ export function useReviews(vendorId: string) {
     }).catch(() => {});
   }, [vendorId]);
 
-  async function submit(payload: { vendor_id: string; user_id: string; rating: number; body: string }) {
+  async function submit(payload: { vendor_id: string; user_id: string; stars: number; body: string }) {
     setSubmitting(true);
     try {
       const { data } = await api.post(`/places/${vendorId}/reviews`, {
-        rating: payload.rating,
+        rating: payload.stars,
         body: payload.body,
       });
       const newReview = { ...data.data, vendor_id: vendorId, user_name: "You" };

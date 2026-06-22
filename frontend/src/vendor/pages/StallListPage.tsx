@@ -10,17 +10,19 @@ type ViewMode = "list" | "map";
 
 export function StallListPage() {
   const navigate = useNavigate();
-  const { stalls } = useStalls();
+  const { stalls, loading } = useStalls();
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<StallCategory | "All">("All");
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
   const [sortBy, setSortBy] = useState<"name" | "rating">("name");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const filtered = stalls
     .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()))
     .filter((s) => category === "All" || s.category === category)
-    .sort((a, b) => sortBy === "rating" ? b.rating - a.rating : a.name.localeCompare(b.name));
+    .filter((s) => statusFilter === "all" || s.status === statusFilter)
+    .sort((a, b) => sortBy === "rating" ? (b.rating ?? 0) - (a.rating ?? 0) : a.name.localeCompare(b.name));
 
   const selectStyle: React.CSSProperties = {
     padding: "8px 12px", border: "1px solid var(--brand-card-border)",
@@ -104,16 +106,29 @@ export function StallListPage() {
           <option value="name">Sort By: Name</option>
           <option value="rating">Sort By: Rating</option>
         </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | "open" | "closed")} style={selectStyle}>
+          <option value="all">All Stalls</option>
+          <option value="open">Open Only</option>
+          <option value="closed">Closed Only</option>
+        </select>
         <ViewToggle />
       </div>
 
+      {/* Loading state for both views */}
+      {loading && (
+        <div className="flex flex-col items-center justify-center py-20 rounded-xl border" style={{ borderColor: "var(--brand-card-border)", background: "var(--card)" }}>
+          <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
+          <p className="mt-3 text-sm" style={{ color: "var(--brand-text-muted)" }}>Loading stalls from database...</p>
+        </div>
+      )}
+
       {/* Map view */}
-      {viewMode === "map" && (
-        <StallMapView stalls={filtered} onPinClick={(id) => navigate(`/vendor/stalls/${id}`)} />
+      {!loading && viewMode === "map" && (
+        <StallMapView stalls={filtered} loading={false} onPinClick={(id) => navigate(`/vendor/stalls/${id}`)} />
       )}
 
       {/* List view */}
-      {viewMode === "list" && (
+      {!loading && viewMode === "list" && (
         filtered.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filtered.map((stall) => {

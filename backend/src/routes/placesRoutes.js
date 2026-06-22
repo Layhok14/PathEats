@@ -16,6 +16,21 @@ router.get("/:id", catchAsync(async (req, res) => {
   res.json({ success: true, data: place });
 }));
 
+router.get("/reviews/all", catchAsync(async (req, res) => {
+  const { pool } = await import("../config/db.js");
+  const { rows } = await pool.query(
+    `SELECT r.id, r.rating AS stars, r.body, r.created_at,
+            COALESCE(u.first_name || ' ' || u.last_name, 'Anonymous') AS user_name,
+            p.name AS place_name, p.id AS place_id
+     FROM reviews r
+     JOIN places p ON p.id = r.place_id
+     LEFT JOIN users u ON u.id = r.user_id
+     WHERE r.deleted_at IS NULL
+     ORDER BY r.created_at DESC`
+  );
+  res.json({ success: true, data: rows });
+}));
+
 router.get("/:id/reviews", catchAsync(async (req, res) => {
   const reviews = await placeService.getReviews(req.params.id);
   res.json({ success: true, data: reviews });

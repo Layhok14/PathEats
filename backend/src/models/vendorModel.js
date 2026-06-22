@@ -43,20 +43,24 @@ class VendorModel {
     return {
       id: row.id,
       name: row.name,
-      description: row.description,
+      description: row.description || "",
+      photoUrl: row.photo_url || "",
+      category: row.category_name || "Others",
       category_id: row.category_id,
-      category_slug: row.category_slug,
-      category_name: row.category_name,
-      address: row.address,
-      photo_url: row.photo_url,
-      price_range: row.price_range,
-      rating_avg: row.rating_avg,
-      rating_count: row.rating_count,
-      is_open: row.is_open,
-      status: row.status,
-      location: row.location
-        ? { latitude: row.location.y, longitude: row.location.x }
-        : null,
+      price_range: row.price_range || 1,
+      rating: parseFloat(row.rating_avg) || 0,
+      reviewCount: parseInt(row.rating_count) || 0,
+      status: row.is_open ? "open" : "closed",
+      location: {
+        landmark: row.address || "",
+        latitude: parseFloat(row.lat) || 0,
+        longitude: parseFloat(row.lng) || 0,
+      },
+      operatingHours: {
+        weekdays: { open: "07:00 AM", close: "09:00 PM" },
+        weekends: { open: "08:00 AM", close: "08:00 PM" },
+      },
+      menuItemIds: [],
       created_at: row.created_at,
     };
   }

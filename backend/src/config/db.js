@@ -17,6 +17,8 @@ const pool = new pg.Pool({
   keepAlive: true,
 });
 
+export { pool };
+
 const db = {
   query(text, params) {
     return pool.query(text, params);

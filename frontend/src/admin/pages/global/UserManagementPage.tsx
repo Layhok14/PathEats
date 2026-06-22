@@ -131,7 +131,8 @@ export default function UserManagementPage() {
       ]);
       setRows(overviewRows);
       setDbConnected(dbStatus.connected);
-    } catch {
+    } catch (err) {
+      console.error("[UserManagementPage] Failed to load overview:", err);
       const text = "Could not load user management data.";
       setMessage(text);
       toast.error(text);
@@ -200,7 +201,8 @@ export default function UserManagementPage() {
       await updateAdminUserStatus(row.id, nextStatus);
       toast.success(nextStatus === "Active" ? "User unbanned." : "User banned.");
       await loadOverview(query);
-    } catch {
+    } catch (err) {
+      console.error("[UserManagementPage] Failed to update user status:", err);
       toast.error("Could not update user account.");
     }
   };
@@ -286,6 +288,12 @@ export default function UserManagementPage() {
             </div>
           </div>
 
+          {loading ? (
+            <div className="p-10 text-center text-[13px] text-[#94a3b8]">
+              <div className="w-5 h-5 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading user data from database...
+            </div>
+          ) : (
           <table className="w-full table-fixed">
             <thead>
               <tr className="bg-[#f8fafc]">
@@ -343,6 +351,7 @@ export default function UserManagementPage() {
               )}
             </tbody>
           </table>
+          )}
 
           <div className="flex items-center justify-between px-6 py-3 border-t border-[#f1f5f9]">
             <p className="text-[12px] text-[#94a3b8]">Page {page} of {totalPages}</p>

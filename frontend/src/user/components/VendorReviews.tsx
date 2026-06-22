@@ -46,12 +46,13 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
+  const idNum = vendor.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const display =
     reviews.length > 0
       ? reviews
       : [
-          SEED_POOL[vendor.id % SEED_POOL.length],
-          SEED_POOL[(vendor.id + 1) % SEED_POOL.length],
+          SEED_POOL[idNum % SEED_POOL.length],
+          SEED_POOL[(idNum + 1) % SEED_POOL.length],
         ];
   const avg =
     reviews.length > 0

@@ -1,12 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
-import { MapPin, Trash2, CheckSquare, Plus, X, Pencil } from "lucide-react";
+import { Trash2, CheckSquare, Plus, X, Pencil, Search, Expand } from "lucide-react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 import { PhotoUpload } from "../components/PhotoUpload";
+import { SuccessModal } from "../../shared/components/SuccessModal";
 import { useStalls } from "../../shared/hooks/useStalls";
 import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import { STALL_CATEGORIES, MENU_CATEGORIES } from "../../shared/constants/categories";
 import { formatPrice } from "../../shared/utils/formatters";
+import { LIGHT_VECTOR_STYLE, PHNOM_PENH_CENTER } from "../../shared/constants/appConfig";
 import type { StallFormData, StallCategory, VendorMenuItem as MenuItem, MenuCategory } from "../../shared/types";
 import type { MenuItemFormData } from "../../shared/hooks/useMenuItems";
 import api from "../../shared/services/axiosService";
@@ -141,23 +145,47 @@ function MenuItemModal({
 // Add from existing catalog picker
 function CatalogPicker({ selectedIds, onToggle, onClose }: { selectedIds: string[]; onToggle: (id: string) => void; onClose: () => void }) {
   const [catFilter, setCatFilter] = useState<MenuCategory>("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const { items } = useMenuItems(catFilter);
+
+  const q = searchQuery.toLowerCase().trim();
+  const filtered = q
+    ? items.filter((i) => i.name.toLowerCase().includes(q) || (i.description || "").toLowerCase().includes(q))
+    : items;
+
+  const inpStyle: React.CSSProperties = {
+    width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "6px",
+    padding: "9px 12px 9px 34px", fontSize: "13px", fontFamily: "Poppins, sans-serif",
+    color: "var(--brand-text-dark)", background: "var(--card)", outline: "none",
+  };
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent style={{ maxWidth: "600px", maxHeight: "80vh", overflow: "auto" }}>
+      <DialogContent style={{ maxWidth: "600px", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
         <DialogHeader>
           <DialogTitle style={{ fontFamily: "Poppins, sans-serif" }}>Add from Catalog</DialogTitle>
         </DialogHeader>
-        <div className="flex gap-2 flex-wrap mb-4">
+        <div className="flex gap-2 flex-wrap mb-3">
           {MENU_CATEGORIES.map((c) => (
             <button key={c} onClick={() => setCatFilter(c)} style={{ padding: "4px 12px", borderRadius: "9999px", border: "none", background: catFilter === c ? "var(--brand-green)" : "var(--muted)", color: catFilter === c ? "white" : "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "13px", cursor: "pointer" }}>
               {c}
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {items.map((item) => {
+        <div className="relative mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--brand-text-muted)", pointerEvents: "none" }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search menu items…"
+            style={inpStyle}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3 overflow-y-auto flex-1" style={{ minHeight: 0 }}>
+          {filtered.length === 0 ? (
+            <p className="col-span-2 py-8 text-center" style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)" }}>No items match your search.</p>
+          ) : filtered.map((item) => {
             const sel = selectedIds.includes(item.id);
             return (
               <button key={item.id} onClick={() => onToggle(item.id)} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "8px", border: `2px solid ${sel ? "var(--brand-green)" : "var(--brand-card-border)"}`, background: sel ? "#f0fdf4" : "var(--card)", cursor: "pointer", textAlign: "left" }}>
@@ -183,6 +211,70 @@ function CatalogPicker({ selectedIds, onToggle, onClose }: { selectedIds: string
 
 type ActiveTab = "info" | "menu";
 
+function LocationPreviewMap({ lat, lng, onOpenFullscreen, onCoordsChange }: { lat: number; lng: number; onOpenFullscreen: () => void; onCoordsChange: (lat: number, lng: number) => void }) {
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+
+  useEffect(() => {
+    if (mapRef.current || !mapDivRef.current) return;
+    const map = new maplibregl.Map({
+      container: mapDivRef.current,
+      style: LIGHT_VECTOR_STYLE,
+      center: [lng, lat],
+      zoom: 15,
+      attributionControl: false,
+      interactive: true,
+    });
+    mapRef.current = map;
+
+    map.on("load", () => {
+      const el = document.createElement("div");
+      el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
+      el.style.cursor = "grab";
+      el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
+
+      const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, draggable: true })
+        .setLngLat([lng, lat])
+        .addTo(map);
+      markerRef.current = marker;
+
+      marker.on("dragend", () => {
+        const lngLat = marker.getLngLat();
+        onCoordsChange(lngLat.lat, lngLat.lng);
+      });
+
+      map.on("click", (e) => {
+        if (markerRef.current) {
+          markerRef.current.setLngLat(e.lngLat);
+          onCoordsChange(e.lngLat.lat, e.lngLat.lng);
+        }
+      });
+    });
+
+    return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div style={{ position: "relative", borderRadius: "8px", overflow: "hidden" }}>
+      <div ref={mapDivRef} style={{ width: "100%", height: "160px" }} />
+      <button
+        type="button"
+        onClick={onOpenFullscreen}
+        style={{
+          position: "absolute", bottom: "8px", right: "8px", zIndex: 10,
+          padding: "6px 10px", borderRadius: "6px", border: "none",
+          background: "rgba(0,0,0,0.65)", color: "white",
+          fontFamily: "Poppins, sans-serif", fontSize: "11px", fontWeight: 600,
+          cursor: "pointer", display: "flex", alignItems: "center", gap: "4px",
+        }}
+      >
+        <Expand size={12} /> Full Screen
+      </button>
+    </div>
+  );
+}
+
 export function StallDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -195,20 +287,25 @@ export function StallDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null | "new">(null);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [stallItems, setStallItems] = useState<MenuItem[]>([]);
 
   useEffect(() => {
     if (!id) return;
     const stall = getStall(id);
-    if (!stall) { setNotFound(true); return; }
+    if (!stall) {
+      if (!loading) setNotFound(true);
+      return;
+    }
+    setNotFound(false);
     setForm({ name: stall.name, photoUrl: stall.photoUrl, category: stall.category, description: stall.description, operatingHours: stall.operatingHours, status: stall.status, location: stall.location, menuItemIds: stall.menuItemIds });
-  }, [id, getStall]);
+  }, [id, getStall, loading]);
 
   useEffect(() => {
     if (!id) return;
     api.get(`/vendor/stalls/${id}/items`).then(({ data }) => {
       setStallItems(data.data.map(mapItem));
-    }).catch(() => {});
+    }).catch((err) => console.error("[StallDetailPage] Failed to load menu items:", err));
   }, [id]);
 
   function setHours(part: "weekdays" | "weekends", field: "open" | "close", val: string) {
@@ -218,7 +315,7 @@ export function StallDetailPage() {
   async function handleUpdate() {
     if (!id) return;
     await updateStall(id, form);
-    toast.success("Stall details updated.");
+    setSuccessMessage("Stall details updated.");
   }
 
   async function handleDelete() {
@@ -234,12 +331,12 @@ export function StallDetailPage() {
       const { data: res } = await api.put(`/vendor/stalls/${id}/items/${editingItem.id}`, data);
       const updated = mapItem(res.data);
       setStallItems((prev) => prev.map((m) => m.id === editingItem.id ? updated : m));
-      toast.success("Menu item updated.");
+      setSuccessMessage("Menu item updated.");
     } else {
       const { data: res } = await api.post(`/vendor/stalls/${id}/items`, data);
       const created = mapItem(res.data);
       setStallItems((prev) => [...prev, created]);
-      toast.success("New menu item created.");
+      setSuccessMessage("New menu item created.");
     }
   }
 
@@ -353,25 +450,13 @@ export function StallDetailPage() {
               <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600, color: "var(--brand-text-dark)", marginBottom: "6px" }}>Location Pin</p>
               <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)", marginBottom: "12px" }}>Click or drag the map to set exact coordinates.</p>
 
-              {/* Map preview — click to open dedicated pinpoint page */}
-              <button
-                type="button"
-                onClick={() => navigate(`/vendor/stalls/${id}/location`)}
-                style={{
-                  width: "100%", height: "160px", borderRadius: "8px", border: "1px solid var(--brand-card-border)",
-                  background: "#eff4ff", cursor: "pointer", position: "relative", overflow: "hidden",
-                  backgroundImage: "linear-gradient(90deg,rgba(0,0,0,.04) 2.5%,transparent 2.5%),linear-gradient(rgba(0,0,0,.04) 2.5%,transparent 2.5%),linear-gradient(90deg,#e2e8f0,#e2e8f0)",
-                  backgroundSize: "40px 40px, 40px 40px, 100% 100%",
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px",
-                }}
-              >
-                <div style={{ width: "40px", height: "40px", borderRadius: "9999px", background: "#006e2f", border: "2px solid white", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.2)" }}>
-                  <MapPin size={18} color="white" />
-                </div>
-                <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-dark)", background: "rgba(255,255,255,0.85)", padding: "4px 12px", borderRadius: "9999px", margin: 0 }}>
-                  Click to set location on map
-                </p>
-              </button>
+              {/* Embedded Maplibre map with current pin */}
+              <LocationPreviewMap
+                lat={form.location.latitude}
+                lng={form.location.longitude}
+                onOpenFullscreen={() => navigate(`/vendor/stalls/${id}/location`)}
+                onCoordsChange={(lat, lng) => setForm((f) => ({ ...f, location: { ...f.location, latitude: lat, longitude: lng } }))}
+              />
 
               <div className="mt-4">
                 <label style={lbl}>Landmark / Station</label>
@@ -513,6 +598,15 @@ export function StallDetailPage() {
           selectedIds={form.menuItemIds}
           onToggle={handleCatalogToggle}
           onClose={() => setShowCatalog(false)}
+        />
+      )}
+
+      {successMessage && (
+        <SuccessModal
+          message={successMessage}
+          onContinue={() => setSuccessMessage(null)}
+          onGoBack={() => { setSuccessMessage(null); navigate("/vendor/stalls"); }}
+          backLabel="Go to My Stalls"
         />
       )}
     </div>

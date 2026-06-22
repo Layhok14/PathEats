@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { PRICE_LABELS } from "../../shared/constants/appConfig";
-import { scoreColor } from "../../shared/utils/geoUtils";
+import { scoreColor, calcMetricScores } from "../../shared/utils/geoUtils";
 import { VendorMenuAccordion } from "./VendorMenuAccordion";
 import { VendorReviews } from "./VendorReviews";
 import { AuthModal } from "./AuthModal";
@@ -186,54 +186,77 @@ export function VendorDetail({
 
           <VendorMenuAccordion menu={vendor.menu} colors={c} />
 
-          {vendor.final_score !== undefined && (
-            <div
-              className="rounded-xl p-4 space-y-3"
-              style={{
-                background: c.scoreCard,
-                border: `1px solid ${c.scoreCardBorder}`,
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <span
-                  className="text-xs font-medium"
-                  style={{ color: c.textFaint }}
-                >
-                  PathEat Value Score
-                </span>
-                <span
-                  className="font-bold text-sm"
-                  style={{ color: scoreColor(vendor.final_score) }}
-                >
-                  {Math.round((vendor.final_score / 0.85) * 100)}
-                  <span style={{ color: c.textDim, fontWeight: 400 }}>
-                    /100
+          {vendor.final_score !== undefined && (() => {
+            const metrics = calcMetricScores(vendor.price_range, vendor.dist_m, vendor.rating, vendor.wait_time_est);
+            const overall = Math.round((vendor.final_score / 0.85) * 100);
+            const metricItems = [
+              { label: "Affordability", score: metrics.affordability, weight: "35%" },
+              { label: "Proximity", score: metrics.proximity, weight: "30%" },
+              { label: "Rating", score: metrics.ratingScore, weight: "20%" },
+              { label: "Wait Time", score: metrics.waitScore, weight: "15%" },
+            ];
+            return (
+              <div
+                className="rounded-xl p-4 space-y-3"
+                style={{
+                  background: c.scoreCard,
+                  border: `1px solid ${c.scoreCardBorder}`,
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: c.textFaint }}
+                  >
+                    PathEat Value Score
                   </span>
-                </span>
-              </div>
-              <div
-                className="w-full h-2 rounded-full overflow-hidden"
-                style={{ background: c.scoreBarBg }}
-              >
+                  <span
+                    className="font-bold text-sm"
+                    style={{ color: scoreColor(vendor.final_score) }}
+                  >
+                    {overall}
+                    <span style={{ color: c.textDim, fontWeight: 400 }}>
+                      /100
+                    </span>
+                  </span>
+                </div>
                 <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{
-                    width: `${(vendor.final_score / 0.85) * 100}%`,
-                    background: scoreColor(vendor.final_score),
-                  }}
-                />
+                  className="w-full h-2 rounded-full overflow-hidden"
+                  style={{ background: c.scoreBarBg }}
+                >
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${overall}%`,
+                      background: scoreColor(vendor.final_score),
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  {metricItems.map((m) => (
+                    <div key={m.label} className="flex items-center gap-2">
+                      <span className="text-[10px] w-20 shrink-0" style={{ color: c.textFaint }}>
+                        {m.label}
+                      </span>
+                      <div className="flex-1 h-1.5 rounded-full" style={{ background: c.scoreBarBg }}>
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${m.score}%`,
+                            background: m.score >= 70 ? "#10b981" : m.score >= 45 ? "#f59e0b" : "#ef4444",
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold w-10 text-right" style={{ color: c.textMid }}>
+                        {m.score}
+                        <span style={{ color: c.textDim, fontWeight: 400 }}>/100</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div
-                className="grid grid-cols-4 gap-1 text-[9px] text-center"
-                style={{ color: c.textDim }}
-              >
-                <span>Afford 35%</span>
-                <span>Proximity 30%</span>
-                <span>Rating 20%</span>
-                <span>Wait −15%</span>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           <VendorReviews
             vendor={vendor}

@@ -5,9 +5,10 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { PenLine, Eye, BookmarkPlus, HelpCircle, X, Loader2 } from "lucide-react";
+import { PenLine, Eye, BookmarkPlus, HelpCircle, LogOut, X, Loader2 } from "lucide-react";
 
 import { useTheme } from "../../shared/hooks/useTheme";
+import { useAuth } from "../../shared/hooks/useAuth";
 import { PLACES, VENDOR_RANGE_DEFAULT } from "../../shared/constants/appConfig";
 import { getRoute } from "../../shared/services/routeService";
 import { useVendors } from "../hooks/useVendors";
@@ -25,6 +26,7 @@ import { AuthModal } from "../components/AuthModal";
 
 export default function UserSearchPage() {
   const { darkMode, tm } = useTheme();
+  const { user, isGuest, logout } = useAuth();
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const [page, setPage] = useState("home");
@@ -492,19 +494,34 @@ export default function UserSearchPage() {
           </span>
         </button>
 
-        {/* Tutorial toggle */}
-        <button
-          onClick={() => setShowAuthModal((v) => !v)}
-          title="How it works"
-          className="absolute top-4 right-[88px] z-[500] w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
-          style={{
-            background: tm.glassCard,
-            backdropFilter: "blur(12px)",
-            border: `1px solid ${tm.border}`,
-          }}
-        >
-          <HelpCircle size={16} style={{ color: tm.text3 }} />
-        </button>
+        {/* Auth buttons: sign in/up for guests, logout for users */}
+        {isGuest ? (
+          <div className="absolute top-4 right-[88px] z-[500] flex gap-1.5">
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="px-3 h-9 rounded-xl flex items-center gap-1.5 transition-all hover:brightness-110 active:scale-95"
+              style={{
+                background: "#22c55e",
+                border: "none",
+              }}
+            >
+              <span className="text-[10px] font-bold text-white">Sign In</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="absolute top-4 right-[88px] z-[500] w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
+            style={{
+              background: tm.glassCard,
+              backdropFilter: "blur(12px)",
+              border: `1px solid ${tm.border}`,
+            }}
+          >
+            <LogOut size={14} style={{ color: tm.text3 }} />
+          </button>
+        )}
 
         <div
           className="absolute bottom-2 right-3 z-[400] text-[9px]"
@@ -552,12 +569,22 @@ export default function UserSearchPage() {
                         <div
                           className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold text-white"
                           style={{
-                            background: "#10b981",
+                            background: v.final_score !== undefined ? (v.final_score >= 0.68 ? "#10b981" : v.final_score >= 0.50 ? "#22c55e" : "#f97316") : "#10b981",
                             boxShadow: "0 1px 2px rgba(0,0,0,0.5)",
                           }}
                         >
                           {i + 1}
                         </div>
+                        {v.final_score !== undefined && (
+                          <div
+                            className="absolute top-1.5 right-1.5 px-1 py-0.5 rounded text-[7px] font-bold text-white"
+                            style={{
+                              background: v.final_score >= 0.68 ? "#10b981" : v.final_score >= 0.50 ? "#22c55e" : "#f97316",
+                            }}
+                          >
+                            {Math.round((v.final_score / 0.85) * 100)}
+                          </div>
+                        )}
                         <div
                           className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
                           style={{

@@ -117,7 +117,10 @@ export function NavRail({
 
       {/* User / settings */}
       <button
-        onClick={onSettingsToggle}
+        onClick={() => {
+          if (isGuest) { onAuthRequired?.(); return; }
+          onSettingsToggle();
+        }}
         className="flex flex-col items-center justify-center gap-1 w-[56px] py-2.5 rounded-xl transition-all"
         style={
           showSettings

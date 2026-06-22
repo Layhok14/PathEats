@@ -1,10 +1,25 @@
 import db from "../config/db.js";
 
+const menuItemCategory = (cat) => {
+  const norm = {
+    snack: "snack", snacks: "snack", "main course": "main course",
+    main: "main course", drink: "drink", drinks: "drink",
+    dessert: "dessert", desserts: "dessert",
+  };
+  return norm[(cat ?? "").toLowerCase().trim()] || "snack";
+};
+
 class VendorRepository {
 
   async findByOwner(ownerId) {
     const { rows } = await db.query(
-      `SELECT p.*, pc.slug AS category_slug, pc.name AS category_name
+      `SELECT p.id, p.name, p.description, p.address, p.photo_url,
+              p.price_range, p.rating_avg, p.rating_count, p.is_open,
+              p.status, p.created_at, p.updated_at,
+              ST_Y(p.location::geometry) AS lat,
+              ST_X(p.location::geometry) AS lng,
+              pc.slug AS category_slug, pc.name AS category_name,
+              p.category_id
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        WHERE p.owner_id = $1
@@ -16,7 +31,13 @@ class VendorRepository {
 
   async findOwnedById(id, ownerId) {
     const { rows } = await db.query(
-      `SELECT p.*, pc.slug AS category_slug, pc.name AS category_name
+      `SELECT p.id, p.name, p.description, p.address, p.photo_url,
+              p.price_range, p.rating_avg, p.rating_count, p.is_open,
+              p.status, p.created_at, p.updated_at,
+              ST_Y(p.location::geometry) AS lat,
+              ST_X(p.location::geometry) AS lng,
+              pc.slug AS category_slug, pc.name AS category_name,
+              p.category_id
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        WHERE p.id = $1 AND p.owner_id = $2
@@ -38,7 +59,8 @@ class VendorRepository {
     const { rows } = await db.query(
       `INSERT INTO places (owner_id, category_id, name, description, address, photo_url, price_range, location, status, is_open)
        VALUES ($1, $2, $3, $4, $5, $6, $7, ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography, $10, $11)
-       RETURNING *`,
+       RETURNING id, name, description, address, photo_url, price_range, rating_avg, rating_count, is_open, status, created_at, updated_at, category_id,
+                 ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng`,
       [
         data.owner_id,
         data.category_id,
@@ -49,8 +71,8 @@ class VendorRepository {
         data.price_range || null,
         data.longitude || 104.9282,
         data.latitude || 11.5564,
-        "PENDING",
-        data.status === "open",
+        "APPROVED",
+        data.is_open !== false,
       ]
     );
     return rows[0];
@@ -86,7 +108,9 @@ class VendorRepository {
     values.push(id);
 
     const { rows } = await db.query(
-      `UPDATE places SET ${setClauses.join(", ")} WHERE id = $${idx} RETURNING *`,
+      `UPDATE places SET ${setClauses.join(", ")} WHERE id = $${idx}
+       RETURNING id, name, description, address, photo_url, price_range, rating_avg, rating_count, is_open, status, created_at, updated_at, category_id,
+                 ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng`,
       values
     );
     return rows[0] || null;
@@ -102,6 +126,14 @@ class VendorRepository {
       [id]
     );
     return rows[0] || null;
+  }
+
+  async deleteStall(id, ownerId) {
+    const { rowCount } = await db.query(
+      `DELETE FROM places WHERE id = $1 AND owner_id = $2`,
+      [id, ownerId]
+    );
+    return rowCount > 0;
   }
 
   async updateStatus(id, status) {
@@ -134,8 +166,7 @@ class VendorRepository {
        JOIN places p ON p.id = r.place_id
        JOIN users u ON u.id = r.user_id
        WHERE p.owner_id = $1
-       ORDER BY r.created_at DESC
-       LIMIT 10`,
+       ORDER BY r.created_at DESC`,
       [ownerId]
     );
     return rows;
@@ -168,12 +199,13 @@ class VendorRepository {
     const values = [];
     let idx = 1;
 
+    const image_url = data.image_url || data.imageUrl;
     const fields = {
       name: data.name,
       description: data.description,
       price: data.price,
-      category: data.category,
-      image_url: data.image_url,
+      category: data.category !== undefined ? menuItemCategory(data.category) : undefined,
+      image_url,
       is_available: data.is_available,
     };
 
@@ -184,7 +216,7 @@ class VendorRepository {
       }
     }
 
-    setClauses.push(`updated_at = NOW()`);
+    if (setClauses.length === 0) return null;
     values.push(itemId, ownerId);
 
     const { rows } = await db.query(
@@ -209,6 +241,7 @@ class VendorRepository {
   }
 
   async createMenuItem(placeId, ownerId, data) {
+    const image_url = data.image_url || data.imageUrl;
     const { rows } = await db.query(
       `INSERT INTO menu_items (place_id, name, description, price, category, image_url, is_available)
        SELECT $1, $2, $3, $4, $5, $6, $7
@@ -221,8 +254,8 @@ class VendorRepository {
         data.name,
         data.description || null,
         data.price,
-        data.category || "snack",
-        data.image_url || null,
+        menuItemCategory(data.category),
+        image_url || null,
         data.is_available !== false,
         ownerId,
       ]
@@ -235,12 +268,13 @@ class VendorRepository {
     const values = [];
     let idx = 1;
 
+    const image_url = data.image_url || data.imageUrl;
     const fields = {
       name: data.name,
       description: data.description,
       price: data.price,
-      category: data.category,
-      image_url: data.image_url,
+      category: data.category !== undefined ? menuItemCategory(data.category) : undefined,
+      image_url,
       is_available: data.is_available,
     };
 
@@ -251,7 +285,7 @@ class VendorRepository {
       }
     }
 
-    setClauses.push(`updated_at = NOW()`);
+    if (setClauses.length === 0) return null;
     values.push(itemId, placeId, ownerId);
 
     const { rows } = await db.query(

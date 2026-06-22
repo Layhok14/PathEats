@@ -1,24 +1,33 @@
 import { useRef, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useStalls } from "../../shared/hooks/useStalls";
+import { SuccessModal } from "../../shared/components/SuccessModal";
 import { PHNOM_PENH_CENTER, LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
 
 export function LocationPinpointPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { getStall, updateStall, stalls } = useStalls();
+  const [showSuccess, setShowSuccess] = useState(false);
 
+  const isCreateMode = !id;
   const stall = id ? getStall(id) : null;
+
+  const initialLat = isCreateMode
+    ? parseFloat(searchParams.get("lat") || "11.5564")
+    : stall?.location?.latitude ?? 11.5564;
+  const initialLng = isCreateMode
+    ? parseFloat(searchParams.get("lng") || "104.9282")
+    : stall?.location?.longitude ?? 104.9282;
+
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
-
-  const initialLng = stall?.location?.longitude ?? 104.9282;
-  const initialLat = stall?.location?.latitude ?? 11.5564;
 
   const [coords, setCoords] = useState({ lat: initialLat, lng: initialLng });
 
@@ -58,23 +67,6 @@ export function LocationPinpointPage() {
           setCoords({ lat: e.lngLat.lat, lng: e.lngLat.lng });
         }
       });
-
-      // Show other stalls as grey dots
-      stalls.forEach((s) => {
-        if (s.id === id) return;
-        if (!s.location?.latitude || !s.location?.longitude) return;
-        const dot = document.createElement("div");
-        dot.style.width = "12px";
-        dot.style.height = "12px";
-        dot.style.borderRadius = "50%";
-        dot.style.background = "#94a3b8";
-        dot.style.border = "2px solid white";
-        dot.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
-        const m = new maplibregl.Marker(dot)
-          .setLngLat([s.location.longitude, s.location.latitude])
-          .addTo(map);
-        otherMarkersRef.current.push(m);
-      });
     });
 
     return () => {
@@ -83,17 +75,44 @@ export function LocationPinpointPage() {
       map.remove();
       mapRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.loaded()) return;
+
+    otherMarkersRef.current.forEach((m) => m.remove());
+    otherMarkersRef.current = [];
+
+    stalls.forEach((s) => {
+      if (s.id === id) return;
+      if (!s.location?.latitude || !s.location?.longitude) return;
+      const dot = document.createElement("div");
+      dot.style.width = "12px";
+      dot.style.height = "12px";
+      dot.style.borderRadius = "50%";
+      dot.style.background = "#94a3b8";
+      dot.style.border = "2px solid white";
+      dot.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+      const m = new maplibregl.Marker(dot)
+        .setLngLat([s.location.longitude, s.location.latitude])
+        .addTo(map);
+      otherMarkersRef.current.push(m);
+    });
+  }, [stalls, id]);
 
   async function handleConfirm() {
-    if (id && stall) {
+    if (isCreateMode) {
+      sessionStorage.setItem("stall_create_location", JSON.stringify(coords));
+      navigate("/vendor/stalls/new");
+    } else if (id && stall) {
       await updateStall(id, {
         ...stall,
         location: { ...stall.location, latitude: coords.lat, longitude: coords.lng },
       });
-      toast.success("Location confirmed.");
+      setShowSuccess(true);
     }
-    navigate(-1);
   }
 
   function handleCancel() {
@@ -101,7 +120,7 @@ export function LocationPinpointPage() {
   }
 
   return (
-    <div className="relative overflow-hidden" style={{ height: "calc(100vh - 64px)" }}>
+    <div className="relative overflow-hidden" style={{ height: "100%" }}>
       <div ref={mapDivRef} className="absolute inset-0" />
 
       <div
@@ -114,7 +133,7 @@ export function LocationPinpointPage() {
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "20px", fontWeight: 500, color: "#0b1c30", margin: 0 }}>
-            Set Stall Location
+            {isCreateMode ? "Set Location" : "Set Stall Location"}
           </p>
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "16px", color: "#565e74", margin: 0, lineHeight: "24px" }}>
             Drag the pin or click on the map to set your stall's exact location.
@@ -161,7 +180,7 @@ export function LocationPinpointPage() {
               boxShadow: "0px 1px 1px rgba(0,0,0,0.05)",
             }}
           >
-            Confirm Location
+            {isCreateMode ? "Use This Location" : "Confirm Location"}
           </button>
         </div>
       </div>
@@ -176,6 +195,15 @@ export function LocationPinpointPage() {
       >
         Drag the pin or click on the map to set location
       </div>
+
+      {showSuccess && (
+        <SuccessModal
+          message="Location confirmed successfully!"
+          onContinue={() => setShowSuccess(false)}
+          onGoBack={() => { if (id) { navigate("/vendor/stalls"); } else { navigate(-1); } }}
+          backLabel="Go to My Stalls"
+        />
+      )}
     </div>
   );
 }

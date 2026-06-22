@@ -22,12 +22,12 @@ const lbl: React.CSSProperties = {
 function ItemFormModal({
   item, onClose, onSave,
 }: { item: MenuItem | null; onClose: () => void; onSave: (data: MenuItemFormData) => Promise<void> }) {
-  const [form, setForm] = useState<MenuItemFormData>({
+  const [form, setForm] = useState({
     name: item?.name ?? "",
     description: item?.description ?? "",
-    price: item?.price ?? 0,
+    price: item ? String(item.price) : "",
     imageUrl: item?.imageUrl ?? "",
-    category: (item?.category as MenuCategory) ?? "Rice",
+    category: (item?.category as MenuCategory) ?? "Snack",
     isAvailable: item?.isAvailable ?? true,
   });
   const [saving, setSaving] = useState(false);
@@ -35,9 +35,18 @@ function ItemFormModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { toast.error("Item name is required."); return; }
+    const priceNum = parseFloat(form.price);
+    if (isNaN(priceNum) || priceNum < 0) { toast.error("Valid price is required."); return; }
     setSaving(true);
     try {
-      await onSave(form);
+      await onSave({
+        name: form.name,
+        description: form.description,
+        price: priceNum,
+        imageUrl: form.imageUrl,
+        category: form.category,
+        isAvailable: form.isAvailable,
+      });
       toast.success(item ? "Menu item updated." : "New item created.");
       onClose();
     } finally {
@@ -65,7 +74,7 @@ function ItemFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label style={lbl}>Price ($) *</label>
-              <input type="number" step="0.01" min="0" required value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: parseFloat(e.target.value) || 0 }))} style={inp} />
+              <input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" inputMode="decimal" style={inp} />
             </div>
             <div>
               <label style={lbl}>Category</label>

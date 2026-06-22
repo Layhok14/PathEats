@@ -106,7 +106,8 @@ export default function RestaurantManagementPage() {
       setMessage("");
       const overviewRows = await getAdminVendorManagementOverview(searchText);
       setRows(overviewRows);
-    } catch {
+    } catch (err) {
+      console.error("[RestaurantManagementPage] Failed to load overview:", err);
       const text = "Could not load vendor management data.";
       setMessage(text);
       toast.error(text);
@@ -208,6 +209,12 @@ export default function RestaurantManagementPage() {
             </div>
           </div>
 
+          {loading ? (
+            <div className="p-10 text-center text-[13px] text-[#94a3b8]">
+              <div className="w-5 h-5 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              Loading vendor data from database...
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1280px] table-fixed">
               <thead>
@@ -230,7 +237,14 @@ export default function RestaurantManagementPage() {
                     <td className="px-6 py-3"><SummaryCell tableName="reviews" icon={<Star size={16} />} cell={row.review} onView={() => setActiveDetail({ title: "reviews row details", details: row.review.details })} /></td>
                     <td className="px-6 py-3">
                       <button
-                        onClick={() => navigate(`/admin/restaurants/manage/${row.id}`)}
+                        onClick={() => {
+                          const ownerId = (row.user.details as Record<string, unknown> | null)?.id as string | undefined;
+                          if (ownerId) {
+                            navigate(`/admin/restaurants/vendor/${ownerId}`);
+                          } else {
+                            toast.error("Owner ID not found for this row.");
+                          }
+                        }}
                         className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#005a26] transition-colors"
                       >
                         Manage Stall
@@ -244,6 +258,7 @@ export default function RestaurantManagementPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           <div className="flex items-center justify-between px-6 py-3 border-t border-[#f1f5f9]">
             <p className="text-[12px] text-[#94a3b8]">Page {page} of {totalPages}</p>

@@ -20,16 +20,17 @@ export function VendorRoutes() {
       <Route path="/vendor/login" element={<VendorLoginPage />} />
       <Route path="/vendor/register" element={<VendorRegisterPage />} />
       <Route path="/vendor" element={<VendorLayout />}>
-        <Route index element={<AuthGuard><DashboardPage /></AuthGuard>} />
-        <Route path="stalls" element={<AuthGuard><StallListPage /></AuthGuard>} />
-        <Route path="stalls/new" element={<AuthGuard><StallCreatePage /></AuthGuard>} />
-        <Route path="stalls/:id" element={<AuthGuard><StallDetailPage /></AuthGuard>} />
-        <Route path="stalls/:id/view" element={<AuthGuard><StallViewPage /></AuthGuard>} />
-        <Route path="stalls/:id/location" element={<AuthGuard><LocationPinpointPage /></AuthGuard>} />
-        <Route path="menu" element={<AuthGuard><MenuItemsPage /></AuthGuard>} />
-        <Route path="reviews" element={<AuthGuard><ReviewsPage /></AuthGuard>} />
-        <Route path="support" element={<AuthGuard><SupportPage /></AuthGuard>} />
-        <Route path="settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />
+        <Route index element={<AuthGuard requiredRole="VENDOR"><DashboardPage /></AuthGuard>} />
+        <Route path="stalls" element={<AuthGuard requiredRole="VENDOR"><StallListPage /></AuthGuard>} />
+        <Route path="stalls/new" element={<AuthGuard requiredRole="VENDOR"><StallCreatePage /></AuthGuard>} />
+        <Route path="stalls/:id" element={<AuthGuard requiredRole="VENDOR"><StallDetailPage /></AuthGuard>} />
+        <Route path="stalls/:id/view" element={<AuthGuard requiredRole="VENDOR"><StallViewPage /></AuthGuard>} />
+        <Route path="stalls/location-pinpoint" element={<AuthGuard requiredRole="VENDOR"><LocationPinpointPage /></AuthGuard>} />
+        <Route path="stalls/:id/location" element={<AuthGuard requiredRole="VENDOR"><LocationPinpointPage /></AuthGuard>} />
+        <Route path="menu" element={<AuthGuard requiredRole="VENDOR"><MenuItemsPage /></AuthGuard>} />
+        <Route path="reviews" element={<AuthGuard requiredRole="VENDOR"><ReviewsPage /></AuthGuard>} />
+        <Route path="support" element={<AuthGuard requiredRole="VENDOR"><SupportPage /></AuthGuard>} />
+        <Route path="settings" element={<AuthGuard requiredRole="VENDOR"><SettingsPage /></AuthGuard>} />
       </Route>
       <Route path="/vendor/*" element={<Navigate to="/vendor/stalls" replace />} />
     </>

@@ -27,9 +27,9 @@ export const PLACES = [
   { name: "Russian Market (Toul Tom Pong)", lat: 11.5398, lng: 104.9084 },
 ];
 
-export const VENDOR_RANGE_DEFAULT = 1000;
+export const VENDOR_RANGE_DEFAULT = 300;
 export const VENDOR_RANGE_MIN = 10;
-export const VENDOR_RANGE_MAX = 3000;
+export const VENDOR_RANGE_MAX = 1500;
 
 export const PRICE_LABELS = { 1: "$", 2: "$$", 3: "$$$", 4: "$$$$" };
 

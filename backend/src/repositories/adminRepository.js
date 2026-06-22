@@ -2,6 +2,15 @@ import pool from "../config/db.js";
 
 const quoteIdent = (value) => `"${String(value).replace(/"/g, '""')}"`;
 
+const menuItemCategory = (cat) => {
+  const norm = {
+    snack: "snack", snacks: "snack", "main course": "main course",
+    main: "main course", drink: "drink", drinks: "drink",
+    dessert: "dessert", desserts: "dessert",
+  };
+  return norm[(cat ?? "").toLowerCase().trim()] || "snack";
+};
+
 const optionalRows = async (query, params = [], fallback = []) => {
   try {
     const result = await pool.query(query, params);
@@ -75,7 +84,7 @@ export const getDashboardTelemetry = async () => {
   const [totalUsers, activePlaces, totalReviews, totalRoutes, growthRows, activityRows] =
     await Promise.all([
       countRows("users"),
-      countRows("places", "WHERE is_approved = true AND status = 'active'"),
+      countRows("places", "WHERE status = 'APPROVED'"),
       countRows("reviews"),
       countRows("routes"),
       optionalRows(
@@ -440,9 +449,9 @@ export const findAllVendors = async () => {
     available.has("name") ? "p.name" : "'Unnamed place' AS name",
     available.has("address") ? "p.address" : "'No address' AS address",
     available.has("category_id") ? "p.category_id::text" : "NULL AS category_id",
-    available.has("rating") ? "p.rating" : "NULL AS rating",
-    available.has("is_approved") ? "p.is_approved" : "false AS is_approved",
-    available.has("status") ? "p.status" : "'pending' AS status",
+    available.has("rating_avg") ? "p.rating_avg" : "NULL AS rating",
+    "CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved",
+    available.has("status") ? "p.status" : "'PENDING' AS status",
     available.has("created_at") ? "p.created_at" : "NOW() AS created_at",
     available.has("category_id") ? "pc.name AS category" : "'Place' AS category",
     available.has("owner_id") ? "u.email AS email" : "'' AS email",
@@ -469,7 +478,7 @@ export const findAllVendors = async () => {
     location: vendor.address,
     email: vendor.email,
     category: vendor.category,
-    status: vendor.is_approved || vendor.status === "active" ? "Active" : "Pending",
+    status: vendor.is_approved ? "Active" : "Pending",
     rating: vendor.rating === null || vendor.rating === undefined ? null : Number(vendor.rating),
     submittedAt: vendor.created_at,
   }));
@@ -500,10 +509,9 @@ export const approveVendor = async (id, approved) => {
   const result = await pool.query(
     `
     UPDATE places
-    SET is_approved = $1,
-        status = CASE WHEN $1 THEN 'active' ELSE 'inactive' END
+    SET status = CASE WHEN $1 THEN 'APPROVED' ELSE 'REJECTED' END
     WHERE id = $2
-    RETURNING id::text, name, is_approved, status
+    RETURNING id::text, name, status
     `,
     [approved, id]
   );
@@ -565,10 +573,20 @@ export const getStallManagementOptions = async () => {
   };
 };
 
-export const createStall = async ({ ownerId, categoryId, name, description, address, priceRange, photoUrl }) => {
+export const createStall = async ({ ownerId, categoryId, name, description, address, priceRange, photoUrl, latitude, longitude }) => {
   const columns = await getColumns("places");
   const allowed = new Set(columns);
-  const template = await optionalRows("SELECT * FROM places LIMIT 1", [], []);
+
+  if (allowed.has("location") && latitude != null && longitude != null) {
+    const result = await pool.query(
+      `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, location)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'APPROVED', ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
+       RETURNING *`,
+      [ownerId || null, categoryId, name, description || null, address || null, priceRange || null, photoUrl || null, longitude, latitude]
+    );
+    return result.rows[0] ?? null;
+  }
+
   const values = {
     owner_id: ownerId || null,
     category_id: categoryId,
@@ -578,12 +596,8 @@ export const createStall = async ({ ownerId, categoryId, name, description, addr
     price_range: priceRange || null,
     photo_url: photoUrl || null,
     is_open: true,
-    status: "PENDING",
+    status: "APPROVED",
   };
-
-  if (allowed.has("location") && template[0]?.location !== undefined) {
-    values.location = template[0].location;
-  }
 
   return insertAllowed("places", values);
 };
@@ -603,7 +617,7 @@ export const createStallMenuItem = async (placeId, payload) => {
     name: payload.name,
     description: payload.description || null,
     price: payload.price,
-    category: payload.category || "snacks",
+    category: menuItemCategory(payload.category),
     image_url: payload.imageUrl || null,
     is_available: payload.isAvailable ?? true,
   });
@@ -657,6 +671,19 @@ export const createStallReview = async (placeId, payload) => {
 export const deleteStallReview = async (id) => {
   const result = await pool.query("DELETE FROM reviews WHERE id::text = $1 RETURNING id::text", [id]);
   return result.rows[0] ?? null;
+};
+
+export const getAllReviews = async () => {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.rating AS stars, r.body, r.created_at,
+            u.first_name || ' ' || u.last_name AS user_name,
+            p.name AS place_name, p.id AS place_id
+     FROM reviews r
+     JOIN places p ON p.id = r.place_id
+     JOIN users u ON u.id = r.user_id
+     ORDER BY r.created_at DESC`
+  );
+  return rows;
 };
 
 export const ensureRoleTable = async () => {
@@ -766,4 +793,321 @@ export const deleteRoleRecord = async (id) => {
   );
 
   return result.rows[0] ?? null;
+};
+
+export const findAllStalls = async () => {
+  const rows = await optionalRows(
+    `
+    SELECT
+      p.id::text,
+      p.name,
+      p.description,
+      p.address,
+      p.price_range,
+      p.photo_url,
+      p.is_open,
+      p.status,
+      CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
+      p.rating_avg,
+      p.rating_count,
+      p.owner_id::text,
+      COALESCE(u.email, '') AS owner_email,
+      CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
+      ST_AsGeoJSON(p.location)::jsonb AS location,
+      jsonb_build_object(
+        'id', pc.id::text,
+        'name', pc.name,
+        'slug', pc.slug
+      ) AS category,
+      to_jsonb(p) AS place_details
+    FROM places p
+    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
+    ORDER BY p.created_at DESC NULLS LAST
+    LIMIT 500
+    `
+  );
+
+  return rows.map((row) => {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      address: row.address,
+      priceRange: row.price_range,
+      photoUrl: row.photo_url,
+      isOpen: row.is_open,
+      status: row.status,
+      isApproved: row.is_approved,
+      rating: row.rating ?? row.rating_avg ?? null,
+      ratingAvg: row.rating_avg ?? null,
+      ratingCount: row.rating_count ?? 0,
+      ownerId: row.owner_id,
+      ownerEmail: row.owner_email,
+      ownerName: row.owner_name,
+      category: row.category,
+      location: row.location,
+    };
+  });
+};
+
+export const findStallsByOwner = async (ownerId) => {
+  const rows = await optionalRows(
+    `
+    SELECT
+      p.id::text,
+      p.name,
+      p.description,
+      p.address,
+      p.price_range,
+      p.photo_url,
+      p.is_open,
+      p.status,
+      CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
+      p.rating_avg,
+      p.rating_count,
+      p.owner_id::text,
+      COALESCE(u.email, '') AS owner_email,
+      CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
+      ST_AsGeoJSON(p.location)::jsonb AS location,
+      jsonb_build_object(
+        'id', pc.id::text,
+        'name', pc.name,
+        'slug', pc.slug
+      ) AS category,
+      to_jsonb(p) AS place_details
+    FROM places p
+    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
+    WHERE p.owner_id::text = $1
+    ORDER BY p.created_at DESC NULLS LAST
+    `,
+    [ownerId]
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    address: row.address,
+    priceRange: row.price_range,
+    photoUrl: row.photo_url,
+    isOpen: row.is_open,
+    status: row.status,
+    isApproved: row.is_approved,
+    rating: row.rating ?? row.rating_avg ?? null,
+    ratingAvg: row.rating_avg ?? null,
+    ratingCount: row.rating_count ?? 0,
+    ownerId: row.owner_id,
+    ownerEmail: row.owner_email,
+    ownerName: row.owner_name,
+    category: row.category,
+    location: row.location,
+  }));
+};
+
+export const findStallById = async (id) => {
+  const rows = await optionalRows(
+    `
+    SELECT
+      p.id::text,
+      p.name,
+      p.description,
+      p.address,
+      p.price_range,
+      p.photo_url,
+      p.is_open,
+      p.status,
+      CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
+      p.rating_avg,
+      p.rating_count,
+      p.owner_id::text,
+      COALESCE(u.email, '') AS owner_email,
+      CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
+      ST_AsGeoJSON(p.location)::jsonb AS location,
+      jsonb_build_object(
+        'id', pc.id::text,
+        'name', pc.name,
+        'slug', pc.slug
+      ) AS category,
+      to_jsonb(p) AS place_details
+    FROM places p
+    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
+    WHERE p.id::text = $1
+    ORDER BY p.created_at DESC NULLS LAST
+    LIMIT 1
+    `,
+    [id]
+  );
+
+  if (!rows.length) return null;
+  const row = rows[0];
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    address: row.address,
+    priceRange: row.price_range,
+    photoUrl: row.photo_url,
+    isOpen: row.is_open,
+    status: row.status,
+    isApproved: row.is_approved,
+    rating: row.rating ?? row.rating_avg ?? null,
+    ratingAvg: row.rating_avg ?? null,
+    ratingCount: row.rating_count ?? 0,
+    ownerId: row.owner_id,
+    ownerEmail: row.owner_email,
+    ownerName: row.owner_name,
+    category: row.category,
+    location: row.location,
+  };
+};
+
+export const updateStall = async (id, payload) => {
+  const allowed = new Set(await getColumns("places"));
+  const sets = [];
+  const params = [];
+  let idx = 1;
+
+  const fieldMap = {
+    name: "name",
+    description: "description",
+    address: "address",
+    priceRange: "price_range",
+    photoUrl: "photo_url",
+    isOpen: "is_open",
+    status: "status",
+    isApproved: "is_approved",
+  };
+
+  let hasLocation = false;
+  let locationLat = null;
+  let locationLng = null;
+
+  for (const [key, col] of Object.entries(fieldMap)) {
+    if (payload[key] !== undefined && allowed.has(col)) {
+      sets.push(`${quoteIdent(col)} = $${idx++}`);
+      params.push(payload[key]);
+    }
+  }
+
+  if (payload.latitude !== undefined && payload.longitude !== undefined && allowed.has("location")) {
+    hasLocation = true;
+    locationLat = payload.latitude;
+    locationLng = payload.longitude;
+  }
+
+  if (sets.length === 0 && !hasLocation) return null;
+
+  if (hasLocation) {
+    sets.push(`location = ST_SetSRID(ST_MakePoint($${idx++}, $${idx++}), 4326)::geography`);
+    params.push(locationLng, locationLat);
+  }
+
+  params.push(id);
+  const result = await pool.query(
+    `UPDATE places SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text`,
+    params
+  );
+  return result.rows[0] ?? null;
+};
+
+export const updateStallStatus = async (id, isOpen) => {
+  const result = await pool.query(
+    `UPDATE places SET is_open = $1 WHERE id::text = $2 RETURNING id::text, is_open`,
+    [isOpen, id]
+  );
+  return result.rows[0] ?? null;
+};
+
+export const findAllMenuItems = async () => {
+  const rows = await optionalRows(
+    `
+    SELECT
+      mi.id::text,
+      mi.name,
+      mi.description,
+      mi.price,
+      mi.category,
+      mi.image_url,
+      mi.is_available,
+      mi.place_id::text,
+      p.name AS place_name,
+      to_jsonb(mi) AS item_details
+    FROM menu_items mi
+    LEFT JOIN places p ON p.id::text = mi.place_id::text
+    ORDER BY p.name ASC, mi.name ASC
+    LIMIT 500
+    `
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    price: row.price,
+    category: row.category,
+    imageUrl: row.image_url,
+    isAvailable: row.is_available,
+    placeId: row.place_id,
+    placeName: row.place_name,
+  }));
+};
+
+export const updateMenuItem = async (id, payload) => {
+  const allowed = new Set(await getColumns("menu_items"));
+  const sets = [];
+  const params = [];
+  let idx = 1;
+
+  const fieldMap = {
+    name: "name",
+    description: "description",
+    price: "price",
+    category: "category",
+    imageUrl: "image_url",
+    isAvailable: "is_available",
+  };
+
+  for (const [key, col] of Object.entries(fieldMap)) {
+    if (payload[key] !== undefined && allowed.has(col)) {
+      const val = key === "category" ? menuItemCategory(payload[key]) : payload[key];
+      sets.push(`${quoteIdent(col)} = $${idx++}`);
+      params.push(val);
+    }
+  }
+
+  if (sets.length === 0) return null;
+
+  params.push(id);
+  const result = await pool.query(
+    `UPDATE menu_items SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text`,
+    params
+  );
+  return result.rows[0] ?? null;
+};
+
+export const getAuditActivity = async () => {
+  const rows = await optionalRows(
+    `
+    SELECT
+      pid::int AS pid,
+      usename AS username,
+      application_name,
+      client_addr::text,
+      state,
+      query_start,
+      state_change,
+      wait_event_type,
+      wait_event,
+      query
+    FROM pg_stat_activity
+    WHERE state IS DISTINCT FROM 'idle'
+      AND pid <> pg_backend_pid()
+    ORDER BY query_start DESC NULLS LAST
+    LIMIT 50
+    `,
+    []
+  );
+  return rows;
 };

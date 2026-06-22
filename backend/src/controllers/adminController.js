@@ -258,6 +258,91 @@ class AdminController {
       next(error);
     }
   };
+
+  getAllStalls = async (req, res, next) => {
+    try {
+      const stalls = await this.service.getAllStalls();
+      res.json({ success: true, data: stalls });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStallById = async (req, res, next) => {
+    try {
+      const stall = await this.service.getStallById(req.params.id);
+      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      res.json({ success: true, data: stall });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStallsByOwner = async (req, res, next) => {
+    try {
+      const stalls = await this.service.getStallsByOwner(req.params.ownerId);
+      res.json({ success: true, data: stalls });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  editStall = async (req, res, next) => {
+    try {
+      const stall = await this.service.editStall(req.params.id, req.body);
+      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      res.json({ success: true, data: stall });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  toggleStallStatus = async (req, res, next) => {
+    try {
+      const stall = await this.service.toggleStallStatus(req.params.id);
+      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      res.json({ success: true, data: stall });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAuditActivity = async (req, res, next) => {
+    try {
+      const activity = await this.service.getAuditActivity();
+      res.json({ success: true, data: activity });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAllMenuItems = async (req, res, next) => {
+    try {
+      const items = await this.service.getAllMenuItems();
+      res.json({ success: true, data: items });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAllReviews = async (req, res, next) => {
+    try {
+      const reviews = await this.service.getAllReviews();
+      res.json({ success: true, data: reviews });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  editMenuItem = async (req, res, next) => {
+    try {
+      const item = await this.service.editMenuItem(req.params.id, req.body);
+      if (!item) return res.status(404).json({ success: false, message: "Menu item not found" });
+      res.json({ success: true, data: item });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 const adminController = new AdminController(adminService);
@@ -288,6 +373,16 @@ export const createRole = adminController.createRole;
 export const getRoles = adminController.getRoles;
 export const updateRoleRecord = adminController.updateRoleRecord;
 export const deleteRoleRecord = adminController.deleteRoleRecord;
+
+export const getAllStalls = adminController.getAllStalls;
+export const getStallById = adminController.getStallById;
+export const getStallsByOwner = adminController.getStallsByOwner;
+export const editStall = adminController.editStall;
+export const toggleStallStatus = adminController.toggleStallStatus;
+export const getAuditActivity = adminController.getAuditActivity;
+export const getAllMenuItems = adminController.getAllMenuItems;
+export const editMenuItem = adminController.editMenuItem;
+export const getAllReviews = adminController.getAllReviews;
 
 export { AdminController };
 export default adminController;

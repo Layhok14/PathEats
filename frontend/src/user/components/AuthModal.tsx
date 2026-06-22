@@ -11,7 +11,7 @@ interface Props {
 
 export function AuthModal({ onClose, prompt }: Props) {
   const { tm } = useTheme();
-  const { login, signup } = useAuth();
+  const { login, signup, continueAsGuest } = useAuth();
 
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [showPw, setShowPw] = useState(false);
@@ -200,6 +200,25 @@ export function AuthModal({ onClose, prompt }: Props) {
                 : tab === "login"
                   ? "Sign In"
                   : "Create Account"}
+            </button>
+            <div className="relative my-2">
+              <div className="absolute inset-0 flex items-center">
+                <div style={{ borderTop: `1px solid ${tm.border}`, width: "100%" }} />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-2 text-[10px]" style={{ background: tm.dropdown, color: tm.text4 }}>or</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                continueAsGuest();
+                onClose();
+              }}
+              className="w-full py-2 rounded-xl text-xs font-medium transition-all hover:brightness-110 active:scale-95"
+              style={{ border: `1px solid ${tm.border}`, color: tm.text3, background: tm.surface1 }}
+            >
+              Continue as Guest
             </button>
           </form>
         </motion.div>

@@ -40,6 +40,12 @@ router.put("/stalls/:id", catchAsync(async (req, res) => {
   res.json({ success: true, data: stall });
 }));
 
+router.delete("/stalls/:id", catchAsync(async (req, res) => {
+  const ownerId = req.user.sub;
+  await vendorService.deleteStall(ownerId, req.params.id);
+  res.json({ success: true, data: { message: "Stall deleted" } });
+}));
+
 router.get("/items", catchAsync(async (req, res) => {
   const ownerId = req.user.sub;
   const items = await vendorService.getAllMenuItems(ownerId);

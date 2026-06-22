@@ -1,122 +1,78 @@
 import { useEffect, useRef } from "react";
 import { MapPin } from "lucide-react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
 import type { Stall } from "../../shared/types";
 
 interface StallMapViewProps {
   stalls: Stall[];
+  loading?: boolean;
   onPinClick: (id: string) => void;
 }
 
-// Normalises lat/lng coordinates to canvas pixel positions
-function toCanvasCoords(
-  lat: number,
-  lng: number,
-  bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number },
-  width: number,
-  height: number,
-  padding: number
-): { x: number; y: number } {
-  const usableW = width - padding * 2;
-  const usableH = height - padding * 2;
-  const x = padding + ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng || 1)) * usableW;
-  // Latitude increases northward but canvas y increases downward — invert
-  const y = padding + (1 - (lat - bounds.minLat) / (bounds.maxLat - bounds.minLat || 1)) * usableH;
-  return { x, y };
-}
-
-export function StallMapView({ stalls, onPinClick }: StallMapViewProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Store pin hit areas so click handler can identify which stall was clicked
-  const pinsRef = useRef<{ id: string; x: number; y: number; r: number }[]>([]);
+export function StallMapView({ stalls, loading = false, onPinClick }: StallMapViewProps) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const W = canvas.width;
-    const H = canvas.height;
-    const PADDING = 40;
+    if (mapRef.current || !mapContainerRef.current || stalls.length === 0) return;
 
     const lats = stalls.map((s) => s.location.latitude);
     const lngs = stalls.map((s) => s.location.longitude);
-    const bounds = {
-      minLat: Math.min(...lats) - 0.01,
-      maxLat: Math.max(...lats) + 0.01,
-      minLng: Math.min(...lngs) - 0.01,
-      maxLng: Math.max(...lngs) + 0.01,
-    };
+    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
 
-    // Background
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = getComputedStyle(document.documentElement)
-      .getPropertyValue("--muted")
-      .trim() || "#ececf0";
-    ctx.fillRect(0, 0, W, H);
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: LIGHT_VECTOR_STYLE,
+      center: [centerLng, centerLat],
+      zoom: 13,
+      attributionControl: false,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    mapRef.current = map;
 
-    // Light grid lines to hint at a map
-    ctx.strokeStyle = "rgba(0,0,0,0.07)";
-    ctx.lineWidth = 1;
-    for (let gx = PADDING; gx < W - PADDING; gx += 60) {
-      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
-    }
-    for (let gy = PADDING; gy < H - PADDING; gy += 60) {
-      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
-    }
+    map.on("load", () => {
+      stalls.forEach((stall) => {
+        const el = document.createElement("div");
+        const isOpen = stall.status === "open";
+        const color = isOpen ? "#006e2f" : "#d4183d";
+        el.innerHTML = `<svg width="28" height="36" viewBox="0 0 24 36" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="${color}" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
+        el.style.cursor = "pointer";
+        el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
+        el.title = stall.name;
 
-    const pins: typeof pinsRef.current = [];
-    const primary = getComputedStyle(document.documentElement)
-      .getPropertyValue("--primary")
-      .trim() || "#030213";
-    const destructive = getComputedStyle(document.documentElement)
-      .getPropertyValue("--destructive")
-      .trim() || "#d4183d";
+        const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement })
+          .setLngLat([stall.location.longitude, stall.location.latitude])
+          .addTo(map);
 
-    stalls.forEach((stall) => {
-      const { x, y } = toCanvasCoords(
-        stall.location.latitude,
-        stall.location.longitude,
-        bounds,
-        W,
-        H,
-        PADDING
-      );
-      const r = 14;
-      const color = stall.status === "open" ? primary : destructive;
-
-      // Pin circle
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      // White dot centre
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff";
-      ctx.fill();
-
-      // Label
-      ctx.fillStyle = "#333";
-      ctx.font = "11px Poppins, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(stall.name, x, y + r + 14);
-
-      pins.push({ id: stall.id, x, y, r });
+        el.addEventListener("click", () => onPinClick(stall.id));
+        markersRef.current.push(marker);
+      });
     });
 
-    pinsRef.current = pins;
-  }, [stalls]);
+    return () => {
+      markersRef.current.forEach((m) => m.remove());
+      markersRef.current = [];
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [stalls]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const hit = pinsRef.current.find(
-      (p) => Math.hypot(mx - p.x, my - p.y) <= p.r + 6
+  if (loading) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center h-64 rounded-[var(--radius-lg)] border"
+        style={{ background: "var(--muted)", borderColor: "var(--border)" }}
+      >
+        <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
+        <p className="mt-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
+          Loading stalls from database...
+        </p>
+      </div>
     );
-    if (hit) onPinClick(hit.id);
   }
 
   if (stalls.length === 0) {
@@ -135,30 +91,21 @@ export function StallMapView({ stalls, onPinClick }: StallMapViewProps) {
 
   return (
     <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-      {/* Legend */}
       <div
         className="flex items-center gap-5 px-4 py-2 border-b text-xs"
         style={{ borderColor: "var(--border)", background: "var(--card)", color: "var(--muted-foreground)" }}
       >
         <div className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full inline-block" style={{ background: "var(--primary)" }} />
+          <span className="w-3 h-3 rounded-full inline-block" style={{ background: "#006e2f" }} />
           Open
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full inline-block" style={{ background: "var(--destructive)" }} />
+          <span className="w-3 h-3 rounded-full inline-block" style={{ background: "#d4183d" }} />
           Closed
         </div>
         <span className="ml-auto">Click a pin to manage the stall</span>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={900}
-        height={420}
-        className="w-full cursor-pointer"
-        style={{ display: "block" }}
-        onClick={handleClick}
-        aria-label="Stall map"
-      />
+      <div ref={mapContainerRef} className="w-full" style={{ height: "420px" }} />
     </div>
   );
 }

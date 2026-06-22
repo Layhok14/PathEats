@@ -6,6 +6,7 @@ import {
   DARK_VECTOR_STYLE,
 } from "../../shared/constants/appConfig";
 import { scoreColor } from "../../shared/utils/geoUtils";
+import { PRICE_LABELS } from "../../shared/constants/appConfig";
 
 function styleUrl(dark) {
   return dark ? DARK_VECTOR_STYLE : LIGHT_VECTOR_STYLE;
@@ -73,6 +74,7 @@ export function useMaplibreMap({
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
   const vendorMarkersRef = useRef(new Map());
+  const popupRef = useRef(null);
   const endpointMarkersRef = useRef([]);
   const ghostMarkerRef = useRef(null);
   const editModeRef = useRef(false);
@@ -229,12 +231,13 @@ export function useMaplibreMap({
     map.fitBounds(bounds, { padding: 40 });
   }, [mapReady, routePoints, styleVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vendor markers — marker pool with ID-based diffing
+  // Vendor markers — marker pool with ID-based diffing, popups, and auto-fit bounds
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     if (!routeReady || editRouteMode) {
       vendorMarkersRef.current.forEach((entry) => entry.marker.remove());
       vendorMarkersRef.current.clear();
+      if (popupRef.current) { popupRef.current.remove(); popupRef.current = null; }
       return;
     }
 
@@ -250,14 +253,17 @@ export function useMaplibreMap({
       }
     });
 
+    const bounds = new maplibregl.LngLatBounds();
+
     // Add/update current vendors
     scoredVendors.forEach((v, i) => {
       const existing = prev.get(v.id);
       const isSelected = selectedVendorId === v.id;
       const bg = isSelected ? "#3B82F6" : scoreColor(v.final_score);
+      const lngLat = [v.lng, v.lat];
 
       if (existing) {
-        existing.marker.setLngLat([v.lng, v.lat]);
+        existing.marker.setLngLat(lngLat);
         const el = existing.marker.getElement();
         if (el.style.background !== bg) el.style.background = bg;
         el.style.boxShadow = isSelected
@@ -267,11 +273,38 @@ export function useMaplibreMap({
         if (span) span.textContent = String(i + 1);
       } else {
         const el = makeVendorElement(i + 1, v.final_score, isSelected);
-        const marker = new maplibregl.Marker(el).setLngLat([v.lng, v.lat]).addTo(map);
-        el.addEventListener("click", () => onSelectVendor(v));
+        const marker = new maplibregl.Marker(el).setLngLat(lngLat).addTo(map);
+
+        el.addEventListener("click", () => {
+          onSelectVendor(v);
+          if (popupRef.current) popupRef.current.remove();
+          const overallScore = Math.round((v.final_score / 0.85) * 100);
+          const popupHtml = `
+            <div style="font-family:system-ui;padding:4px 2px;min-width:140px">
+              <div style="font-weight:700;font-size:13px;margin-bottom:4px">${v.name}</div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#555">
+                <span>${v.cuisine}</span>
+                <span>${PRICE_LABELS[v.price_range]}</span>
+                <span style="font-weight:700;color:${scoreColor(v.final_score)}">${overallScore}/100</span>
+              </div>
+            </div>`;
+          const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: [0, -16] })
+            .setLngLat(lngLat)
+            .setHTML(popupHtml)
+            .addTo(map);
+          popupRef.current = popup;
+        });
+
         prev.set(v.id, { marker });
       }
+
+      bounds.extend(lngLat);
     });
+
+    // Fit map to show all vendors
+    if (scoredVendors.length > 0 && !bounds.isEmpty()) {
+      map.fitBounds(bounds, { padding: 60, maxZoom: 16 });
+    }
   }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debug places — grey dots for all vendors

@@ -6,16 +6,22 @@ interface Props {
   requiredRole?: string;
 }
 
+const ADMIN_ROLES = ["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "CUSTOMER_SERVICE_ADMIN"];
+
 export function AuthGuard({ children, requiredRole }: Props) {
   const { user } = useAuth();
   const location = useLocation();
 
+  const loginPath = requiredRole && ADMIN_ROLES.includes(requiredRole)
+    ? "/admin/login"
+    : "/vendor/login";
+
   if (!user) {
-    return <Navigate to="/vendor/login" state={{ from: location }} replace />;
+    return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
   if (requiredRole && user.role_scope !== requiredRole) {
-    return <Navigate to="/vendor/login" replace />;
+    return <Navigate to={loginPath} replace />;
   }
 
   return <>{children}</>;

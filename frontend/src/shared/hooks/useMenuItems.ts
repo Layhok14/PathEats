@@ -19,7 +19,8 @@ export function useMenuItems(filterCategory?: MenuCategory) {
     try {
       const { data } = await api.get("/vendor/items");
       setItems(data.data.map(mapItem));
-    } catch {
+    } catch (err) {
+      console.error("[useMenuItems] Failed to fetch items:", err);
       setItems([]);
     }
   }, []);

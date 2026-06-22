@@ -16,15 +16,34 @@ export async function authMiddleware(req, res, next) {
     if (authHeader && authHeader.startsWith("Bearer ")) {
       const token = authHeader.split(" ")[1];
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = { sub: decoded.sub, email: decoded.email, role_scope: decoded.role_scope };
-      return next();
+      const { rows } = await db.query(
+        `SELECT id, email, role_scope FROM users WHERE id = $1 LIMIT 1`,
+        [decoded.sub]
+      );
+      if (rows.length > 0) {
+        req.user = { sub: rows[0].id, email: rows[0].email, role_scope: rows[0].role_scope };
+        return next();
+      }
+      console.error("[authMiddleware] Stale token — user ID not found, resolving by email:", decoded.email);
+      const { rows: emailRows } = await db.query(
+        `SELECT id, email, role_scope FROM users WHERE email = $1 LIMIT 1`,
+        [decoded.email]
+      );
+      if (emailRows.length > 0) {
+        req.user = { sub: emailRows[0].id, email: emailRows[0].email, role_scope: emailRows[0].role_scope };
+        return next();
+      }
     }
-  } catch {
-    // Token invalid — fall through to mock fallback for local testing
+  } catch (err) {
+    console.error("[authMiddleware] Token verification failed:", err.message);
   }
 
   try {
-    let { rows } = await db.query(`SELECT id, email, role_scope FROM users LIMIT 1`);
+    let { rows } = await db.query(
+      `SELECT id, email, role_scope FROM users ORDER BY
+         CASE role_scope WHEN 'VENDOR' THEN 0 WHEN 'GLOBAL_ADMIN' THEN 1 ELSE 2 END
+       LIMIT 1`
+    );
     if (rows.length === 0) {
       for (const u of MOCK_ROLES) {
         const r = await db.query(
@@ -37,7 +56,8 @@ export async function authMiddleware(req, res, next) {
       }
     }
     req.user = { sub: rows[0].id, email: rows[0].email, role_scope: rows[0].role_scope };
-  } catch {
+  } catch (err) {
+    console.error("[authMiddleware] DB mock fallback failed:", err.message);
     req.user = { sub: "mock-user-id", email: "vendor@patheat.app", role_scope: "VENDOR" };
   }
   next();

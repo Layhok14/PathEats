@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const stored = localStorage.getItem(SESSION_KEY);
       if (stored) return JSON.parse(stored);
-    } catch { /* ignore */ }
+    } catch (err) { console.error("[useAuth] Failed to parse stored user:", err); }
     return null;
   });
   const [isGuest, setIsGuest] = useState(false);

@@ -89,6 +89,14 @@ export function VendorCard({
           >
             {vendor.open_now ? "● Open" : "● Closed"}
           </span>
+          {vendor.final_score !== undefined && (
+            <span
+              className="text-[10px] font-bold ml-auto"
+              style={{ color: scoreColor(vendor.final_score) }}
+            >
+              {Math.round((vendor.final_score / 0.85) * 100)}
+            </span>
+          )}
         </div>
       </div>
     </div>

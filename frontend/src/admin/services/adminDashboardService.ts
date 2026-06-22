@@ -248,3 +248,80 @@ export async function checkAdminDatabase(): Promise<{ connected: boolean; checke
   const response = await api.get<{ success: boolean; data: { connected: boolean; checkedAt: string | null } }>("/admin/db/check");
   return response.data.data;
 }
+
+export interface AdminStallRow {
+  id: string;
+  name: string;
+  description: string | null;
+  address: string | null;
+  priceRange: string | null;
+  photoUrl: string | null;
+  isOpen: boolean;
+  status: string;
+  isApproved: boolean;
+  rating: number | null;
+  ratingAvg: number | null;
+  ratingCount: number;
+  ownerId: string | null;
+  ownerEmail: string;
+  ownerName: string;
+  category: { id: string; name: string; slug: string } | null;
+  location: { type: string; coordinates: [number, number] } | null;
+}
+
+export interface AdminMenuItemRow {
+  id: string;
+  name: string;
+  description: string | null;
+  price: string;
+  category: string;
+  imageUrl: string | null;
+  isAvailable: boolean;
+  placeId: string;
+  placeName: string;
+}
+
+export interface AuditActivityRow {
+  pid: number;
+  username: string;
+  application_name: string;
+  client_addr: string | null;
+  state: string;
+  query_start: string;
+  state_change: string;
+  wait_event_type: string | null;
+  wait_event: string | null;
+  query: string;
+}
+
+export async function getAdminAllStalls(): Promise<AdminStallRow[]> {
+  const response = await api.get<{ success: boolean; data: AdminStallRow[] }>("/admin/stalls");
+  return response.data.data;
+}
+
+export async function getAdminStallById(id: string): Promise<AdminStallRow> {
+  const response = await api.get<{ success: boolean; data: AdminStallRow }>(`/admin/stalls/${id}`);
+  return response.data.data;
+}
+
+export async function updateAdminStall(id: string, payload: Partial<AdminStallRow>): Promise<void> {
+  await api.patch(`/admin/stalls/${id}`, payload);
+}
+
+export async function toggleAdminStallStatus(id: string): Promise<void> {
+  await api.patch(`/admin/stalls/${id}/toggle`);
+}
+
+export async function getAdminAllMenuItems(): Promise<AdminMenuItemRow[]> {
+  const response = await api.get<{ success: boolean; data: AdminMenuItemRow[] }>("/admin/menu-items");
+  return response.data.data;
+}
+
+export async function updateAdminMenuItem(id: string, payload: Partial<AdminMenuItemRow>): Promise<void> {
+  await api.patch(`/admin/menu-items/${id}`, payload);
+}
+
+export async function getAdminAuditActivity(): Promise<AuditActivityRow[]> {
+  const response = await api.get<{ success: boolean; data: AuditActivityRow[] }>("/admin/audit/activity");
+  return response.data.data;
+}

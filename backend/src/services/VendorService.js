@@ -1,5 +1,5 @@
 import VendorRepository from "../repositories/VendorRepository.js";
-import VendorModel from "../models/VendorModel.js";
+import VendorModel from "../models/vendorModel.js";
 import AppError from "../utils/AppError.js";
 
 class VendorService {
@@ -50,6 +50,13 @@ class VendorService {
     if (!stall) throw new AppError("Stall not found", 404);
     const updated = await this.vendorRepo.update(stallId, data);
     return VendorModel.toResponse(updated);
+  }
+
+  async deleteStall(ownerId, stallId) {
+    const stall = await this.vendorRepo.findOwnedById(stallId, ownerId);
+    if (!stall) throw new AppError("Stall not found", 404);
+    const deleted = await this.vendorRepo.deleteStall(stallId, ownerId);
+    if (!deleted) throw new AppError("Stall not found", 404);
   }
 
   async getReviews(ownerId) {

@@ -38,6 +38,17 @@ export function calcScore(priceRange, distM, rating, waitMin) {
   );
 }
 
+/**
+ * Returns individual metric scores (0–100) for display breakdown.
+ */
+export function calcMetricScores(priceRange, distM, rating, waitMin) {
+  const affordability = Math.round((1 - (priceRange - 1) / 3) * 100);
+  const proximity = Math.round((1 - Math.min(distM, 300) / 300) * 100);
+  const ratingScore = Math.round((rating / 5) * 100);
+  const waitScore = Math.round(Math.max(0, 100 - (waitMin / 15) * 100));
+  return { affordability, proximity, ratingScore, waitScore };
+}
+
 export function scoreColor(score) {
   if (score >= 0.68) return "#10b981";
   if (score >= 0.50) return "#22c55e";

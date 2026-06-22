@@ -1,18 +1,65 @@
 import type { RouteObject } from "react-router";
 import DeveloperLayout from "../layouts/DeveloperLayout";
 import DeveloperDashboard from "../pages/developer/DeveloperDashboard";
-import DatabaseManagementPage from "../pages/developer/DatabaseManagementPage";
-import ErrorLogsPage from "../pages/developer/ErrorLogsPage";
-import BackupRecoveryPage from "../pages/developer/BackupRecoveryPage";
+import BackupPage from "../pages/developer/BackupPage";
+import RecoveryPage from "../pages/developer/RecoveryPage";
+import DeveloperUserManagementPage from "../pages/developer/DeveloperUserManagementPage";
+import DeveloperVendorManagementPage from "../pages/developer/DeveloperVendorManagementPage";
+import DeveloperVendorDetailPage from "../pages/developer/DeveloperVendorDetailPage";
+import { AuthGuard } from "../../shared/components/AuthGuard";
 
 const developerRoutes: RouteObject = {
   path: "/developer",
   element: <DeveloperLayout />,
   children: [
-    { index: true, element: <DeveloperDashboard /> },
-    { path: "database", element: <DatabaseManagementPage /> },
-    { path: "error-logs", element: <ErrorLogsPage /> },
-    { path: "backup", element: <BackupRecoveryPage /> },
+    {
+      index: true,
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperDashboard />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "backup",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <BackupPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "recovery",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <RecoveryPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "users",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperUserManagementPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "vendors",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperVendorManagementPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "vendors/:vendorId",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperVendorDetailPage />
+        </AuthGuard>
+      ),
+    },
   ],
 };
 

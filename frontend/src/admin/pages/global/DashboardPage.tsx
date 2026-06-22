@@ -32,7 +32,8 @@ export default function DashboardPage() {
       setMessage("");
       const rows = await getAdminRoles();
       setRoles(rows);
-    } catch {
+    } catch (err) {
+      console.error("[DashboardPage] Failed to load roles:", err);
       const text = "Could not load roles from database.";
       setMessage(text);
       toast.error(text);
@@ -78,7 +79,8 @@ export default function DashboardPage() {
       await deleteAdminRole(role.id);
       toast.success(`Role "${role.name}" deleted.`);
       await loadRoles();
-    } catch {
+    } catch (err) {
+      console.error("[DashboardPage] Failed to delete role:", err);
       toast.error("Could not delete role.");
     }
   };

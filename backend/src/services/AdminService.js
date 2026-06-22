@@ -130,3 +130,41 @@ export const updateRoleRecord = async (id, roleData) => {
 export const deleteRoleRecord = async (id) => {
   return adminRepository.deleteRoleRecord(id);
 };
+
+export const getAllStalls = async () => {
+  return adminRepository.findAllStalls();
+};
+
+export const getStallsByOwner = async (ownerId) => {
+  return adminRepository.findStallsByOwner(ownerId);
+};
+
+export const getStallById = async (id) => {
+  return adminRepository.findStallById(id);
+};
+
+export const editStall = async (id, payload) => {
+  return adminRepository.updateStall(id, payload);
+};
+
+export const toggleStallStatus = async (id) => {
+  const stall = await adminRepository.findStallById(id);
+  if (!stall) return null;
+  return adminRepository.updateStallStatus(id, !stall.isOpen);
+};
+
+export const getAuditActivity = async () => {
+  return adminRepository.getAuditActivity();
+};
+
+export const getAllReviews = async () => {
+  return adminRepository.getAllReviews();
+};
+
+export const getAllMenuItems = async () => {
+  return adminRepository.findAllMenuItems();
+};
+
+export const editMenuItem = async (id, payload) => {
+  return adminRepository.updateMenuItem(id, payload);
+};
