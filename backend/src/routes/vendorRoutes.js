@@ -70,6 +70,12 @@ router.delete("/items/:itemId", catchAsync(async (req, res) => {
   res.json({ success: true, data: { message: "Menu item deleted" } });
 }));
 
+router.get("/onboarding", catchAsync(async (req, res) => {
+  const { default: adminRepository } = await import("../repositories/adminRepository.js");
+  const config = await adminRepository.getOnboardingConfig();
+  res.json({ success: true, data: config });
+}));
+
 router.get("/reviews", catchAsync(async (req, res) => {
   const ownerId = req.user.sub;
   const reviews = await vendorService.getReviews(ownerId);

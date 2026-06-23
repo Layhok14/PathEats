@@ -242,3 +242,39 @@ export const deleteUser = async (id, adminId = null) => {
 export const getDatabaseTables = async () => {
   return adminRepository.getDatabaseTables();
 };
+
+// ── Onboarding Config ─────────────────────────────────────────────────
+
+export const getOnboardingConfig = async () => {
+  return adminRepository.getOnboardingConfig();
+};
+
+export const updateOnboardingConfig = async (data) => {
+  return adminRepository.updateOnboardingConfig(data);
+};
+
+// ── Review Moderation ─────────────────────────────────────────────────
+
+export const flagReview = async (id) => {
+  const review = await adminRepository.flagReview(id);
+  if (review) {
+    await adminRepository.refreshPlaceRating(review.place_id);
+  }
+  return review;
+};
+
+export const unflagReview = async (id) => {
+  const review = await adminRepository.unflagReview(id);
+  if (review) {
+    await adminRepository.refreshPlaceRating(review.place_id);
+  }
+  return review;
+};
+
+export const removeReview = async (id) => {
+  const review = await adminRepository.removeReview(id);
+  if (review) {
+    await adminRepository.refreshPlaceRating(review.place_id);
+  }
+  return review;
+};

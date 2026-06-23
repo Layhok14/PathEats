@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Upload, AlertTriangle, CheckCircle, X } from "lucide-react";
 import { toast } from "sonner";
-import { TopBar } from "../../components/TopBar";
 import {
   getDevRecovery,
   initiateDevRecovery,
@@ -200,7 +199,6 @@ export default function RecoveryPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" searchPlaceholder="Search recoveries…" />
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
           <h1 className="text-[26px] font-bold text-[#0b1c30]">Recovery Management</h1>

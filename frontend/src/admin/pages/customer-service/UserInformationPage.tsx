@@ -1,5 +1,5 @@
 import { Mail, Phone, MapPin, CheckCircle, ExternalLink } from "lucide-react";
-import { TopBar } from "../../components/TopBar";
+
 
 export default function UserInformationPage() {
   return (

@@ -134,3 +134,70 @@ export async function initiateDevRecovery(payload: {
   const response = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", payload);
   return response.data.data;
 }
+
+// ── SQL Query Runner ────────────────────────────────────────────────────────
+
+export interface QueryPreset {
+  name: string;
+  description: string;
+  sql: string;
+}
+
+export interface QueryResult {
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  fields: string[];
+}
+
+export async function getDevQueryPresets(): Promise<QueryPreset[]> {
+  const response = await api.get<{ success: boolean; data: QueryPreset[] }>("/dev/queries/presets");
+  return response.data.data;
+}
+
+export async function postDevQuery(sql: string): Promise<QueryResult> {
+  const response = await api.post<{ success: boolean; data: QueryResult }>("/dev/query", { sql });
+  return response.data.data;
+}
+
+// ── Maintenance ─────────────────────────────────────────────────────────────
+
+export interface TableMaintenanceRow {
+  name: string;
+  live_tuples: number;
+  dead_tuples: number;
+  size: string;
+  last_vacuum: string | null;
+  last_autovacuum: string | null;
+  last_analyze: string | null;
+  last_autoanalyze: string | null;
+  health: "good" | "warning" | "critical";
+}
+
+export async function getDevMaintenanceStatus(): Promise<TableMaintenanceRow[]> {
+  const response = await api.get<{ success: boolean; data: TableMaintenanceRow[] }>("/dev/maintenance");
+  return response.data.data;
+}
+
+export async function postDevVacuum(table: string): Promise<{ message: string }> {
+  const response = await api.post<{ success: boolean; data: { message: string } }>("/dev/maintenance/vacuum", { table });
+  return response.data.data;
+}
+
+export async function postDevAnalyze(table: string): Promise<{ message: string }> {
+  const response = await api.post<{ success: boolean; data: { message: string } }>("/dev/maintenance/analyze", { table });
+  return response.data.data;
+}
+
+// ── Error / Bug Summary ─────────────────────────────────────────────────────
+
+export interface DevErrorSummary {
+  auditErrors: Array<{ action: string; details: Record<string, unknown> | null; created_at: string; target_type: string | null }>;
+  bannedUsers: Array<{ id: string; email: string; created_at: string }>;
+  totalErrors: number;
+  totalBanned: number;
+}
+
+export async function getDevErrors(): Promise<DevErrorSummary> {
+  const response = await api.get<{ success: boolean; data: DevErrorSummary }>("/dev/errors");
+  return response.data.data;
+}

@@ -23,22 +23,6 @@ class VendorModel {
     return { valid: errors.length === 0, errors };
   }
 
-  static validateUpdate(data) {
-    const errors = [];
-
-    if (data.name !== undefined && (!data.name || typeof data.name !== "string")) {
-      errors.push("Name must be a non-empty string");
-    }
-
-    if (data.price_range !== undefined && data.price_range !== null) {
-      if (!Number.isInteger(data.price_range) || data.price_range < 1 || data.price_range > 4) {
-        errors.push("Price range must be an integer between 1 and 4");
-      }
-    }
-
-    return { valid: errors.length === 0, errors };
-  }
-
   static toResponse(row) {
     return {
       id: row.id,

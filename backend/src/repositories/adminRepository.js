@@ -84,20 +84,6 @@ const getPublicTableNames = async () => {
   return rows.map((row) => row.table_name);
 };
 
-const logAudit = async (adminId, action, targetType, targetId, details = null) => {
-  try {
-    await pool.query(
-      `
-      INSERT INTO audit_log (admin_id, action, target_type, target_id, details)
-      VALUES ($1, $2, $3, $4, $5)
-      `,
-      [adminId, action, targetType, targetId, details ? JSON.stringify(details) : null]
-    );
-  } catch (err) {
-    console.warn(`[audit_log] Failed to log: ${err.message}`);
-  }
-};
-
 export const logAuditAction = async (adminId, action, targetType, targetId, details = null) => {
   try {
     await pool.query(
@@ -712,7 +698,13 @@ export const createStallReview = async (placeId, payload) => {
 };
 
 export const deleteStallReview = async (id) => {
-  const result = await pool.query("DELETE FROM reviews WHERE id::text = $1 RETURNING id::text", [id]);
+  const result = await pool.query(
+    "UPDATE reviews SET deleted_at = NOW() WHERE id::text = $1 AND deleted_at IS NULL RETURNING id::text, place_id",
+    [id]
+  );
+  if (result.rows[0]) {
+    await pool.query("SELECT refresh_place_rating($1)", [result.rows[0].place_id]);
+  }
   return result.rows[0] ?? null;
 };
 
@@ -720,7 +712,8 @@ export const getAllReviews = async () => {
   const { rows } = await pool.query(
     `SELECT r.id, r.rating AS stars, r.body, r.created_at,
             u.first_name || ' ' || u.last_name AS user_name,
-            p.name AS place_name, p.id AS place_id
+            p.name AS place_name, p.id AS place_id,
+            r.flagged_at, r.deleted_at
      FROM reviews r
      JOIN places p ON p.id = r.place_id
      JOIN users u ON u.id = r.user_id
@@ -1325,4 +1318,65 @@ export const deleteUserRecord = async (id) => {
 
 export const getDatabaseTables = async () => {
   return getPublicTableNames();
+};
+
+// ── Onboarding Config ─────────────────────────────────────────────────
+
+export const getOnboardingConfig = async () => {
+  const { rows } = await pool.query(
+    "SELECT id, telegram_link, message, updated_at FROM onboarding_config LIMIT 1"
+  );
+  return rows[0] ?? { telegram_link: "", message: "" };
+};
+
+export const updateOnboardingConfig = async (data) => {
+  const { rows } = await pool.query(
+    `UPDATE onboarding_config
+     SET telegram_link = COALESCE($1, telegram_link),
+         message = COALESCE($2, message),
+         updated_at = NOW()
+     WHERE id = (SELECT id FROM onboarding_config LIMIT 1)
+     RETURNING id, telegram_link, message, updated_at`,
+    [data.telegramLink ?? null, data.message ?? null]
+  );
+  return rows[0] ?? null;
+};
+
+// ── Review Moderation ─────────────────────────────────────────────────
+
+export const flagReview = async (id) => {
+  const { rows } = await pool.query(
+    `UPDATE reviews
+     SET flagged_at = NOW()
+     WHERE id::text = $1 AND deleted_at IS NULL
+     RETURNING id::text, place_id`,
+    [id]
+  );
+  return rows[0] ?? null;
+};
+
+export const unflagReview = async (id) => {
+  const { rows } = await pool.query(
+    `UPDATE reviews
+     SET flagged_at = NULL
+     WHERE id::text = $1 AND deleted_at IS NULL
+     RETURNING id::text, place_id`,
+    [id]
+  );
+  return rows[0] ?? null;
+};
+
+export const removeReview = async (id) => {
+  const { rows } = await pool.query(
+    `UPDATE reviews
+     SET deleted_at = NOW()
+     WHERE id::text = $1 AND deleted_at IS NULL
+     RETURNING id::text, place_id`,
+    [id]
+  );
+  return rows[0] ?? null;
+};
+
+export const refreshPlaceRating = async (placeId) => {
+  await pool.query("SELECT refresh_place_rating($1)", [placeId]);
 };

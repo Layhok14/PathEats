@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router";
-import { LayoutDashboard, Store, UtensilsCrossed, HelpCircle, Settings, Star } from "lucide-react";
+import { LayoutDashboard, Store, UtensilsCrossed, HelpCircle, Settings, Star, UserPlus } from "lucide-react";
 import { useAuth } from "../../shared/hooks/useAuth";
 
 const NAV = [
@@ -7,7 +7,8 @@ const NAV = [
   { to: "/vendor/stalls", label: "Stall Management", icon: <Store size={16} /> },
   { to: "/vendor/menu", label: "Menu Items", icon: <UtensilsCrossed size={16} /> },
   { to: "/vendor/reviews", label: "Reviews", icon: <Star size={16} /> },
-  { to: "/vendor/support", label: "Support/Onboarding", icon: <HelpCircle size={16} /> },
+  { to: "/vendor/onboarding", label: "Onboarding", icon: <UserPlus size={16} /> },
+  { to: "/vendor/support", label: "Support", icon: <HelpCircle size={16} /> },
   { to: "/vendor/settings", label: "Settings", icon: <Settings size={16} /> },
 ];
 
@@ -18,7 +19,7 @@ export function VendorLayout() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f8f9ff]">
-      <aside className="flex flex-col w-[220px] shrink-0 h-full bg-[#004b1e]">
+      <aside className="flex flex-col w-[240px] shrink-0 h-full bg-[#004b1e]">
         <div className="px-4 py-4 pb-6">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">

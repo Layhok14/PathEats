@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
-import { TopBar } from "../../components/TopBar";
 import {
   getAdminVendorManagementOverview,
   type AdminVendorOverviewRow,
@@ -44,7 +43,6 @@ export default function DeveloperVendorManagementPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" searchPlaceholder="Search vendors…" />
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
           <h1 className="text-[26px] font-bold text-[#0b1c30]">Vendor Management</h1>

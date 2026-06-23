@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Upload, Eye, Trash2, CheckCircle, X } from "lucide-react";
 import { toast } from "sonner";
-import { TopBar } from "../../components/TopBar";
 import {
   getDevBackups,
   createDevBackup,
@@ -254,7 +253,6 @@ export default function BackupPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" searchPlaceholder="Search backups…" />
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
           <h1 className="text-[26px] font-bold text-[#0b1c30]">Backup Management</h1>

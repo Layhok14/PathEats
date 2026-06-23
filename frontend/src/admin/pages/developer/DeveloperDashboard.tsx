@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Activity, AlertTriangle, Server, Database } from "lucide-react";
-import { TopBar } from "../../components/TopBar";
 import { MetricCard } from "../../components/MetricCard";
 import { getDevHealth, getDevLogs, getDevApiMetrics, type DevHealth, type DevLogEntry } from "../../services/developerService";
 
@@ -39,7 +38,6 @@ export default function DeveloperDashboard() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" searchPlaceholder="Search logs, endpoints, or services…" />
       <div className="flex-1 p-8 flex flex-col gap-6">
         <h1 className="text-[28px] font-bold text-[#0b1c30]">Developer Dashboard</h1>
 

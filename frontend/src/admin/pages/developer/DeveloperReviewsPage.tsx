@@ -1,10 +1,8 @@
-import { TopBar } from "../../components/TopBar";
 import { ReviewsManager } from "../../../shared/components/ReviewsManager";
 
 export default function DeveloperReviewsPage() {
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" searchPlaceholder="Search reviews..." />
       <div className="flex-1 p-8">
         <ReviewsManager
           endpoint="/developer/reviews"

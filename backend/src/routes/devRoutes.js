@@ -312,4 +312,222 @@ router.get("/reviews", catchAsync(async (req, res) => {
   res.json({ success: true, data: reviews });
 }));
 
+// ── SQL Query Runner ────────────────────────────────────────────────────────
+
+const QUERY_PRESETS = [
+  {
+    name: "Table Sizes",
+    description: "Show all user tables with row counts and sizes",
+    sql: `SELECT
+  relname AS table_name,
+  n_live_tup AS row_count,
+  pg_size_pretty(pg_total_relation_size(quote_ident(relname))) AS total_size
+FROM pg_stat_user_tables
+ORDER BY n_live_tup DESC`,
+  },
+  {
+    name: "Recent Registrations",
+    description: "Users who registered in the last 7 days",
+    sql: `SELECT id, email, first_name, last_name, role, created_at
+FROM users
+WHERE created_at > NOW() - INTERVAL '7 days'
+ORDER BY created_at DESC`,
+  },
+  {
+    name: "Top Rated Stalls",
+    description: "Stalls with highest average rating",
+    sql: `SELECT p.id, p.name, AVG(r.rating) AS avg_rating, COUNT(r.id) AS review_count
+FROM places p
+JOIN reviews r ON r.place_id = p.id
+GROUP BY p.id, p.name
+HAVING COUNT(r.id) >= 3
+ORDER BY avg_rating DESC
+LIMIT 20`,
+  },
+  {
+    name: "Unhealthy Indexes",
+    description: "Indexes with high dead tuple ratio (vacuum recommended)",
+    sql: `SELECT
+  schemaname, tablename, indexname,
+  idx_scan, idx_tup_read, idx_tup_fetch
+FROM pg_stat_user_indexes
+WHERE idx_scan < 100
+ORDER BY idx_scan ASC`,
+  },
+  {
+    name: "Idle Connections",
+    description: "Database connections in idle state",
+    sql: `SELECT pid, usename, application_name, state, query_start, query
+FROM pg_stat_activity
+WHERE state = 'idle'
+ORDER BY query_start DESC`,
+  },
+  {
+    name: "Lock Waits",
+    description: "Queries waiting on locks (blocked sessions)",
+    sql: `SELECT
+  blocked.pid AS blocked_pid,
+  blocked.query AS blocked_query,
+  blocking.pid AS blocking_pid,
+  blocking.query AS blocking_query
+FROM pg_locks blocked
+JOIN pg_stat_activity blocked_act ON blocked.pid = blocked_act.pid
+JOIN pg_locks blocking ON blocking.granted AND blocked.relation = blocking.relation AND blocked.pid != blocking.pid
+JOIN pg_stat_activity blocking_act ON blocking.pid = blocking_act.pid
+WHERE NOT blocked.granted`,
+  },
+  {
+    name: "Review Distribution",
+    description: "Count of reviews per rating value",
+    sql: `SELECT rating, COUNT(*) AS count
+FROM reviews
+GROUP BY rating
+ORDER BY rating DESC`,
+  },
+  {
+    name: "Stalls per Category",
+    description: "Count of places grouped by category",
+    sql: `SELECT pc.name AS category, COUNT(p.id) AS stall_count
+FROM place_categories pc
+LEFT JOIN places p ON p.category_id = pc.id
+GROUP BY pc.id, pc.name
+ORDER BY stall_count DESC`,
+  },
+  {
+    name: "Banned Users",
+    description: "Users with banned status",
+    sql: `SELECT id, email, first_name, last_name, role, is_banned, updated_at
+FROM users
+WHERE is_banned = true
+ORDER BY updated_at DESC`,
+  },
+  {
+    name: "Table Dead Tuples",
+    description: "Tables with highest dead tuple counts (vacuum candidates)",
+    sql: `SELECT
+  relname AS table_name,
+  n_dead_tup AS dead_tuples,
+  n_live_tup AS live_tuples,
+  ROUND(100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0), 1) AS dead_pct
+FROM pg_stat_user_tables
+WHERE n_dead_tup > 0
+ORDER BY n_dead_tup DESC`,
+  },
+  {
+    name: "Recent Admin Actions",
+    description: "Last 50 audit log entries",
+    sql: `SELECT id, admin_id, action, target_type, target_id, details, created_at
+FROM audit_log
+ORDER BY created_at DESC
+LIMIT 50`,
+  },
+];
+
+router.get("/queries/presets", catchAsync(async (req, res) => {
+  res.json({ success: true, data: QUERY_PRESETS });
+}));
+
+router.post("/query", catchAsync(async (req, res) => {
+  const { sql } = req.body;
+  if (!sql || typeof sql !== "string") {
+    throw new AppError("SQL query is required", 400);
+  }
+
+  const trimmed = sql.trim().toUpperCase();
+  if (!trimmed.startsWith("SELECT") && !trimmed.startsWith("WITH")) {
+    throw new AppError("Only SELECT and WITH queries are allowed", 403);
+  }
+
+  const result = await db.query(sql);
+  res.json({
+    success: true,
+    data: {
+      rows: result.rows,
+      rowCount: result.rowCount ?? result.rows.length,
+      fields: result.fields ? result.fields.map((f) => f.name) : (result.rows.length > 0 ? Object.keys(result.rows[0]) : []),
+    },
+  });
+}));
+
+// ── Maintenance ─────────────────────────────────────────────────────────────
+
+router.get("/maintenance", catchAsync(async (req, res) => {
+  const tablesResult = await db.query(`
+    SELECT
+      relname AS name,
+      n_live_tup AS live_tuples,
+      n_dead_tup AS dead_tuples,
+      pg_size_pretty(pg_total_relation_size(quote_ident(relname))) AS size,
+      last_vacuum,
+      last_autovacuum,
+      last_analyze,
+      last_autoanalyze,
+      CASE
+        WHEN n_dead_tup > n_live_tup * 0.2 THEN 'critical'
+        WHEN n_dead_tup > n_live_tup * 0.05 THEN 'warning'
+        ELSE 'good'
+      END AS health
+    FROM pg_stat_user_tables
+    ORDER BY n_dead_tup DESC
+  `);
+
+  res.json({ success: true, data: tablesResult.rows });
+}));
+
+router.post("/maintenance/vacuum", catchAsync(async (req, res) => {
+  const { table } = req.body;
+  if (!table || typeof table !== "string") {
+    throw new AppError("Table name is required", 400);
+  }
+
+  const safeTable = table.replace(/[^a-z0-9_]/gi, "");
+  await db.query(`VACUUM ANALYZE "${safeTable}"`);
+  res.json({ success: true, data: { message: `VACUUM ANALYZE completed on "${safeTable}"` } });
+}));
+
+router.post("/maintenance/analyze", catchAsync(async (req, res) => {
+  const { table } = req.body;
+  if (!table || typeof table !== "string") {
+    throw new AppError("Table name is required", 400);
+  }
+
+  const safeTable = table.replace(/[^a-z0-9_]/gi, "");
+  await db.query(`ANALYZE "${safeTable}"`);
+  res.json({ success: true, data: { message: `ANALYZE completed on "${safeTable}"` } });
+}));
+
+// ── Error / Bug Summary ────────────────────────────────────────────────────
+
+router.get("/errors", catchAsync(async (req, res) => {
+  const [auditResult, devLogsResult] = await Promise.allSettled([
+    db.query(`
+      SELECT action, details, created_at, target_type
+      FROM audit_log
+      WHERE action LIKE '%error%' OR action LIKE '%fail%' OR details::text LIKE '%error%'
+      ORDER BY created_at DESC
+      LIMIT 100
+    `),
+    db.query(`
+      SELECT id, email, created_at
+      FROM users
+      WHERE is_banned = true
+      ORDER BY created_at DESC
+      LIMIT 20
+    `),
+  ]);
+
+  const auditErrors = auditResult.status === "fulfilled" ? auditResult.value.rows : [];
+  const bannedUsers = devLogsResult.status === "fulfilled" ? devLogsResult.value.rows : [];
+
+  res.json({
+    success: true,
+    data: {
+      auditErrors,
+      bannedUsers,
+      totalErrors: auditErrors.length,
+      totalBanned: bannedUsers.length,
+    },
+  });
+}));
+
 export default router;

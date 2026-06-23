@@ -226,6 +226,15 @@ export async function getAdminRoles(): Promise<AdminRole[]> {
   return response.data.data;
 }
 
+export async function createAdminRole(role: {
+  name: string;
+  tablePrivileges: Record<string, string[]>;
+  grantOption: boolean;
+}): Promise<AdminRole> {
+  const response = await api.post<{ success: boolean; data: AdminRole }>("/admin/roles", role);
+  return response.data.data;
+}
+
 export async function updateAdminRole(
   id: string,
   role: {
@@ -297,6 +306,16 @@ export async function getAdminAllStalls(): Promise<AdminStallRow[]> {
   return response.data.data;
 }
 
+export async function getAdminStallsByOwner(ownerId: string): Promise<AdminStallRow[]> {
+  const response = await api.get<{ success: boolean; data: AdminStallRow[] }>(`/admin/stalls/owner/${ownerId}`);
+  return response.data.data;
+}
+
+export async function getAdminUsersByRole(role: string): Promise<AdminUser[]> {
+  const all = await getAdminUsers();
+  return all.filter((u) => u.role === role);
+}
+
 export async function getAdminStallById(id: string): Promise<AdminStallRow> {
   const response = await api.get<{ success: boolean; data: AdminStallRow }>(`/admin/stalls/${id}`);
   return response.data.data;
@@ -317,6 +336,11 @@ export async function getAdminAllMenuItems(): Promise<AdminMenuItemRow[]> {
 
 export async function updateAdminMenuItem(id: string, payload: Partial<AdminMenuItemRow>): Promise<void> {
   await api.patch(`/admin/menu-items/${id}`, payload);
+}
+
+export async function postAdminKillQuery(pid: number): Promise<{ message: string }> {
+  const response = await api.post<{ success: boolean; data: { message: string } }>("/admin/audit/kill-query", { pid });
+  return response.data.data;
 }
 
 export async function getAdminAuditActivity(): Promise<AuditActivityRow[]> {
@@ -375,57 +399,59 @@ export async function deleteAdminUser(id: string): Promise<void> {
   await api.delete(`/admin/users/${id}`);
 }
 
-// ── Messages / Support ──────────────────────────────────────────────────
-
-export interface SupportMessage {
-  id: string;
-  subject: string;
-  senderName: string;
-  senderEmail: string;
-  messageBody: string;
-  status: string;
-  priority?: string;
-  ticketId?: string;
-  createdAt?: string;
-}
-
-export interface MessageReply {
-  id: string;
-  messageId: string;
-  replyBody: string;
-  repliedBy: string;
-  createdAt: string;
-}
-
-export async function getAdminMessages(status?: string): Promise<SupportMessage[]> {
-  const response = await api.get<{ success: boolean; data: SupportMessage[] }>("/admin/messages", {
-    params: status ? { status } : undefined,
-  });
-  return response.data.data;
-}
-
-export async function getAdminMessageById(id: string): Promise<SupportMessage> {
-  const response = await api.get<{ success: boolean; data: SupportMessage }>(`/admin/messages/${id}`);
-  return response.data.data;
-}
-
-export async function getAdminMessageReplies(id: string): Promise<MessageReply[]> {
-  const response = await api.get<{ success: boolean; data: MessageReply[] }>(`/admin/messages/${id}/replies`);
-  return response.data.data;
-}
-
-export async function addAdminMessageReply(id: string, replyBody: string): Promise<MessageReply> {
-  const response = await api.post<{ success: boolean; data: MessageReply }>(`/admin/messages/${id}/replies`, { replyBody });
-  return response.data.data;
-}
-
-export async function updateAdminMessageStatus(id: string, status: string): Promise<void> {
-  await api.patch(`/admin/messages/${id}/status`, { status });
-}
-
 // ── Database Tables ─────────────────────────────────────────────────────
 
 export async function getAdminDatabaseTables(): Promise<string[]> {
   const response = await api.get<{ success: boolean; data: string[] }>("/admin/tables");
   return response.data.data;
+}
+
+// ── Onboarding Config ────────────────────────────────────────────────────
+
+export interface OnboardingConfig {
+  id: string;
+  telegram_link: string;
+  message: string;
+  updated_at: string;
+}
+
+export async function getAdminOnboardingConfig(): Promise<OnboardingConfig> {
+  const response = await api.get<{ success: boolean; data: OnboardingConfig }>("/admin/onboarding");
+  return response.data.data;
+}
+
+export async function updateAdminOnboardingConfig(data: { telegramLink?: string; message?: string }): Promise<OnboardingConfig> {
+  const response = await api.put<{ success: boolean; data: OnboardingConfig }>("/admin/onboarding", data);
+  return response.data.data;
+}
+
+// ── Review Moderation ─────────────────────────────────────────────────────
+
+export interface AdminReview {
+  id: string;
+  stars: number;
+  body: string;
+  created_at: string;
+  user_name: string;
+  place_name: string;
+  place_id: string;
+  flagged_at?: string | null;
+  deleted_at?: string | null;
+}
+
+export async function getAdminAllReviews(): Promise<AdminReview[]> {
+  const response = await api.get<{ success: boolean; data: AdminReview[] }>("/admin/reviews");
+  return response.data.data;
+}
+
+export async function flagAdminReview(id: string): Promise<void> {
+  await api.patch(`/admin/stalls/reviews/${id}/flag`);
+}
+
+export async function unflagAdminReview(id: string): Promise<void> {
+  await api.patch(`/admin/stalls/reviews/${id}/unflag`);
+}
+
+export async function removeAdminReview(id: string): Promise<void> {
+  await api.delete(`/admin/stalls/reviews/${id}/remove`);
 }

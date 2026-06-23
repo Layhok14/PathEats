@@ -12,6 +12,7 @@ import { LocationPinpointPage } from "../pages/LocationPinpointPage";
 import { ReviewsPage } from "../pages/ReviewsPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SupportPage } from "../pages/SupportPage";
+import { OnboardingPage } from "../pages/OnboardingPage";
 import { MenuItemsPage } from "../pages/MenuItemsPage";
 
 export function VendorRoutes() {
@@ -29,6 +30,7 @@ export function VendorRoutes() {
         <Route path="stalls/:id/location" element={<AuthGuard requiredRole="VENDOR"><LocationPinpointPage /></AuthGuard>} />
         <Route path="menu" element={<AuthGuard requiredRole="VENDOR"><MenuItemsPage /></AuthGuard>} />
         <Route path="reviews" element={<AuthGuard requiredRole="VENDOR"><ReviewsPage /></AuthGuard>} />
+        <Route path="onboarding" element={<AuthGuard requiredRole="VENDOR"><OnboardingPage /></AuthGuard>} />
         <Route path="support" element={<AuthGuard requiredRole="VENDOR"><SupportPage /></AuthGuard>} />
         <Route path="settings" element={<AuthGuard requiredRole="VENDOR"><SettingsPage /></AuthGuard>} />
       </Route>

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, Users, Plus, Pencil, Trash2, Search, KeyRound, Unlock, Table2, UserPlus, Lock, X, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { TopBar } from "../../components/TopBar";
 import { MetricCard } from "../../components/MetricCard";
 import CreateRoleModal from "../../components/Add-role";
-import { getAdminRoles, getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser, updateAdminUserStatus, type AdminRole, type AdminUser } from "../../services/adminDashboardService";
+import {
+  getAdminRoles, getAdminUsers, createAdminUser, updateAdminUser, updateAdminUserStatus, deleteAdminRole, deleteAdminUser,
+  getAdminDatabaseTables, type AdminRole, type AdminUser,
+} from "../../services/adminDashboardService";
 
 const PAGE_SIZE = 6;
 
@@ -18,7 +20,6 @@ export default function AdminManagementPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" />
       <div className="px-8 pt-6 pb-0">
         <h1 className="text-[28px] font-bold text-[#0b1c30]">Admin Management</h1>
         <p className="text-[14px] text-[#64748b] mt-1">Manage roles and users across the system.</p>
@@ -68,6 +69,17 @@ function RoleManagementSection() {
   const allTables = new Set(roles.flatMap((r) => Object.keys(r.tablePrivileges)));
   const grantable = roles.filter((r) => r.grantOption).length;
 
+  const handleDeleteRole = async (role: AdminRole) => {
+    if (!confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteAdminRole(role.id);
+      toast.success(`Role "${role.name}" deleted.`);
+      await loadRoles();
+    } catch (err) {
+      toast.error("Could not delete role.");
+    }
+  };
+
   return (
     <>
       <CreateRoleModal isOpen={showRoleModal} role={editingRole} onClose={() => { setShowRoleModal(false); setEditingRole(null); }} onCreated={loadRoles} />
@@ -110,7 +122,7 @@ function RoleManagementSection() {
                 <td className="px-6 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingRole(role); setShowRoleModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
-                    <button onClick={() => { if(confirm(`Delete "${role.name}"?`)) {}} } className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={15} /></button>
+                    <button onClick={() => handleDeleteRole(role)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={15} /></button>
                   </div>
                 </td>
               </tr>
@@ -132,15 +144,22 @@ function RoleManagementSection() {
 
 function UserManagementSection() {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [roles, setRoles] = useState<AdminRole[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
 
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const rows = await getAdminUsers();
-      setUsers(rows.users);
+      const [rows, roleRows] = await Promise.all([
+        getAdminUsers(),
+        getAdminRoles(),
+      ]);
+      setUsers(rows);
+      setRoles(roleRows);
     } catch (err) { toast.error("Could not load users."); }
     finally { setLoading(false); }
   };
@@ -156,11 +175,40 @@ function UserManagementSection() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const handleDeleteUser = async (user: AdminUser) => {
+    if (!confirm(`Delete user "${user.name}" (${user.email})? This cannot be undone.`)) return;
+    try {
+      await deleteAdminUser(user.id);
+      toast.success(`User "${user.name}" deleted.`);
+      await loadUsers();
+    } catch (err) {
+      toast.error("Could not delete user.");
+    }
+  };
+
+  const handleToggleBan = async (user: AdminUser) => {
+    const newStatus = user.status === "Banned" ? "Active" : "Banned";
+    try {
+      await updateAdminUserStatus(user.id, newStatus);
+      toast.success(`User "${user.name}" is now ${newStatus}.`);
+      await loadUsers();
+    } catch (err) {
+      toast.error("Could not update user status.");
+    }
+  };
+
   return (
     <>
+      <UserFormModal
+        isOpen={showModal}
+        user={editingUser}
+        roles={roles}
+        onClose={() => { setShowModal(false); setEditingUser(null); }}
+        onDone={loadUsers}
+      />
       <div className="flex items-start justify-between mb-5">
         <p className="text-[14px] text-[#64748b]">{loading ? "Loading..." : "View and manage database users."}</p>
-        <button className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] text-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#005a26] shadow-sm"><UserPlus size={14} /> Create user</button>
+        <button onClick={() => setShowModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] text-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#005a26] shadow-sm"><UserPlus size={14} /> Create user</button>
       </div>
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
@@ -171,7 +219,7 @@ function UserManagementSection() {
           </div>
         </div>
         <table className="w-full">
-          <thead><tr className="bg-[#f8fafc]">{["USER", "EMAIL", "ROLE", "STATUS"].map(h => <th key={h} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>)}</tr></thead>
+          <thead><tr className="bg-[#f8fafc]">{["USER", "EMAIL", "ROLE", "STATUS", "ACTIONS"].map(h => <th key={h} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>)}</tr></thead>
           <tbody>
             {visible.map((u) => (
               <tr key={u.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
@@ -179,9 +227,18 @@ function UserManagementSection() {
                 <td className="px-6 py-3 text-[13px] text-[#64748b]">{u.email}</td>
                 <td className="px-6 py-3"><span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#dbeafe] text-[#1e40af]">{u.role}</span></td>
                 <td className="px-6 py-3"><span className="text-[13px]" style={{ color: u.status === "Active" ? "#006e2f" : "#ef4444" }}>{u.status}</span></td>
+                <td className="px-6 py-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingUser(u); setShowModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
+                    <button onClick={() => handleToggleBan(u)} className={`p-1.5 rounded ${u.status === "Banned" ? "text-[#006e2f] hover:bg-green-50" : "text-[#b45309] hover:bg-amber-50"}`}>
+                      {u.status === "Banned" ? <Lock size={15} /> : <Lock size={15} />}
+                    </button>
+                    <button onClick={() => handleDeleteUser(u)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={15} /></button>
+                  </div>
+                </td>
               </tr>
             ))}
-            {visible.length === 0 && <tr><td colSpan={4} className="px-6 py-10 text-center text-[13px] text-[#94a3b8]">No users found.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={5} className="px-6 py-10 text-center text-[13px] text-[#94a3b8]">No users found.</td></tr>}
           </tbody>
         </table>
         <div className="flex items-center justify-between px-6 py-3 border-t border-[#f1f5f9]">
@@ -193,5 +250,114 @@ function UserManagementSection() {
         </div>
       </div>
     </>
+  );
+}
+
+function UserFormModal({
+  isOpen, user, roles, onClose, onDone,
+}: {
+  isOpen: boolean;
+  user: AdminUser | null;
+  roles: AdminRole[];
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "", role: "" });
+  const [saving, setSaving] = useState(false);
+  const isEditing = Boolean(user);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setForm({
+      name: user?.name ?? "",
+      email: user?.email ?? "",
+      password: "",
+      confirmPassword: "",
+      role: user?.role ?? "",
+    });
+  }, [isOpen, user]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.email.trim() || !form.role) {
+      toast.error("Name, email, and role are required.");
+      return;
+    }
+    if (!isEditing && form.password !== form.confirmPassword) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+    if (!isEditing && !form.password) {
+      toast.error("Password is required for new users.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (isEditing && user) {
+        await updateAdminUser(user.id, { firstName: form.name, email: form.email, role: form.role });
+        toast.success(`User "${form.name}" updated.`);
+      } else {
+        await createAdminUser({ name: form.name, email: form.email, role: form.role, password: form.password });
+        toast.success(`User "${form.name}" created.`);
+      }
+      onClose();
+      await onDone();
+    } catch (err) {
+      const msg = err && typeof err === "object" && "response" in err
+        ? (err as any).response?.data?.message : undefined;
+      toast.error(msg || `${isEditing ? "Update" : "Create"} user failed.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-[18px] font-bold text-[#0b1c30]">{isEditing ? "Edit User" : "Create User"}</h2>
+          <button onClick={onClose} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b]">Name *</label>
+            <input required value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b]">Email *</label>
+            <input required type="email" value={form.email} onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b]">Role *</label>
+            <select required value={form.role} onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
+              <option value="">Select role...</option>
+              {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+              <option value="ADMIN">ADMIN</option>
+              <option value="CONSUMER">CONSUMER</option>
+              <option value="VENDOR">VENDOR</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b]">{isEditing ? "New Password (leave blank to keep)" : "Password *"}</label>
+            <input type="password" value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder={isEditing ? "Leave blank to keep current" : "Enter password"} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+          </div>
+          {!isEditing && (
+            <div>
+              <label className="text-[12px] font-medium text-[#64748b]">Confirm Password *</label>
+              <input type="password" value={form.confirmPassword} onChange={(e) => setForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Confirm password" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t border-[#e2e8f0]">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-60">
+              {saving ? "Saving..." : isEditing ? "Save" : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

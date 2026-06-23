@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TopBar } from "../../components/TopBar";
+
 import { MetricCard } from "../../components/MetricCard";
 
 const CS_TICKETS = [

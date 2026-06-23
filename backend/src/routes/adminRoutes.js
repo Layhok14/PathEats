@@ -3,6 +3,7 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import { catchAsync } from "../utils/catchAsync.js";
 import * as adminController from "../controllers/adminController.js";
+import db from "../config/db.js";
 
 const router = Router();
 
@@ -848,96 +849,6 @@ router.delete("/stalls/reviews/:id", catchAsync(adminController.deleteStallRevie
 
 /**
  * @swagger
- * /api/admin/settings:
- *   get:
- *     tags: [Admin]
- *     summary: Get admin settings
- *     security: [{ BearerAuth: [] }]
- *     responses:
- *       200:
- *         description: Settings object
- *   put:
- *     tags: [Admin]
- *     summary: Update admin settings
- *     security: [{ BearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *     responses:
- *       200:
- *         description: Settings updated
- */
-router.get("/settings", catchAsync(async (req, res) => {
-  res.json({ success: true, data: {} });
-}));
-router.put("/settings", catchAsync(async (req, res) => {
-  res.json({ success: true, data: { message: "Update settings - implement" } });
-}));
-
-/**
- * @swagger
- * /api/admin/audit:
- *   get:
- *     tags: [Admin]
- *     summary: Get audit log
- *     security: [{ BearerAuth: [] }]
- *     responses:
- *       200:
- *         description: Audit log array
- */
-router.get("/audit", catchAsync(async (req, res) => {
-  res.json({ success: true, data: [] });
-}));
-
-/**
- * @swagger
- * /api/admin/messages:
- *   get:
- *     tags: [Admin]
- *     summary: List support messages
- *     security: [{ BearerAuth: [] }]
- *     parameters:
- *       - in: query
- *         name: status
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Array of messages
- *   post:
- *     tags: [Admin]
- *     summary: Create a new message
- *     security: [{ BearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               subject: { type: string }
- *               senderName: { type: string }
- *               senderEmail: { type: string }
- *               senderType: { type: string }
- *               messageBody: { type: string }
- *               priority: { type: string }
- *     responses:
- *       201:
- *         description: Message created
- */
-router.get("/messages", catchAsync(adminController.getMessages));
-router.post("/messages", catchAsync(adminController.createMessage));
-router.get("/messages/count/open", catchAsync(adminController.getOpenMessageCount));
-router.get("/messages/:id", catchAsync(adminController.getMessageById));
-router.patch("/messages/:id/status", catchAsync(adminController.updateMessageStatus));
-router.get("/messages/:id/replies", catchAsync(adminController.getMessageReplies));
-router.post("/messages/:id/replies", catchAsync(adminController.addMessageReply));
-router.delete("/messages/:id", catchAsync(adminController.deleteMessage));
-
-/**
- * @swagger
  * /api/admin/health:
  *   get:
  *     tags: [Admin]
@@ -965,5 +876,29 @@ router.get("/health", catchAsync(async (req, res) => {
     res.status(503).json({ success: false, data: { status: "unhealthy", dbConnected: false } });
   }
 }));
+
+// ── Kill Query ──────────────────────────────────────────────────────────────
+
+router.post("/audit/kill-query", catchAsync(async (req, res) => {
+  const { pid } = req.body;
+  if (!pid || typeof pid !== "number") {
+    throw new AppError("Valid PID (number) is required", 400);
+  }
+  try {
+    await db.query(`SELECT pg_cancel_backend($1)`, [pid]);
+    res.json({ success: true, data: { message: `Cancel signal sent to PID ${pid}` } });
+  } catch (err) {
+    throw new AppError(`Failed to cancel PID ${pid}: ${err.message}`, 500);
+  }
+}));
+
+// ── Onboarding Config ──────────────────────────────────────────────────
+router.get("/onboarding", catchAsync(adminController.getOnboardingConfig));
+router.put("/onboarding", catchAsync(adminController.updateOnboardingConfig));
+
+// ── Review Moderation ──────────────────────────────────────────────────
+router.patch("/stalls/reviews/:id/flag", catchAsync(adminController.flagReview));
+router.patch("/stalls/reviews/:id/unflag", catchAsync(adminController.unflagReview));
+router.delete("/stalls/reviews/:id/remove", catchAsync(adminController.removeReview));
 
 export default router;

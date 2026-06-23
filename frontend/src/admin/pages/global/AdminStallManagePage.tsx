@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
+import { ArrowLeft } from "lucide-react";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import { Plus, Search, List, Map, Info, X } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   getAdminAllStalls,
+  getAdminStallsByOwner,
   createAdminStall,
   getStallManagementOptions,
   type AdminStallRow,
@@ -79,27 +81,22 @@ function StallMap({ stalls, loading = false }: { stalls: AdminStallRow[]; loadin
 
 export default function AdminStallManagePage() {
   const navigate = useNavigate();
+  const { vendorId } = useParams<{ vendorId: string }>();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
 
-  // Stalls state
   const [stalls, setStalls] = useState<AdminStallRow[]>([]);
   const [stallSearch, setStallSearch] = useState("");
   const [stallPage, setStallPage] = useState(1);
   const [loadingStalls, setLoadingStalls] = useState(true);
 
-  // Options
   const [options, setOptions] = useState<StallManagementOptions | null>(null);
-
-  // Create stall modal
   const [showCreateStall, setShowCreateStall] = useState(false);
-
-  // Success modal
   const [successState, setSuccessState] = useState<{ message: string } | null>(null);
 
   const loadStalls = async () => {
     try {
       setLoadingStalls(true);
-      const data = await getAdminAllStalls();
+      const data = vendorId ? await getAdminStallsByOwner(vendorId) : await getAdminAllStalls();
       setStalls(data);
     } catch (err) {
       console.error("[AdminStallManagePage] Failed to load stalls:", err);
@@ -121,7 +118,7 @@ export default function AdminStallManagePage() {
   useEffect(() => {
     loadStalls();
     loadOptions();
-  }, []);
+  }, [vendorId]);
 
   const filteredStalls = stalls.filter((s) =>
     s.name.toLowerCase().includes(stallSearch.toLowerCase()) ||
@@ -131,7 +128,6 @@ export default function AdminStallManagePage() {
   const stallTotalPages = Math.max(1, Math.ceil(filteredStalls.length / PAGE_SIZE));
   const visibleStalls = filteredStalls.slice((stallPage - 1) * PAGE_SIZE, stallPage * PAGE_SIZE);
 
-  // Create stall modal
   const [createForm, setCreateForm] = useState({ ownerId: "", categoryId: "", name: "" });
   const handleCreateStall = async () => {
     if (!createForm.name.trim() || !createForm.ownerId || !createForm.categoryId) {
@@ -150,55 +146,50 @@ export default function AdminStallManagePage() {
     }
   };
 
+  const vendorName = stalls.length > 0 ? stalls[0].ownerName || stalls[0].ownerEmail : "Vendor";
+
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="flex-1 p-6 flex flex-col gap-5">
+        {vendorId && (
+          <button onClick={() => navigate("/admin/vendors")} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30] w-fit">
+            <ArrowLeft size={14} /> Back to Vendors
+          </button>
+        )}
         <div className="flex items-center justify-between">
-          <h1 className="text-[22px] font-bold text-[#0b1c30]">All Stalls</h1>
+          <h1 className="text-[22px] font-bold text-[#0b1c30]">{vendorId ? `Stalls — ${vendorName}` : "All Stalls"}</h1>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowCreateStall(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]"
-            >
+            <button onClick={() => {
+              if (vendorId) setCreateForm((f) => ({ ...f, ownerId: vendorId }));
+              setShowCreateStall(true);
+            }} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
               <Plus size={14} /> Create Stall
             </button>
           </div>
         </div>
 
-        {/* Filters row */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" size={14} />
-            <input
-              value={stallSearch}
-              onChange={(e) => { setStallSearch(e.target.value); setStallPage(1); }}
-              placeholder="Search stalls..."
-              className="w-full pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
-            />
+            <input value={stallSearch} onChange={(e) => { setStallSearch(e.target.value); setStallPage(1); }} placeholder="Search stalls..." className="w-full pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]" />
           </div>
           <div className="flex rounded-lg border border-[#e2e8f0] bg-white p-0.5">
             {([["list", <List size={14} />], ["map", <Map size={14} />]] as const).map(([mode, icon]) => (
-              <button
-                key={mode}
-                onClick={() => setViewMode(mode)}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded text-[12px] font-medium ${viewMode === mode ? "bg-[#006e2f] text-white" : "text-[#64748b] hover:bg-[#f1f5f9]"}`}
-              >
+              <button key={mode} onClick={() => setViewMode(mode)} className={`flex items-center gap-1 px-3 py-1.5 rounded text-[12px] font-medium ${viewMode === mode ? "bg-[#006e2f] text-white" : "text-[#64748b] hover:bg-[#f1f5f9]"}`}>
                 {icon} {mode === "list" ? "List" : "Map"}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Map view */}
         {viewMode === "map" && <StallMap stalls={filteredStalls} loading={loadingStalls} />}
 
-        {/* List view */}
         {viewMode === "list" && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             {loadingStalls ? (
               <div className="p-8 text-center text-[13px] text-[#94a3b8]">
                 <div className="w-5 h-5 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                Loading stalls from database...
+                Loading stalls...
               </div>
             ) : (
               <>
@@ -231,7 +222,7 @@ export default function AdminStallManagePage() {
                           </td>
                           <td className="px-5 py-3">
                             <button
-                              onClick={() => navigate(`/admin/restaurants/stall/${stall.id}`)}
+                              onClick={() => navigate(vendorId ? `/admin/vendors/${vendorId}/stall/${stall.id}` : `/admin/vendors/${stall.ownerId}/stall/${stall.id}`)}
                               className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]"
                             >
                               <Info size={14} /> Stall Info
@@ -273,7 +264,7 @@ export default function AdminStallManagePage() {
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Owner *</label>
-                <select value={createForm.ownerId} onChange={(e) => setCreateForm({ ...createForm, ownerId: e.target.value })} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
+                <select value={createForm.ownerId} onChange={(e) => { setCreateForm({ ...createForm, ownerId: e.target.value }); if (!vendorId) setCreateForm((f) => ({ ...f, ownerId: e.target.value })); }}>
                   <option value="">Select vendor...</option>
                   {(options?.vendors || []).map((v) => (
                     <option key={v.id} value={v.id}>{v.name} ({v.email})</option>
@@ -299,11 +290,7 @@ export default function AdminStallManagePage() {
       )}
 
       {successState && (
-        <SuccessModal
-          message={successState.message}
-          onContinue={() => setSuccessState(null)}
-          onGoBack={() => setSuccessState(null)}
-        />
+        <SuccessModal message={successState.message} onContinue={() => setSuccessState(null)} onGoBack={() => setSuccessState(null)} />
       )}
     </div>
   );

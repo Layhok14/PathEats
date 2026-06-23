@@ -1,5 +1,5 @@
 import { MessageSquare, CheckCircle, Clock, TrendingUp } from "lucide-react";
-import { TopBar } from "../../components/TopBar";
+
 import { MetricCard } from "../../components/MetricCard";
 
 export default function CustomerServiceDashboard() {

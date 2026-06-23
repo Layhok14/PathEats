@@ -408,83 +408,58 @@ class AdminController {
     }
   };
 
-  // ── Messages / Ticketing ──────────────────────────────────────────
+  // ── Onboarding Config ───────────────────────────────────────────
 
-  getMessages = async (req, res, next) => {
+  getOnboardingConfig = async (req, res, next) => {
     try {
-      const { status } = req.query;
-      const messages = await this.service.getMessages(status || null);
-      res.json({ success: true, data: messages });
+      const config = await this.service.getOnboardingConfig();
+      res.json({ success: true, data: config });
     } catch (error) {
       next(error);
     }
   };
 
-  getMessageById = async (req, res, next) => {
+  updateOnboardingConfig = async (req, res, next) => {
     try {
-      const message = await this.service.getMessageById(req.params.id);
-      if (!message) return res.status(404).json({ success: false, message: "Message not found" });
-      res.json({ success: true, data: message });
+      const config = await this.service.updateOnboardingConfig(req.body);
+      res.json({ success: true, data: config });
     } catch (error) {
       next(error);
     }
   };
 
-  createMessage = async (req, res, next) => {
+  // ── Review Moderation ───────────────────────────────────────────
+
+  flagReview = async (req, res, next) => {
     try {
-      const message = await this.service.createMessage(req.body);
-      res.status(201).json({ success: true, data: message });
+      const review = await this.service.flagReview(req.params.id);
+      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      res.json({ success: true, data: review });
     } catch (error) {
       next(error);
     }
   };
 
-  updateMessageStatus = async (req, res, next) => {
+  unflagReview = async (req, res, next) => {
     try {
-      const result = await this.service.updateMessageStatus(req.params.id, req.body.status, req.user?.sub);
-      if (!result) return res.status(404).json({ success: false, message: "Message not found" });
-      res.json({ success: true, data: result });
+      const review = await this.service.unflagReview(req.params.id);
+      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      res.json({ success: true, data: review });
     } catch (error) {
       next(error);
     }
   };
 
-  getMessageReplies = async (req, res, next) => {
+  removeReview = async (req, res, next) => {
     try {
-      const replies = await this.service.getMessageReplies(req.params.id);
-      res.json({ success: true, data: replies });
+      const review = await this.service.removeReview(req.params.id);
+      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      res.json({ success: true, data: review });
     } catch (error) {
       next(error);
     }
   };
 
-  addMessageReply = async (req, res, next) => {
-    try {
-      const reply = await this.service.addMessageReply(req.params.id, { ...req.body, repliedBy: req.user?.sub || 'admin' }, req.user?.sub);
-      res.status(201).json({ success: true, data: reply });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getOpenMessageCount = async (req, res, next) => {
-    try {
-      const count = await this.service.getOpenMessageCount();
-      res.json({ success: true, data: { count } });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  deleteMessage = async (req, res, next) => {
-    try {
-      const result = await this.service.deleteMessage(req.params.id);
-      if (!result) return res.status(404).json({ success: false, message: "Message not found" });
-      res.json({ success: true, message: "Message deleted", data: result });
-    } catch (error) {
-      next(error);
-    }
-  };
 }
 
 const adminController = new AdminController(adminService);
@@ -532,6 +507,11 @@ export const getUserById = adminController.getUserById;
 export const updateUser = adminController.updateUser;
 export const deleteUser = adminController.deleteUser;
 export const getDatabaseTables = adminController.getDatabaseTables;
+export const getOnboardingConfig = adminController.getOnboardingConfig;
+export const updateOnboardingConfig = adminController.updateOnboardingConfig;
+export const flagReview = adminController.flagReview;
+export const unflagReview = adminController.unflagReview;
+export const removeReview = adminController.removeReview;
 
 export { AdminController };
 export default adminController;

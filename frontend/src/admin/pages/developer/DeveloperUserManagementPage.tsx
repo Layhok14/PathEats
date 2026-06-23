@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Ban, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
-import { TopBar } from "../../components/TopBar";
 import { MetricCard } from "../../components/MetricCard";
 import {
   getAdminUserManagementOverview,
@@ -64,7 +63,6 @@ export default function DeveloperUserManagementPage() {
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
-      <TopBar actionLabel="" searchPlaceholder="Search users…" />
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
           <h1 className="text-[26px] font-bold text-[#0b1c30]">User Management</h1>
