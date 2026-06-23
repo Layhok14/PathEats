@@ -57,7 +57,7 @@ class AdminController {
 
   createUser = async (req, res, next) => {
     try {
-      const user = await this.service.createUser(req.body);
+      const user = await this.service.createUser(req.body, req.user?.sub);
       res.status(201).json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -66,7 +66,7 @@ class AdminController {
 
   updateRole = async (req, res, next) => {
     try {
-      const user = await this.service.updateRole(req.params.id, req.body.role);
+      const user = await this.service.updateRole(req.params.id, req.body.role, req.user?.sub);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -75,7 +75,7 @@ class AdminController {
 
   updateStatus = async (req, res, next) => {
     try {
-      const user = await this.service.updateStatus(req.params.id, req.body.status);
+      const user = await this.service.updateStatus(req.params.id, req.body.status, req.user?.sub);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -215,7 +215,7 @@ class AdminController {
 
   createRole = async (req, res, next) => {
     try {
-      const role = await this.service.createRole(req.body);
+      const role = await this.service.createRole(req.body, req.user?.sub);
       res.status(201).json({
         success: true,
         message: "Role created successfully",
@@ -237,7 +237,7 @@ class AdminController {
 
   updateRoleRecord = async (req, res, next) => {
     try {
-      const role = await this.service.updateRoleRecord(req.params.id, req.body);
+      const role = await this.service.updateRoleRecord(req.params.id, req.body, req.user?.sub);
       if (!role) {
         return res.status(404).json({ success: false, message: "Role not found" });
       }
@@ -249,7 +249,7 @@ class AdminController {
 
   deleteRoleRecord = async (req, res, next) => {
     try {
-      const role = await this.service.deleteRoleRecord(req.params.id);
+      const role = await this.service.deleteRoleRecord(req.params.id, req.user?.sub);
       if (!role) {
         return res.status(404).json({ success: false, message: "Role not found" });
       }
@@ -334,11 +334,153 @@ class AdminController {
     }
   };
 
+  getReviewsByPlaceId = async (req, res, next) => {
+    try {
+      const reviews = await this.service.getReviewsByPlaceId(req.params.placeId);
+      res.json({ success: true, data: reviews });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   editMenuItem = async (req, res, next) => {
     try {
       const item = await this.service.editMenuItem(req.params.id, req.body);
       if (!item) return res.status(404).json({ success: false, message: "Menu item not found" });
       res.json({ success: true, data: item });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ── New: Audit Logs ───────────────────────────────────────────────
+
+  getAuditLogs = async (req, res, next) => {
+    try {
+      const limit = Number(req.query.limit || 50);
+      const logs = await this.service.getAuditLogs(limit);
+      res.json({ success: true, data: logs });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ── New: User CRUD ────────────────────────────────────────────────
+
+  getUserById = async (req, res, next) => {
+    try {
+      const user = await this.service.getUserById(req.params.id);
+      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      res.json({ success: true, data: user });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateUser = async (req, res, next) => {
+    try {
+      const user = await this.service.updateUser(req.params.id, req.body, req.user?.sub);
+      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      res.json({ success: true, data: user });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteUser = async (req, res, next) => {
+    try {
+      const user = await this.service.deleteUser(req.params.id, req.user?.sub);
+      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      res.json({ success: true, message: "User deleted successfully", data: user });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ── New: Database Tables ──────────────────────────────────────────
+
+  getDatabaseTables = async (req, res, next) => {
+    try {
+      const tables = await this.service.getDatabaseTables();
+      res.json({ success: true, data: tables });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ── Messages / Ticketing ──────────────────────────────────────────
+
+  getMessages = async (req, res, next) => {
+    try {
+      const { status } = req.query;
+      const messages = await this.service.getMessages(status || null);
+      res.json({ success: true, data: messages });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getMessageById = async (req, res, next) => {
+    try {
+      const message = await this.service.getMessageById(req.params.id);
+      if (!message) return res.status(404).json({ success: false, message: "Message not found" });
+      res.json({ success: true, data: message });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createMessage = async (req, res, next) => {
+    try {
+      const message = await this.service.createMessage(req.body);
+      res.status(201).json({ success: true, data: message });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateMessageStatus = async (req, res, next) => {
+    try {
+      const result = await this.service.updateMessageStatus(req.params.id, req.body.status, req.user?.sub);
+      if (!result) return res.status(404).json({ success: false, message: "Message not found" });
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getMessageReplies = async (req, res, next) => {
+    try {
+      const replies = await this.service.getMessageReplies(req.params.id);
+      res.json({ success: true, data: replies });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addMessageReply = async (req, res, next) => {
+    try {
+      const reply = await this.service.addMessageReply(req.params.id, { ...req.body, repliedBy: req.user?.sub || 'admin' }, req.user?.sub);
+      res.status(201).json({ success: true, data: reply });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getOpenMessageCount = async (req, res, next) => {
+    try {
+      const count = await this.service.getOpenMessageCount();
+      res.json({ success: true, data: { count } });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteMessage = async (req, res, next) => {
+    try {
+      const result = await this.service.deleteMessage(req.params.id);
+      if (!result) return res.status(404).json({ success: false, message: "Message not found" });
+      res.json({ success: true, message: "Message deleted", data: result });
     } catch (error) {
       next(error);
     }
@@ -383,6 +525,13 @@ export const getAuditActivity = adminController.getAuditActivity;
 export const getAllMenuItems = adminController.getAllMenuItems;
 export const editMenuItem = adminController.editMenuItem;
 export const getAllReviews = adminController.getAllReviews;
+export const getReviewsByPlaceId = adminController.getReviewsByPlaceId;
+
+export const getAuditLogs = adminController.getAuditLogs;
+export const getUserById = adminController.getUserById;
+export const updateUser = adminController.updateUser;
+export const deleteUser = adminController.deleteUser;
+export const getDatabaseTables = adminController.getDatabaseTables;
 
 export { AdminController };
 export default adminController;

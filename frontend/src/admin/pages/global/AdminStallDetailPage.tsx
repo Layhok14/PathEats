@@ -514,7 +514,7 @@ export default function AdminStallDetailPage() {
 
         {tab === "reviews" && (
           <ReviewsManager
-            endpoint="/admin/reviews"
+            endpoint={`/admin/stalls/${stallId}/reviews`}
             title={`Reviews for ${stall.name}`}
             subtitle="Customer feedback for this stall."
           />

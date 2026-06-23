@@ -34,14 +34,14 @@ export const getVendorManagementOverview = async (search = "") => {
   return adminRepository.getVendorManagementOverview(search);
 };
 
-export const createUser = async (userData) => {
+export const createUser = async (userData, adminId = null) => {
   const temporaryPassword = userData.password || "ChangeMe123!";
   const password_hash = await bcrypt.hash(temporaryPassword, 12);
 
   const [firstName = "", ...rest] = String(userData.name ?? "").trim().split(" ");
   const lastName = rest.join(" ");
 
-  return adminRepository.createUser({
+  const user = await adminRepository.createUser({
     email: userData.email,
     password_hash,
     first_name: userData.first_name ?? userData.firstName ?? firstName,
@@ -49,14 +49,31 @@ export const createUser = async (userData) => {
     phone: userData.phone,
     role_scope: userData.role_scope ?? userData.role ?? "CONSUMER",
   });
+
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_user", "users", user?.id, {
+      email: userData.email,
+      role: userData.role,
+    });
+  }
+
+  return user;
 };
 
-export const updateRole = async (id, role) => {
-  return adminRepository.updateRole(id, role);
+export const updateRole = async (id, role, adminId = null) => {
+  const result = await adminRepository.updateRole(id, role);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "update_role", "users", id, { role });
+  }
+  return result;
 };
 
-export const updateStatus = async (id, status) => {
-  return adminRepository.updateStatus(id, status);
+export const updateStatus = async (id, status, adminId = null) => {
+  const result = await adminRepository.updateStatus(id, status);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "update_status", "users", id, { status });
+  }
+  return result;
 };
 
 export const getVendors = async () => {
@@ -115,20 +132,37 @@ export const deleteStallReview = async (id) => {
   return adminRepository.deleteStallReview(id);
 };
 
-export const createRole = async (roleData) => {
-  return adminRepository.createRole(roleData);
+export const createRole = async (roleData, adminId = null) => {
+  const role = await adminRepository.createRole(roleData);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_role", "role", role?.id, {
+      name: roleData.name,
+      tablePrivileges: roleData.tablePrivileges,
+    });
+  }
+  return role;
 };
 
 export const getRoles = async () => {
   return adminRepository.findAllRoles();
 };
 
-export const updateRoleRecord = async (id, roleData) => {
-  return adminRepository.updateRoleRecord(id, roleData);
+export const updateRoleRecord = async (id, roleData, adminId = null) => {
+  const role = await adminRepository.updateRoleRecord(id, roleData);
+  if (adminId && role) {
+    await adminRepository.logAuditAction(adminId, "update_role", "role", id, {
+      name: roleData.name,
+    });
+  }
+  return role;
 };
 
-export const deleteRoleRecord = async (id) => {
-  return adminRepository.deleteRoleRecord(id);
+export const deleteRoleRecord = async (id, adminId = null) => {
+  const role = await adminRepository.deleteRoleRecord(id);
+  if (adminId && role) {
+    await adminRepository.logAuditAction(adminId, "delete_role", "role", id);
+  }
+  return role;
 };
 
 export const getAllStalls = async () => {
@@ -161,10 +195,50 @@ export const getAllReviews = async () => {
   return adminRepository.getAllReviews();
 };
 
+export const getReviewsByPlaceId = async (placeId) => {
+  return adminRepository.getReviewsByPlaceId(placeId);
+};
+
 export const getAllMenuItems = async () => {
   return adminRepository.findAllMenuItems();
 };
 
 export const editMenuItem = async (id, payload) => {
   return adminRepository.updateMenuItem(id, payload);
+};
+
+// ── New: Audit Logs ────────────────────────────────────────────────────
+
+export const getAuditLogs = async (limit) => {
+  return adminRepository.getAuditLogs(limit);
+};
+
+// ── New: User CRUD ─────────────────────────────────────────────────────
+
+export const getUserById = async (id) => {
+  return adminRepository.getUserById(id);
+};
+
+export const updateUser = async (id, userData, adminId = null) => {
+  const user = await adminRepository.updateUser(id, userData);
+  if (adminId && user) {
+    await adminRepository.logAuditAction(adminId, "update_user", "users", id, userData);
+  }
+  return user;
+};
+
+export const deleteUser = async (id, adminId = null) => {
+  const user = await adminRepository.deleteUserRecord(id);
+  if (adminId && user) {
+    await adminRepository.logAuditAction(adminId, "delete_user", "users", id, {
+      email: user.email,
+    });
+  }
+  return user;
+};
+
+// ── New: Database Tables ───────────────────────────────────────────────
+
+export const getDatabaseTables = async () => {
+  return adminRepository.getDatabaseTables();
 };

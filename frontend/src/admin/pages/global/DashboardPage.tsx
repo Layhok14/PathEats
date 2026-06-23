@@ -51,16 +51,15 @@ export default function DashboardPage() {
     if (!search) return roles;
     return roles.filter((role) =>
       role.name.toLowerCase().includes(search) ||
-      role.privileges.join(" ").toLowerCase().includes(search) ||
-      role.tables.join(" ").toLowerCase().includes(search)
+      Object.values(role.tablePrivileges).flat().join(" ").toLowerCase().includes(search)
     );
   }, [roles, query]);
 
   const totalPages = Math.max(Math.ceil(filteredRoles.length / PAGE_SIZE), 1);
   const visibleRoles = filteredRoles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const uniqueTables = new Set(roles.flatMap((role) => role.tables)).size;
+  const uniqueTables = new Set(Object.keys(roles.flatMap((role) => role.tablePrivileges))).size;
   const grantableRoles = roles.filter((role) => role.grantOption).length;
-  const totalPrivileges = roles.reduce((sum, role) => sum + role.privileges.length, 0);
+  const totalPrivileges = roles.reduce((sum, role) => sum + Object.values(role.tablePrivileges).flat().length, 0);
 
   const openCreateRole = () => {
     setEditingRole(null);

@@ -263,6 +263,63 @@ router.post("/users/:id/ban", catchAsync(async (req, res, next) => {
 
 /**
  * @swagger
+ * /api/admin/users/{id}:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Get user by ID
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: User data
+ *       404:
+ *         description: User not found
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Update user information
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               firstName: { type: string }
+ *               lastName: { type: string }
+ *               email: { type: string }
+ *               role: { type: string }
+ *     responses:
+ *       200:
+ *         description: User updated
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Delete a user
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: User deleted
+ */
+router.get("/users/:id", catchAsync(adminController.getUserById));
+router.patch("/users/:id", catchAsync(adminController.updateUser));
+router.delete("/users/:id", catchAsync(adminController.deleteUser));
+
+/**
+ * @swagger
  * /api/admin/vendors:
  *   get:
  *     tags: [Admin]
@@ -355,6 +412,36 @@ router.get("/stall-management/options", catchAsync(adminController.getStallManag
  *         description: Array of active queries
  */
 router.get("/audit/activity", catchAsync(adminController.getAuditActivity));
+
+/**
+ * @swagger
+ * /api/admin/audit/logs:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Get admin activity log
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50 }
+ *     responses:
+ *       200:
+ *         description: Array of audit log entries
+ */
+router.get("/audit/logs", catchAsync(adminController.getAuditLogs));
+
+/**
+ * @swagger
+ * /api/admin/tables:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List all database tables
+ *     security: [{ BearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Array of table names
+ */
+router.get("/tables", catchAsync(adminController.getDatabaseTables));
 
 /**
  * @swagger
@@ -698,6 +785,24 @@ router.get("/reviews", catchAsync(adminController.getAllReviews));
 /**
  * @swagger
  * /api/admin/stalls/{placeId}/reviews:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List reviews for a specific stall
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: placeId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Array of reviews for the stall
+ */
+router.get("/stalls/:placeId/reviews", catchAsync(adminController.getReviewsByPlaceId));
+
+/**
+ * @swagger
+ * /api/admin/stalls/{placeId}/reviews:
  *   post:
  *     tags: [Admin]
  *     summary: Add a review to a stall
@@ -785,6 +890,80 @@ router.put("/settings", catchAsync(async (req, res) => {
  */
 router.get("/audit", catchAsync(async (req, res) => {
   res.json({ success: true, data: [] });
+}));
+
+/**
+ * @swagger
+ * /api/admin/messages:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List support messages
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Array of messages
+ *   post:
+ *     tags: [Admin]
+ *     summary: Create a new message
+ *     security: [{ BearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               subject: { type: string }
+ *               senderName: { type: string }
+ *               senderEmail: { type: string }
+ *               senderType: { type: string }
+ *               messageBody: { type: string }
+ *               priority: { type: string }
+ *     responses:
+ *       201:
+ *         description: Message created
+ */
+router.get("/messages", catchAsync(adminController.getMessages));
+router.post("/messages", catchAsync(adminController.createMessage));
+router.get("/messages/count/open", catchAsync(adminController.getOpenMessageCount));
+router.get("/messages/:id", catchAsync(adminController.getMessageById));
+router.patch("/messages/:id/status", catchAsync(adminController.updateMessageStatus));
+router.get("/messages/:id/replies", catchAsync(adminController.getMessageReplies));
+router.post("/messages/:id/replies", catchAsync(adminController.addMessageReply));
+router.delete("/messages/:id", catchAsync(adminController.deleteMessage));
+
+/**
+ * @swagger
+ * /api/admin/health:
+ *   get:
+ *     tags: [Admin]
+ *     summary: System health check
+ *     security: [{ BearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Health status
+ */
+router.get("/health", catchAsync(async (req, res) => {
+  try {
+    const dbResult = await pool.query("SELECT NOW() AS now");
+    const latency = Date.now() - req._startTime;
+    res.json({
+      success: true,
+      data: {
+        status: "healthy",
+        dbConnected: true,
+        dbLatency: `${latency}ms`,
+        uptime: process.uptime(),
+        timestamp: dbResult.rows[0]?.now,
+      },
+    });
+  } catch (err) {
+    res.status(503).json({ success: false, data: { status: "unhealthy", dbConnected: false } });
+  }
 }));
 
 export default router;

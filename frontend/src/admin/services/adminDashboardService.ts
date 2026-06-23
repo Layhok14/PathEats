@@ -81,8 +81,7 @@ export interface AdminPlaceCategory {
 export interface AdminRole {
   id: string;
   name: string;
-  privileges: string[];
-  tables: string[];
+  tablePrivileges: Record<string, string[]>;
   grantOption: boolean;
   createdAt: string;
 }
@@ -231,8 +230,7 @@ export async function updateAdminRole(
   id: string,
   role: {
     name: string;
-    privileges: string[];
-    tables: string[];
+    tablePrivileges: Record<string, string[]>;
     grantOption: boolean;
   }
 ): Promise<AdminRole> {
@@ -323,5 +321,111 @@ export async function updateAdminMenuItem(id: string, payload: Partial<AdminMenu
 
 export async function getAdminAuditActivity(): Promise<AuditActivityRow[]> {
   const response = await api.get<{ success: boolean; data: AuditActivityRow[] }>("/admin/audit/activity");
+  return response.data.data;
+}
+
+// ── Audit Logs ──────────────────────────────────────────────────────────
+
+export interface AuditLogEntry {
+  id: string;
+  adminId: string | null;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export async function getAdminAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
+  const response = await api.get<{ success: boolean; data: AuditLogEntry[] }>("/admin/audit/logs", {
+    params: { limit },
+  });
+  return response.data.data;
+}
+
+// ── User CRUD ───────────────────────────────────────────────────────────
+
+export interface AdminUserDetail {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  role: string;
+  isBanned: boolean;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAdminUserById(id: string): Promise<AdminUserDetail> {
+  const response = await api.get<{ success: boolean; data: AdminUserDetail }>(`/admin/users/${id}`);
+  return response.data.data;
+}
+
+export async function updateAdminUser(
+  id: string,
+  data: { firstName?: string; lastName?: string; email?: string; role?: string }
+): Promise<AdminUserDetail> {
+  const response = await api.patch<{ success: boolean; data: AdminUserDetail }>(`/admin/users/${id}`, data);
+  return response.data.data;
+}
+
+export async function deleteAdminUser(id: string): Promise<void> {
+  await api.delete(`/admin/users/${id}`);
+}
+
+// ── Messages / Support ──────────────────────────────────────────────────
+
+export interface SupportMessage {
+  id: string;
+  subject: string;
+  senderName: string;
+  senderEmail: string;
+  messageBody: string;
+  status: string;
+  priority?: string;
+  ticketId?: string;
+  createdAt?: string;
+}
+
+export interface MessageReply {
+  id: string;
+  messageId: string;
+  replyBody: string;
+  repliedBy: string;
+  createdAt: string;
+}
+
+export async function getAdminMessages(status?: string): Promise<SupportMessage[]> {
+  const response = await api.get<{ success: boolean; data: SupportMessage[] }>("/admin/messages", {
+    params: status ? { status } : undefined,
+  });
+  return response.data.data;
+}
+
+export async function getAdminMessageById(id: string): Promise<SupportMessage> {
+  const response = await api.get<{ success: boolean; data: SupportMessage }>(`/admin/messages/${id}`);
+  return response.data.data;
+}
+
+export async function getAdminMessageReplies(id: string): Promise<MessageReply[]> {
+  const response = await api.get<{ success: boolean; data: MessageReply[] }>(`/admin/messages/${id}/replies`);
+  return response.data.data;
+}
+
+export async function addAdminMessageReply(id: string, replyBody: string): Promise<MessageReply> {
+  const response = await api.post<{ success: boolean; data: MessageReply }>(`/admin/messages/${id}/replies`, { replyBody });
+  return response.data.data;
+}
+
+export async function updateAdminMessageStatus(id: string, status: string): Promise<void> {
+  await api.patch(`/admin/messages/${id}/status`, { status });
+}
+
+// ── Database Tables ─────────────────────────────────────────────────────
+
+export async function getAdminDatabaseTables(): Promise<string[]> {
+  const response = await api.get<{ success: boolean; data: string[] }>("/admin/tables");
   return response.data.data;
 }

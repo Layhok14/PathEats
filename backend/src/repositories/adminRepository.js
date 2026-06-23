@@ -69,6 +69,49 @@ const getColumns = async (tableName) => {
   return rows.map((row) => row.column_name);
 };
 
+const getPublicTableNames = async () => {
+  const rows = await optionalRows(
+    `
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+    ORDER BY table_name ASC
+    `,
+    [],
+    []
+  );
+  return rows.map((row) => row.table_name);
+};
+
+const logAudit = async (adminId, action, targetType, targetId, details = null) => {
+  try {
+    await pool.query(
+      `
+      INSERT INTO audit_log (admin_id, action, target_type, target_id, details)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [adminId, action, targetType, targetId, details ? JSON.stringify(details) : null]
+    );
+  } catch (err) {
+    console.warn(`[audit_log] Failed to log: ${err.message}`);
+  }
+};
+
+export const logAuditAction = async (adminId, action, targetType, targetId, details = null) => {
+  try {
+    await pool.query(
+      `
+      INSERT INTO audit_log (admin_id, action, target_type, target_id, details)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [adminId, action, targetType, targetId, details ? JSON.stringify(details) : null]
+    );
+  } catch (err) {
+    console.warn(`[audit_log] Failed to log: ${err.message}`);
+  }
+};
+
 const toStatus = (isBanned) => (isBanned ? "Suspended" : "Active");
 const toBanned = (status) => String(status).toLowerCase() === "suspended";
 
@@ -686,14 +729,55 @@ export const getAllReviews = async () => {
   return rows;
 };
 
+export const getReviewsByPlaceId = async (placeId) => {
+  const { rows } = await pool.query(
+    `SELECT r.id, r.rating AS stars, r.body, r.created_at,
+            u.first_name || ' ' || u.last_name AS user_name,
+            p.name AS place_name, p.id AS place_id
+     FROM reviews r
+     JOIN places p ON p.id = r.place_id
+     JOIN users u ON u.id = r.user_id
+     WHERE r.place_id::text = $1
+     ORDER BY r.created_at DESC`,
+    [placeId]
+  );
+  return rows;
+};
+
 export const ensureRoleTable = async () => {
   const tableName = await getRoleTableName();
+  // Check if table exists first
+  if (await tableExists(tableName)) {
+    // Check if table_privileges column exists, if not add it
+    const columns = await getColumns(tableName);
+    if (!columns.includes("table_privileges")) {
+      await pool.query(`
+        ALTER TABLE "${tableName}"
+        ADD COLUMN table_privileges JSONB DEFAULT '{}'::jsonb
+      `);
+      // Migrate old data: convert privileges[] + tables[] to table_privileges JSONB
+      await pool.query(`
+        UPDATE "${tableName}"
+        SET table_privileges = (
+          SELECT COALESCE(
+            jsonb_object_agg(
+              t,
+              (SELECT array_to_json(privileges)::jsonb)
+            ),
+            '{}'::jsonb
+          )
+          FROM unnest(tables) AS t
+        )
+        WHERE tables IS NOT NULL AND array_length(tables, 1) > 0
+      `);
+    }
+    return;
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "${tableName}" (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT UNIQUE NOT NULL,
-      privileges TEXT[] NOT NULL DEFAULT '{}',
-      tables TEXT[] NOT NULL DEFAULT '{}',
+      table_privileges JSONB DEFAULT '{}'::jsonb,
       grant_option BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -709,8 +793,7 @@ export const findAllRoles = async () => {
     SELECT
       id::text,
       name,
-      privileges,
-      tables,
+      table_privileges,
       grant_option,
       created_at
     FROM "${tableName}"
@@ -721,33 +804,31 @@ export const findAllRoles = async () => {
   return rows.map((role) => ({
     id: role.id,
     name: role.name,
-    privileges: role.privileges ?? [],
-    tables: role.tables ?? [],
+    tablePrivileges: role.table_privileges ?? {},
     grantOption: Boolean(role.grant_option),
     createdAt: role.created_at,
   }));
 };
 
-export const createRole = async ({ name, privileges, tables, grantOption }) => {
+export const createRole = async ({ name, tablePrivileges, grantOption }) => {
   const tableName = await getRoleTableName();
   await ensureRoleTable();
   const result = await pool.query(
     `
-    INSERT INTO "${tableName}" (name, privileges, tables, grant_option)
-    VALUES ($1,$2,$3,$4)
+    INSERT INTO "${tableName}" (name, table_privileges, grant_option)
+    VALUES ($1,$2,$3)
     ON CONFLICT (name)
-    DO UPDATE SET privileges = EXCLUDED.privileges,
-                  tables = EXCLUDED.tables,
+    DO UPDATE SET table_privileges = EXCLUDED.table_privileges,
                   grant_option = EXCLUDED.grant_option
     RETURNING *
     `,
-    [name, privileges, tables, grantOption]
+    [name, JSON.stringify(tablePrivileges ?? {}), grantOption ?? false]
   );
 
   return result.rows[0];
 };
 
-export const updateRoleRecord = async (id, { name, privileges, tables, grantOption }) => {
+export const updateRoleRecord = async (id, { name, tablePrivileges, grantOption }) => {
   const tableName = await getRoleTableName();
   await ensureRoleTable();
 
@@ -755,17 +836,15 @@ export const updateRoleRecord = async (id, { name, privileges, tables, grantOpti
     `
     UPDATE "${tableName}"
     SET name = COALESCE($2, name),
-        privileges = COALESCE($3, privileges),
-        tables = COALESCE($4, tables),
-        grant_option = COALESCE($5, grant_option)
+        table_privileges = COALESCE($3::jsonb, table_privileges),
+        grant_option = COALESCE($4, grant_option)
     WHERE id = $1
-    RETURNING id::text, name, privileges, tables, grant_option, created_at
+    RETURNING id::text, name, table_privileges, grant_option, created_at
     `,
     [
       id,
       name ?? null,
-      Array.isArray(privileges) ? privileges : null,
-      Array.isArray(tables) ? tables : null,
+      tablePrivileges ? JSON.stringify(tablePrivileges) : null,
       typeof grantOption === "boolean" ? grantOption : null,
     ]
   );
@@ -776,8 +855,7 @@ export const updateRoleRecord = async (id, { name, privileges, tables, grantOpti
   return {
     id: role.id,
     name: role.name,
-    privileges: role.privileges ?? [],
-    tables: role.tables ?? [],
+    tablePrivileges: role.table_privileges ?? {},
     grantOption: Boolean(role.grant_option),
     createdAt: role.created_at,
   };
@@ -1110,4 +1188,141 @@ export const getAuditActivity = async () => {
     []
   );
   return rows;
+};
+
+// ── Audit Log Table ────────────────────────────────────────────────────
+
+export const ensureAuditLogTable = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      admin_id TEXT,
+      action TEXT NOT NULL,
+      target_type TEXT,
+      target_id TEXT,
+      details JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+};
+
+export const getAuditLogs = async (limit = 50) => {
+  await ensureAuditLogTable();
+  const rows = await optionalRows(
+    `
+    SELECT
+      id::text,
+      admin_id,
+      action,
+      target_type,
+      target_id,
+      details,
+      created_at
+    FROM audit_log
+    ORDER BY created_at DESC
+    LIMIT $1
+    `,
+    [limit],
+    []
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    adminId: row.admin_id,
+    action: row.action,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    details: row.details,
+    createdAt: row.created_at,
+  }));
+};
+
+// ── User CRUD ──────────────────────────────────────────────────────────
+
+export const getUserById = async (id) => {
+  const result = await pool.query(
+    `
+    SELECT
+      id::text,
+      email,
+      first_name,
+      last_name,
+      phone_number,
+      role_scope,
+      is_banned,
+      created_at,
+      updated_at
+    FROM users
+    WHERE id::text = $1
+    `,
+    [id]
+  );
+  const user = result.rows[0];
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    phone: user.phone_number,
+    role: user.role_scope,
+    isBanned: user.is_banned,
+    status: user.is_banned ? "Suspended" : "Active",
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+  };
+};
+
+export const updateUser = async (id, { firstName, lastName, email, role }) => {
+  const sets = [];
+  const params = [];
+  let idx = 1;
+
+  if (firstName !== undefined) {
+    sets.push(`first_name = $${idx++}`);
+    params.push(firstName);
+  }
+  if (lastName !== undefined) {
+    sets.push(`last_name = $${idx++}`);
+    params.push(lastName);
+  }
+  if (email !== undefined) {
+    sets.push(`email = $${idx++}`);
+    params.push(email);
+  }
+  if (role !== undefined) {
+    sets.push(`role_scope = $${idx++}`);
+    params.push(role);
+  }
+
+  if (sets.length === 0) return null;
+
+  params.push(id);
+  const result = await pool.query(
+    `UPDATE users SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text, email, first_name, last_name, role_scope, is_banned`,
+    params
+  );
+  const user = result.rows[0];
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    role: user.role_scope,
+    status: user.is_banned ? "Suspended" : "Active",
+  };
+};
+
+export const deleteUserRecord = async (id) => {
+  const result = await pool.query(
+    `DELETE FROM users WHERE id::text = $1 RETURNING id::text, email`,
+    [id]
+  );
+  return result.rows[0] ?? null;
+};
+
+// ── Database Tables ────────────────────────────────────────────────────
+
+export const getDatabaseTables = async () => {
+  return getPublicTableNames();
 };

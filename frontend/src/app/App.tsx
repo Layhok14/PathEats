@@ -5,6 +5,7 @@ import { ThemeProvider } from "../shared/hooks/useTheme";
 import { UserRoutes } from "../user/routes/userRoutes";
 import { VendorRoutes } from "../vendor/routes/vendorRoutes";
 import adminRoutes from "../admin/routes/adminRoutes";
+import contentRoutes from "../admin/routes/contentRoutes";
 import customerServiceRoutes from "../admin/routes/customerServiceRoutes";
 import developerRoutes from "../admin/routes/developerRoutes";
 import { AdminLoginPage } from "../admin/pages/AdminLoginPage";
