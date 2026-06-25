@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus, Search, List, Map, Info, X } from "lucide-react";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
-import { Plus, Search, List, Map, Info, X } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
@@ -28,7 +27,7 @@ function StallMap({ stalls, loading = false }: { stalls: AdminStallRow[]; loadin
   useEffect(() => {
     if (mapRef.current || !containerRef.current || stalls.length === 0) return;
 
-    const withLoc = stalls.filter((s) => s.location?.coordinates);
+    const withLoc = stalls.filter((s) => s.location?.coordinates?.length >= 2);
     if (withLoc.length === 0) return;
 
     const lngs = withLoc.map((s) => s.location!.coordinates[0]);
@@ -146,7 +145,7 @@ export default function AdminStallManagePage() {
     }
   };
 
-  const vendorName = stalls.length > 0 ? stalls[0].ownerName || stalls[0].ownerEmail : "Vendor";
+  const vendorName = stalls.length > 0 ? (stalls[0].ownerName || stalls[0].ownerEmail || "Vendor") : "Vendor";
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
@@ -264,7 +263,7 @@ export default function AdminStallManagePage() {
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Owner *</label>
-                <select value={createForm.ownerId} onChange={(e) => { setCreateForm({ ...createForm, ownerId: e.target.value }); if (!vendorId) setCreateForm((f) => ({ ...f, ownerId: e.target.value })); }}>
+                <select value={createForm.ownerId} onChange={(e) => setCreateForm((f) => ({ ...f, ownerId: e.target.value }))}>
                   <option value="">Select vendor...</option>
                   {(options?.vendors || []).map((v) => (
                     <option key={v.id} value={v.id}>{v.name} ({v.email})</option>

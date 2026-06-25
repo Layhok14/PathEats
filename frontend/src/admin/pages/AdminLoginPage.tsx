@@ -5,7 +5,7 @@ import { useAuth } from "../../shared/hooks/useAuth";
 const ROLE_REDIRECTS: Record<string, string> = {
   GLOBAL_ADMIN: "/admin",
   DEVELOPER_ADMIN: "/developer",
-  CUSTOMER_SERVICE_ADMIN: "/customer-service",
+  BUSINESS_ASSISTANCE: "/admin",
 };
 
 export function AdminLoginPage() {

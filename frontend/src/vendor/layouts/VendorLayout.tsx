@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router";
-import { LayoutDashboard, Store, UtensilsCrossed, HelpCircle, Settings, Star, UserPlus } from "lucide-react";
+import { LayoutDashboard, Store, UtensilsCrossed, Settings, Star, UserPlus } from "lucide-react";
 import { useAuth } from "../../shared/hooks/useAuth";
 
 const NAV = [
@@ -8,7 +8,6 @@ const NAV = [
   { to: "/vendor/menu", label: "Menu Items", icon: <UtensilsCrossed size={16} /> },
   { to: "/vendor/reviews", label: "Reviews", icon: <Star size={16} /> },
   { to: "/vendor/onboarding", label: "Onboarding", icon: <UserPlus size={16} /> },
-  { to: "/vendor/support", label: "Support", icon: <HelpCircle size={16} /> },
   { to: "/vendor/settings", label: "Settings", icon: <Settings size={16} /> },
 ];
 

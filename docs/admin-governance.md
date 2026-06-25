@@ -8,9 +8,10 @@ The system intentionally separates business administration from technical mainte
 
 ## Administrative Roles
 
-The system contains only two administrative roles:
+The system contains three administrative roles:
 
 - `GLOBAL_ADMIN`
+- `BUSINESS_ASSISTANCE`
 - `DEVELOPER_ADMIN`
 
 These roles are predefined and implemented in software. No dynamic role creation is supported. Adding a new role requires source code modifications, permission updates, and corresponding interface implementation.
@@ -87,6 +88,25 @@ They may not:
 - edit user profile information,
 - bypass application workflows,
 - directly manipulate production data through database tools.
+
+---
+
+## Business Assistance Responsibilities
+
+Business assistants perform vendor-facing operational tasks.
+
+They may:
+
+- configure vendor onboarding (Telegram link, message),
+- create, update, and delete stalls for any vendor,
+- flag, unflag, and remove reviews,
+- view vendor and stall information.
+
+They may not:
+
+- manage users or roles,
+- access developer or system-level tools,
+- modify system settings outside onboarding configuration.
 
 ---
 

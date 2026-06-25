@@ -65,7 +65,7 @@ export default function VendorListPage() {
   const handleUpdate = async () => {
     if (!editVendor) return;
     try {
-      await updateAdminUser(editVendor.id, { firstName: editVendor.name });
+      await updateAdminUser(editVendor.id, { firstName: editVendor.name, lastName: "" });
       setEditVendor(null);
       await loadVendors();
       setSuccessState({ message: "Vendor updated." });
