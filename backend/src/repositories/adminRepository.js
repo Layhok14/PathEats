@@ -198,28 +198,35 @@ export const findAllUsers = async (page, limit) => {
 };
 
 export const createUser = async (userData) => {
+  const columns = await getColumns("users");
+  const available = new Set(columns);
+  const phoneColumn = available.has("phone_number") ? "phone_number" : available.has("phone") ? "phone" : null;
+  const columnNames = [
+    "email",
+    "password_hash",
+    "first_name",
+    "last_name",
+    ...(phoneColumn ? [phoneColumn] : []),
+    "role_scope",
+    "is_banned",
+  ];
+  const values = [
+    userData.email,
+    userData.password_hash,
+    userData.first_name,
+    userData.last_name,
+    ...(phoneColumn ? [userData.phone ?? null] : []),
+    userData.role_scope ?? "CONSUMER",
+    false,
+  ];
+  const placeholders = values.map((_, index) => `$${index + 1}`);
   const result = await pool.query(
     `
-    INSERT INTO users (
-      email,
-      password_hash,
-      first_name,
-      last_name,
-      phone,
-      role_scope,
-      is_banned
-    )
-    VALUES ($1,$2,$3,$4,$5,$6,false)
+    INSERT INTO users (${columnNames.map(quoteIdent).join(", ")})
+    VALUES (${placeholders.join(", ")})
     RETURNING id::text, email, first_name, last_name, role_scope, is_banned, created_at
     `,
-    [
-      userData.email,
-      userData.password_hash,
-      userData.first_name,
-      userData.last_name,
-      userData.phone ?? null,
-      userData.role_scope ?? "CONSUMER",
-    ]
+    values
   );
 
   const user = result.rows[0];

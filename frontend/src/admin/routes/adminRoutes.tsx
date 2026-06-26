@@ -22,6 +22,8 @@ const adminRoutes: RouteObject = {
     { index: true, element: <AdminManagementPage /> },
     { path: "users", element: <ConsumerManagementPage /> },
     { path: "business", element: <BusinessDashboardPage /> },
+    { path: "stalls", element: <AdminStallManagePage /> },
+    { path: "stalls/stall/:stallId", element: <AdminStallDetailPage /> },
     { path: "vendors", element: <VendorListPage /> },
     { path: "vendors/onboarding", element: <VendorOnboardingPage /> },
     { path: "vendors/moderation", element: <ReviewModerationPage /> },

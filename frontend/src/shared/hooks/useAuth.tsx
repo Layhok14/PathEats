@@ -29,7 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const stored = localStorage.getItem(SESSION_KEY);
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.id === "dev-vendor-id") {
+          localStorage.removeItem(SESSION_KEY);
+          return null;
+        }
+        return parsed;
+      }
     } catch (err) { console.error("[useAuth] Failed to parse stored user:", err); }
     return null;
   });

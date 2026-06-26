@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import * as adminRepository from "../repositories/adminRepository.js";
+import AppError from "../utils/AppError.js";
 
 export const checkDatabaseConnection = async () => {
   return adminRepository.checkDatabaseConnection();
@@ -250,6 +251,21 @@ export const getOnboardingConfig = async () => {
 };
 
 export const updateOnboardingConfig = async (data) => {
+  const telegramLink = data?.telegramLink;
+
+  if (telegramLink) {
+    let parsed;
+    try {
+      parsed = new URL(telegramLink);
+    } catch {
+      throw new AppError("Telegram link must be a valid https://t.me/ URL", 400);
+    }
+
+    if (parsed.protocol !== "https:" || parsed.hostname !== "t.me" || parsed.pathname === "/") {
+      throw new AppError("Telegram link must be a valid https://t.me/ URL", 400);
+    }
+  }
+
   return adminRepository.updateOnboardingConfig(data);
 };
 

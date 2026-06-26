@@ -9,8 +9,9 @@ const router = Router();
 
 const devAdminBypass = (req, res, next) => {
   const isDevelopment = process.env.NODE_ENV !== "production";
+  const isBypassEnabled = process.env.PATHEAT_ADMIN_BYPASS === "true";
 
-  if (isDevelopment) {
+  if (isDevelopment && isBypassEnabled) {
     req.user = {
       sub: "dev-admin",
       email: "dev-admin@patheat.local",

@@ -1,27 +1,37 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Store, UserPlus, ShieldAlert, Loader, TrendingUp, ArrowRight } from "lucide-react";
+import { Store, UserPlus, ShieldAlert, Loader, TrendingUp, ArrowRight, MapPinned, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { getAdminAllReviews, getAdminUsers, type AdminReview, type AdminUser } from "../../services/adminDashboardService";
+import {
+  getAdminAllReviews,
+  getAdminAllStalls,
+  getAdminUsers,
+  type AdminReview,
+  type AdminStallRow,
+  type AdminUser,
+} from "../../services/adminDashboardService";
 
 export default function BusinessDashboardPage() {
   const navigate = useNavigate();
   const [vendors, setVendors] = useState<AdminUser[]>([]);
+  const [stalls, setStalls] = useState<AdminStallRow[]>([]);
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       getAdminUsers().catch(() => [] as AdminUser[]),
+      getAdminAllStalls().catch(() => [] as AdminStallRow[]),
       getAdminAllReviews().catch(() => [] as AdminReview[]),
-    ]).then(([v, r]) => {
+    ]).then(([v, s, r]) => {
       setVendors(v.filter((u) => u.role === "VENDOR"));
+      setStalls(s);
       setReviews(r);
     }).catch(() => toast.error("Could not load business data"))
     .finally(() => setLoading(false));
   }, []);
 
-  const stallsCount = vendors.length;
+  const unassignedStalls = stalls.filter((stall) => !stall.ownerId).length;
   const flaggedCount = reviews.filter((r) => r.flagged_at && !r.deleted_at).length;
   const removedCount = reviews.filter((r) => r.deleted_at).length;
 
@@ -35,10 +45,26 @@ export default function BusinessDashboardPage() {
       link: "/admin/vendors",
     },
     {
-      label: "Vendors Onboarded",
-      value: "—",
-      sub: "Telegram-connected accounts",
+      label: "Total Stalls",
+      value: stalls.length,
+      sub: "Stall records in database",
       color: "#005ac2",
+      icon: MapPinned,
+      link: "/admin/stalls",
+    },
+    {
+      label: "Unassigned Stalls",
+      value: unassignedStalls,
+      sub: "No vendor owner connected",
+      color: "#f59e0b",
+      icon: AlertCircle,
+      link: "/admin/stalls",
+    },
+    {
+      label: "Vendors Onboarded",
+      value: "N/A",
+      sub: "Telegram-connected accounts",
+      color: "#7c3aed",
       icon: UserPlus,
       link: "/admin/vendors/onboarding",
     },
@@ -73,10 +99,10 @@ export default function BusinessDashboardPage() {
       <div className="flex-1 p-8 flex flex-col gap-6">
         <div>
           <h1 className="text-[28px] font-bold text-[#0b1c30]">Business Assistance Dashboard</h1>
-          <p className="text-[14px] text-[#64748b] mt-1">Overview of vendor activity, onboarding, and review moderation.</p>
+          <p className="text-[14px] text-[#64748b] mt-1">Overview of vendor accounts, stalls, onboarding, and review moderation.</p>
         </div>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
           {cards.map((c) => {
             const Icon = c.icon;
             return (
@@ -100,9 +126,10 @@ export default function BusinessDashboardPage() {
           <div className="px-6 py-4 border-b border-[#f1f5f9] flex items-center justify-between">
             <h2 className="text-[16px] font-semibold text-[#0b1c30]">Quick Actions</h2>
           </div>
-          <div className="p-6 grid grid-cols-3 gap-4">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {[
               { label: "Manage Vendors", desc: "View, create, and edit vendor accounts", path: "/admin/vendors", icon: Store },
+              { label: "View All Stalls", desc: "See assigned and unassigned stalls", path: "/admin/stalls", icon: MapPinned },
               { label: "Onboarding Settings", desc: "Configure Telegram link and onboarding message", path: "/admin/vendors/onboarding", icon: UserPlus },
               { label: "Review Moderation", desc: "Flag or remove inappropriate reviews", path: "/admin/vendors/moderation", icon: ShieldAlert },
             ].map((action) => {

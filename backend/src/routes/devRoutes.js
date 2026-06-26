@@ -110,6 +110,8 @@ const ensureDatabaseActivityLogTable = async () => {
 
 const ALLOWED_PREFIXES = ["SELECT", "WITH", "EXPLAIN", "VACUUM", "ANALYZE"];
 const FORBIDDEN_KEYWORDS = ["DROP", "ALTER", "TRUNCATE", "REINDEX", "GRANT", "REVOKE", "CREATE DATABASE", "CREATE USER"];
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const nullableUuid = (value) => uuidPattern.test(String(value ?? "")) ? value : null;
 
 const validateSql = (sql) => {
   const trimmed = sql.trim().toUpperCase();
@@ -149,7 +151,7 @@ router.get("/health", catchAsync(async (req, res) => {
 router.get("/database", catchAsync(async (req, res) => {
   const tablesResult = await db.query(`
     SELECT relname AS name, n_live_tup AS row_count,
-      pg_size_pretty(pg_total_relation_size(quote_ident(relname))) AS size,
+      pg_size_pretty(pg_total_relation_size(relid)) AS size,
       CASE WHEN n_dead_tup > n_live_tup * 0.2 THEN 'Vacuum Required'
            WHEN n_dead_tup > n_live_tup * 0.05 THEN 'Fragmented'
            ELSE 'Optimized' END AS status,
@@ -157,7 +159,7 @@ router.get("/database", catchAsync(async (req, res) => {
     FROM pg_stat_user_tables ORDER BY n_live_tup DESC
   `);
   const storageResult = await db.query(`
-    SELECT pg_size_pretty(SUM(pg_total_relation_size(quote_ident(relname)))) AS used
+    SELECT pg_size_pretty(SUM(pg_total_relation_size(relid))) AS used
     FROM pg_stat_user_tables
   `);
   const instanceResult = await db.query(`
@@ -273,7 +275,7 @@ router.post("/queries/presets", catchAsync(async (req, res) => {
   if (category && !["viewing", "altering", "deleting", "updating", "creating"].includes(category)) throw new AppError("Invalid category", 400);
   const result = await db.query(
     `INSERT INTO query_presets (title, query_string, category, is_system_preset, created_by) VALUES ($1, $2, $3, FALSE, $4) RETURNING id, title, query_string, category, is_system_preset, created_at`,
-    [title, query_string, category || "viewing", req.user?.sub || null]
+    [title, query_string, category || "viewing", nullableUuid(req.user?.sub)]
   );
   res.status(201).json({ success: true, data: result.rows[0] });
 }));
@@ -367,7 +369,7 @@ router.get("/query/history", catchAsync(async (req, res) => {
 router.get("/maintenance", catchAsync(async (req, res) => {
   const tablesResult = await db.query(`
     SELECT relname AS name, n_live_tup AS live_tuples, n_dead_tup AS dead_tuples,
-      pg_size_pretty(pg_total_relation_size(quote_ident(relname))) AS size,
+      pg_size_pretty(pg_total_relation_size(relid)) AS size,
       last_vacuum, last_autovacuum, last_analyze, last_autoanalyze,
       CASE WHEN n_dead_tup > n_live_tup * 0.2 THEN 'critical'
            WHEN n_dead_tup > n_live_tup * 0.05 THEN 'warning'

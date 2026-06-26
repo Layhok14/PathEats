@@ -1,0 +1,12 @@
+[2m1:23:22 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/stalls[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m1:23:22 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/users[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m1:23:22 PM[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/reviews[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)

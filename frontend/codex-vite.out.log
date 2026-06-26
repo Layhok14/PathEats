@@ -1,0 +1,16 @@
+
+> patheat-frontend@1.0.0 dev
+> vite --host 127.0.0.1
+
+
+  [32m[1mVITE[22m v6.3.5[39m  [2mready in [0m[1m654[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m1:17:43 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/App.tsx, /src/styles/index.css[22m
+[2m1:17:44 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/admin/layouts/AdminMainLayout.tsx, /src/styles/index.css[22m
+[2m1:18:34 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/admin/pages/global/BusinessDashboardPage.tsx, /src/styles/index.css[22m
+[2m1:20:08 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/admin/pages/global/BusinessDashboardPage.tsx, /src/styles/index.css[22m
+[2m1:20:09 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/admin/pages/global/BusinessDashboardPage.tsx, /src/styles/index.css[22m
+[2m1:20:58 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/app/App.tsx, /src/styles/index.css[22m
+[2m1:21:00 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/admin/pages/global/AdminStallManagePage.tsx, /src/styles/index.css[22m
+[2m1:21:01 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/admin/pages/global/AdminStallDetailPage.tsx, /src/styles/index.css[22m

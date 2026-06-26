@@ -221,7 +221,7 @@ export default function AdminStallManagePage() {
                           </td>
                           <td className="px-5 py-3">
                             <button
-                              onClick={() => navigate(vendorId ? `/admin/vendors/${vendorId}/stall/${stall.id}` : `/admin/vendors/${stall.ownerId}/stall/${stall.id}`)}
+                              onClick={() => navigate(vendorId ? `/admin/vendors/${vendorId}/stall/${stall.id}` : `/admin/stalls/stall/${stall.id}`)}
                               className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]"
                             >
                               <Info size={14} /> Stall Info
