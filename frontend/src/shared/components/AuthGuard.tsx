@@ -6,7 +6,7 @@ interface Props {
   requiredRole?: string;
 }
 
-const ADMIN_ROLES = ["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "CUSTOMER_SERVICE_ADMIN"];
+const ADMIN_ROLES = ["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE"];
 
 export function AuthGuard({ children, requiredRole }: Props) {
   const { user } = useAuth();

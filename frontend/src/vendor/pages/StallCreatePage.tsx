@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, Check, MapPin } from "lucide-react";
 import { PhotoUpload } from "../components/PhotoUpload";
@@ -99,13 +99,18 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
   const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
   const initialCoords = { lat: form.location.latitude, lng: form.location.longitude };
   const [coords, setCoords] = useState(initialCoords);
+  const syncRef = useRef(onChange);
+  syncRef.current = onChange;
+  const formRef = useRef(form);
+  formRef.current = form;
 
-  const syncCoords = useCallback((lat: number, lng: number) => {
-    onChange({
-      ...form,
-      location: { ...form.location, latitude: lat, longitude: lng },
+  const syncCoords = (lat: number, lng: number) => {
+    const currentForm = formRef.current;
+    syncRef.current({
+      ...currentForm,
+      location: { ...currentForm.location, latitude: lat, longitude: lng },
     });
-  }, [form, onChange]);
+  };
 
   useEffect(() => {
     const saved = sessionStorage.getItem("stall_create_location");
@@ -253,11 +258,6 @@ export function StallCreatePage() {
   const btnPrimary: React.CSSProperties = { padding: "11px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer" };
   const btnOutline: React.CSSProperties = { padding: "11px 24px", borderRadius: "6px", border: "1px solid var(--brand-card-border)", background: "var(--card)", color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "14px", cursor: "pointer" };
 
-  const handleNextFromLocation = () => {
-    setForm((f) => ({ ...f }));
-    setStep(3);
-  };
-
   return (
     <div className="p-6 flex flex-col gap-5 max-w-3xl">
       <button onClick={() => navigate("/vendor/stalls")} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: "pointer", color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px" }}>
@@ -337,10 +337,7 @@ export function StallCreatePage() {
               opacity: step === 0 && !form.name.trim() ? 0.5 : 1,
               cursor: step === 0 && !form.name.trim() ? "not-allowed" : "pointer",
             }}
-            onClick={() => {
-              if (step === 2) { handleNextFromLocation(); return; }
-              setStep(step + 1);
-            }}
+            onClick={() => setStep(step + 1)}
             disabled={step === 0 && !form.name.trim()}
           >
             {step === 0 ? "Next: Menu Items" : step === 1 ? "Next: Set Location" : "Review & Confirm"}

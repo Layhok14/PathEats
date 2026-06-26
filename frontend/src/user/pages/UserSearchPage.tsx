@@ -3,16 +3,18 @@
 
 // MapLibre GL styles
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { PenLine, Eye, BookmarkPlus, HelpCircle, LogOut, X, Loader2 } from "lucide-react";
 
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
+import { useGeolocation } from "../../shared/hooks/useGeolocation";
 import { PLACES, VENDOR_RANGE_DEFAULT } from "../../shared/constants/appConfig";
 import { getRoute } from "../../shared/services/routeService";
 import { useVendors } from "../hooks/useVendors";
 import { useMaplibreMap } from "../hooks/useMaplibreMap";
+import { haversineM } from "../../shared/utils/geoUtils";
 
 import { NavRail } from "../components/NavRail";
 import { RouteInputPanel } from "../components/RouteInputPanel";
@@ -60,9 +62,30 @@ export default function UserSearchPage() {
   const [favorites, setFavorites] = useState(new Set());
   const [savedRoutes, setSavedRoutes] = useState([]);
   const [searchHistory, setSearchHistory] = useState([]);
+  const [geoFilled, setGeoFilled] = useState(false);
 
   const [debugShowAll, setDebugShowAll] = useState(false);
 
+  const { latitude, longitude, loading: geoLoading } = useGeolocation();
+  useEffect(() => {
+    if (!geoLoading && latitude !== null && longitude !== null && !geoFilled) {
+      let closest = PLACES[0];
+      let minDist = Infinity;
+      for (const place of PLACES) {
+        const d = haversineM(latitude, longitude, place.lat, place.lng);
+        if (d < minDist) {
+          minDist = d;
+          closest = place;
+        }
+      }
+      if (minDist <= 1000) {
+        setOriginText("My Place");
+        setOriginPlace({ name: "My Place", lat: latitude, lng: longitude });
+        setGeoFilled(true);
+      }
+      setGeoFilled(true);
+    }
+  }, [geoLoading, latitude, longitude, geoFilled]);
   const { scoredVendors, allVendors } = useVendors({
     routePoints,
     vendorRange,
@@ -87,7 +110,14 @@ export default function UserSearchPage() {
   async function handleFindRoute(overrideOrigin, overrideDest) {
     setLoadingRoute(true);
     try {
-      const pts = await getRoute(overrideOrigin ?? originPlace, overrideDest ?? destPlace);
+      // Use GPS location as origin when available
+      const effectiveOrigin = (latitude && longitude)
+        ? { name: "My Place", lat: latitude, lng: longitude }
+        : overrideOrigin ?? originPlace;
+      const displayOrigin = originText.trim() === "My Place" && originPlace
+        ? `${originPlace.lat.toFixed(4)}, ${originPlace.lng.toFixed(4)}`
+        : originText.trim();
+      const pts = await getRoute(effectiveOrigin, overrideDest ?? destPlace);
       setRoutePoints(pts);
       setRouteReady(true);
       setSelectedVendor(null);
@@ -102,7 +132,7 @@ export default function UserSearchPage() {
         });
         const entry = {
           id: Date.now(),
-          origin: originText.trim(),
+          origin: displayOrigin,
           dest: destText.trim(),
           originPlace,
           destPlace,
@@ -145,9 +175,11 @@ export default function UserSearchPage() {
       [
         {
           id: Date.now(),
-          label,
+          label: `${originText === "My Place" ? `${destPlace.lat.toFixed(4)}, ${destPlace.lng.toFixed(4)}` : destText}`,
           origin: originText,
           dest: destText,
+          originPlace,
+          destPlace,
           points: routePoints,
           savedAt,
         },
@@ -159,6 +191,8 @@ export default function UserSearchPage() {
   function handleLoadRoute(r) {
     setOriginText(r.origin);
     setDestText(r.dest);
+    setOriginPlace(r.originPlace ?? { name: r.origin, lat:r.points?.[0]?.[0], lng:r.points?.[0]?.[1]});
+    setDestPlace(r.destPlace ?? { name: r.dest, lat:r.points?.[r.points.length - 1]?.[0], lng:r.points?.[r.points.length - 1]?.[1] });
     setRoutePoints(r.points);
     setRouteReady(true);
     setPage("filter");
@@ -202,6 +236,7 @@ export default function UserSearchPage() {
       handleFindRoute(newOrigin, newDest);
     },
     debugPlaces: debugShowAll ? allVendors : [],
+    userLocation: latitude && longitude ? { latitude, longitude } : null,
   });
 
   const stripVisible = routeReady && !editRouteMode && scoredVendors.length > 0;

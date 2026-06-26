@@ -1,8 +1,7 @@
 import type { RouteObject } from "react-router";
 import DeveloperLayout from "../layouts/DeveloperLayout";
 import DeveloperDashboard from "../pages/developer/DeveloperDashboard";
-import BackupPage from "../pages/developer/BackupPage";
-import RecoveryPage from "../pages/developer/RecoveryPage";
+import BackupManagerPage from "../pages/developer/BackupManagerPage";
 import DeveloperUserManagementPage from "../pages/developer/DeveloperUserManagementPage";
 import DeveloperVendorManagementPage from "../pages/developer/DeveloperVendorManagementPage";
 import DeveloperVendorDetailPage from "../pages/developer/DeveloperVendorDetailPage";
@@ -24,15 +23,7 @@ const developerRoutes: RouteObject = {
       path: "backup",
       element: (
         <AuthGuard requiredRole="DEVELOPER_ADMIN">
-          <BackupPage />
-        </AuthGuard>
-      ),
-    },
-    {
-      path: "recovery",
-      element: (
-        <AuthGuard requiredRole="DEVELOPER_ADMIN">
-          <RecoveryPage />
+          <BackupManagerPage />
         </AuthGuard>
       ),
     },

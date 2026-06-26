@@ -5,8 +5,7 @@ import { ThemeProvider } from "../shared/hooks/useTheme";
 import { UserRoutes } from "../user/routes/userRoutes";
 import { VendorRoutes } from "../vendor/routes/vendorRoutes";
 import adminRoutes from "../admin/routes/adminRoutes";
-import contentRoutes from "../admin/routes/contentRoutes";
-import customerServiceRoutes from "../admin/routes/customerServiceRoutes";
+// import customerServiceRoutes from "../admin/routes/customerServiceRoutes";
 import developerRoutes from "../admin/routes/developerRoutes";
 import { AdminLoginPage } from "../admin/pages/AdminLoginPage";
 
@@ -23,11 +22,7 @@ function AppRoutes() {
             <Route key={i} index={child.index} path={child.path} element={child.element} />
           ))}
         </Route>
-        <Route path="/customer-service/*" element={customerServiceRoutes.element}>
-          {customerServiceRoutes.children?.map((child, i) => (
-            <Route key={i} index={child.index} path={child.path} element={child.element} />
-          ))}
-        </Route>
+        {/* Customer service routes disabled */}
         <Route path="/developer/*" element={developerRoutes.element}>
           {developerRoutes.children?.map((child, i) => (
             <Route key={i} index={child.index} path={child.path} element={child.element} />

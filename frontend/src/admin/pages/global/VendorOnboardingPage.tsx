@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, ShieldCheck, Save, AlertTriangle, Eye, Edit3, Loader } from "lucide-react";
+import {
+  ExternalLink, Save, Loader, MessageCircle, Link2, Check, X, Eye,
+  ArrowRight, Smartphone, Bell, UserCheck, ShieldCheck
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   getAdminOnboardingConfig,
@@ -7,51 +10,56 @@ import {
   type OnboardingConfig,
 } from "../../services/adminDashboardService";
 
-const guidelines = [
-  {
-    title: "Verify the official account",
-    desc: "Our official Telegram account is linked below. Always check that the account handle matches exactly — scammers often use lookalike names (e.g., extra underscores or swapped letters).",
-  },
-  {
-    title: "Never share your password",
-    desc: "PathEat staff will NEVER ask for your password, OTP codes, or payment details on Telegram. Any such request is a scam — report immediately.",
-  },
-  {
-    title: "Cross-check in-app",
-    desc: "If someone contacts you claiming to be PathEat support, open the app and check your notifications or message center. Legitimate communications always appear in-app.",
-  },
-  {
-    title: "Report suspicious activity",
-    desc: "If you receive a suspicious message, forward it to our support Telegram account and block the sender. You can also report via the app's help center.",
-  },
+const steps = [
+  { icon: MessageCircle, label: "Tap the button to open Telegram" },
+  { icon: UserCheck, label: "Bot guides your verification" },
+  { icon: Smartphone, label: "Account linked automatically" },
+  { icon: Bell, label: "Get real-time notifications" },
 ];
 
 export default function VendorOnboardingPage() {
   const [config, setConfig] = useState<OnboardingConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({ telegramLink: "", message: "" });
+  const [saving, setSaving] = useState(false);
+  const [telegramLink, setTelegramLink] = useState("");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     getAdminOnboardingConfig()
       .then((c) => {
         setConfig(c);
-        setForm({ telegramLink: c.telegram_link, message: c.message });
+        setTelegramLink(c.telegram_link);
+        setMessage(c.message);
       })
       .catch(() => toast.error("Could not load onboarding config"))
       .finally(() => setLoading(false));
   }, []);
 
+  const isValidTelegram = (url: string) =>
+    !url || url.startsWith("https://t.me/");
+
   const handleSave = async () => {
+    if (telegramLink && !isValidTelegram(telegramLink)) {
+      toast.error("Telegram link must start with https://t.me/");
+      return;
+    }
+    setSaving(true);
     try {
-      const updated = await updateAdminOnboardingConfig(form);
+      const updated = await updateAdminOnboardingConfig({ telegramLink, message });
       setConfig(updated);
-      setEditing(false);
-      toast.success("Onboarding configuration saved. Vendors will see the updated content.");
+      toast.success("Onboarding config updated");
     } catch {
-      toast.error("Could not save onboarding config.");
+      toast.error("Could not save");
+    } finally {
+      setSaving(false);
     }
   };
+
+  const hasChanges =
+    telegramLink !== (config?.telegram_link ?? "") ||
+    message !== (config?.message ?? "");
+
+  const hasTelegram = telegramLink || config?.telegram_link;
 
   if (loading) {
     return (
@@ -64,119 +72,142 @@ export default function VendorOnboardingPage() {
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="flex-1 p-8 flex flex-col gap-6 max-w-3xl">
-        <div className="flex items-start justify-between">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-[28px] font-bold text-[#0b1c30]">Vendor Onboarding</h1>
-            <p className="text-[14px] text-[#64748b] mt-1">
-              Configure the Telegram onboarding page that vendors see. Edits take effect immediately.
-            </p>
+            <p className="text-[14px] text-[#64748b] mt-1">Configure the vendor Telegram connection page.</p>
           </div>
-          {!editing ? (
-            <button
-              onClick={() => setEditing(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#bccbb9] bg-white px-3 py-1.5 text-[12px] font-medium text-[#374151] hover:bg-gray-50 shadow-sm"
-            >
-              <Edit3 size={14} /> Edit Content
-            </button>
-          ) : (
-            <button
-              onClick={handleSave}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26] shadow-sm"
-            >
-              <Save size={14} /> Save Changes
-            </button>
-          )}
+          <button
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#005a26] disabled:opacity-40 shadow-sm transition-all"
+          >
+            <Save size={14} /> {saving ? "Saving..." : "Save"}
+          </button>
         </div>
 
-        {editing ? (
-          <>
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#f1f5f9]">
-                <h2 className="text-[16px] font-semibold text-[#0b1c30]">Onboarding Content</h2>
-              </div>
-              <div className="p-6 space-y-5">
-                <div>
-                  <label className="text-[12px] font-medium text-[#64748b]">Telegram Link</label>
-                  <input
-                    value={form.telegramLink}
-                    onChange={(e) => setForm({ ...form, telegramLink: e.target.value })}
-                    placeholder="https://t.me/patheat_bot"
-                    className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] text-[#374151]"
-                  />
-                  <p className="text-[11px] text-[#94a3b8] mt-1">The Telegram deep link or bot URL vendors click to connect.</p>
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-[#64748b]">Subtitle / Message</label>
-                  <textarea
-                    value={form.message}
-                    onChange={(e) => setForm({ ...form, message: e.target.value })}
-                    rows={3}
-                    className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] text-[#374151] resize-y"
-                  />
-                  <p className="text-[11px] text-[#94a3b8] mt-1">Displayed below the page title to describe the onboarding process.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-5 py-4 text-[13px] text-[#92400e] flex items-start gap-3 shadow-sm">
-              <Eye size={18} className="shrink-0 mt-0.5" />
-              <span>Preview what vendors will see below ↓</span>
-            </div>
-          </>
-        ) : null}
-
-        {/* Vendor-facing preview */}
-        <div className={`bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden ${editing ? "ring-2 ring-[#f59e0b]" : ""}`}>
+        <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-[#f1f5f9] flex items-center gap-2">
-            <ShieldCheck size={18} className="text-[#006e2f]" />
-            <h2 className="text-[16px] font-semibold text-[#0b1c30]">Vendor Preview</h2>
-            {editing && <span className="ml-auto text-[11px] text-[#f59e0b] font-medium">Live preview</span>}
+            <MessageCircle size={16} className="text-[#006e2f]" />
+            <h2 className="text-[16px] font-semibold text-[#0b1c30]">Telegram Connection</h2>
           </div>
-          <div className="p-6 flex flex-col gap-4">
-            <p className="text-[13px] text-[#64748b]">{form.message || config?.message}</p>
-
-            {form.telegramLink || config?.telegram_link ? (
-              <a
-                href={form.telegramLink || config?.telegram_link || "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 self-start rounded-lg bg-[#006e2f] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#005a26] transition-colors"
-              >
-                <ExternalLink size={16} /> Connect via Telegram
-              </a>
-            ) : (
-              <div className="rounded-lg border border-[#fde68a] bg-[#fffbeb] px-4 py-3 text-[12px] text-[#92400e]">
-                No Telegram link configured — vendors will see a "not configured" message.
-              </div>
-            )}
-
-            <div className="border-t border-[#f1f5f9] pt-4 mt-2">
-              <p className="text-[12px] font-semibold text-[#0b1c30] mb-3">Scam Prevention Guidelines (static)</p>
-              <div className="grid gap-3">
-                {guidelines.map((g) => (
-                  <div key={g.title} className="flex items-start gap-3">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-[#f1f5f9] text-[#006e2f] text-[11px] font-bold">
-                      <ShieldCheck size={13} />
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-semibold text-[#0b1c30]">{g.title}</p>
-                      <p className="text-[11px] text-[#64748b] mt-0.5">{g.desc}</p>
-                    </div>
+          <div className="p-6 space-y-5">
+            <div>
+              <label className="text-[13px] font-medium text-[#0b1c30]">Telegram Link</label>
+              <div className="relative mt-1.5">
+                <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                <input
+                  value={telegramLink}
+                  onChange={(e) => setTelegramLink(e.target.value)}
+                  placeholder="https://t.me/patheat_bot"
+                  className="w-full pl-9 pr-8 py-2 rounded-lg border border-[#e2e8f0] text-[13px] outline-none focus:border-[#006e2f] text-[#374151]"
+                />
+                {telegramLink && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {isValidTelegram(telegramLink) ? (
+                      <Check size={14} className="text-[#006e2f]" />
+                    ) : (
+                      <X size={14} className="text-[#ba1a1a]" />
+                    )}
                   </div>
-                ))}
+                )}
               </div>
+              {telegramLink && !isValidTelegram(telegramLink) && (
+                <p className="text-[11px] text-[#ba1a1a] mt-1">Must start with https://t.me/</p>
+              )}
+            </div>
+            <div>
+              <label className="text-[13px] font-medium text-[#0b1c30]">Subtitle Message</label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={2}
+                placeholder="Connect your vendor account to Telegram..."
+                className="w-full mt-1.5 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] text-[#374151] resize-none"
+              />
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-[#e2e8f0] bg-white px-6 py-5 flex items-start gap-4 shadow-sm">
-          <AlertTriangle size={20} className="shrink-0 mt-0.5 text-[#f59e0b]" />
-          <div>
-            <p className="text-[14px] font-semibold text-[#0b1c30]">What vendors see</p>
-            <p className="text-[13px] text-[#64748b] mt-0.5">
-              This page is viewable by vendors under <strong>Vendor Portal → Onboarding</strong>. The scam prevention
-              guidelines are static and cannot be edited. Only the Telegram link and subtitle message are configurable here.
-            </p>
+        <div className="rounded-xl border border-[#e2e8f0] bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Eye size={16} className="text-[#f59e0b]" />
+            <h3 className="text-[14px] font-semibold text-[#0b1c30]">Vendor Preview</h3>
+          </div>
+          <div className="min-h-[80vh] bg-gradient-to-b from-[#f0fdf4] to-[#f8fafc] rounded-xl border border-[#e2e8f0] p-6">
+            <div className="max-w-lg mx-auto flex flex-col items-center text-center gap-8">
+              <div className="w-16 h-16 rounded-2xl bg-[#006e2f] flex items-center justify-center shadow-lg shadow-[#006e2f]/20">
+                <MessageCircle size={32} className="text-white" />
+              </div>
+
+              <div>
+                <h1 className="text-[26px] font-bold text-[#0b1c30]">Vendor Onboarding</h1>
+                <p className="text-[14px] text-[#64748b] mt-2 leading-relaxed">
+                  {message || "Connect your vendor account to Telegram for real-time notifications, support, and verification."}
+                </p>
+              </div>
+
+              {hasTelegram ? (
+                <a
+                  href={telegramLink || config?.telegram_link || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-3 rounded-xl bg-[#006e2f] px-7 py-3.5 text-[15px] font-bold text-white hover:bg-[#005a26] transition-all shadow-lg shadow-[#006e2f]/25 hover:shadow-[#006e2f]/35 hover:-translate-y-0.5"
+                >
+                  <ExternalLink size={20} />
+                  Connect via Telegram
+                  <ArrowRight size={18} />
+                </a>
+              ) : (
+                <div className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-6 py-4 text-[13px] text-[#92400e] flex items-center gap-3 w-full max-w-xs">
+                  <ShieldCheck size={18} className="shrink-0" />
+                  <span>Telegram onboarding not yet available. Check back later or contact support.</span>
+                </div>
+              )}
+
+              <div className="w-full max-w-lg bg-white rounded-2xl border border-[#e2e8f0] shadow-sm p-6">
+                <h2 className="text-[15px] font-semibold text-[#0b1c30] mb-5">How it works</h2>
+                <div className="grid gap-4">
+                  {steps.map((s, i) => {
+                    const Icon = s.icon;
+                    return (
+                      <div key={i} className="flex items-center gap-4">
+                        <div className="flex items-center justify-center w-9 h-9 rounded-full bg-[#006e2f]/10 text-[#006e2f] shrink-0">
+                          <Icon size={16} />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-[13px] font-medium text-[#0b1c30]">{s.label}</p>
+                        </div>
+                        <span className="text-[11px] font-bold text-[#94a3b8] shrink-0">Step {i + 1}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="w-full max-w-lg bg-white rounded-2xl border border-[#e2e8f0] shadow-sm p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ShieldCheck size={16} className="text-[#006e2f]" />
+                  <h2 className="text-[15px] font-semibold text-[#0b1c30]">Stay Safe</h2>
+                </div>
+                <div className="grid gap-3 text-left">
+                  {[
+                    "We never ask for your password or OTP on Telegram",
+                    "Always verify the account handle matches exactly",
+                    "Report suspicious messages via the app",
+                  ].map((tip, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <ShieldCheck size={14} className="text-[#006e2f] mt-0.5 shrink-0" />
+                      <p className="text-[12px] text-[#64748b] leading-relaxed">{tip}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-[#94a3b8]">
+                Questions? Contact support from your vendor dashboard.
+              </p>
+            </div>
           </div>
         </div>
       </div>

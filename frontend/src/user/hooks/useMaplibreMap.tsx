@@ -70,6 +70,7 @@ export function useMaplibreMap({
   onWaypointAdded,
   onEndpointDrag,
   debugPlaces = [],
+  userLocation,
 }) {
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
@@ -80,6 +81,7 @@ export function useMaplibreMap({
   const editModeRef = useRef(false);
   const routeListenersRef = useRef(null);
   const debugMarkersRef = useRef([]);
+  const userMarkRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
 
@@ -101,6 +103,16 @@ export function useMaplibreMap({
     mapRef.current = map;
     map.on("load", () => {
       setMapReady(true);
+      // Inject pulse animation for user location marker
+      if (!document.getElementById("pl-pulse-style")) {
+        const s = document.createElement("style");
+        s.id = "pl-pulse-style";
+        s.textContent = `@keyframes pulse-ring {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.8); opacity: 0; }
+        }`;
+        document.head.appendChild(s);
+      }
     });
     return () => {
       map.remove();
@@ -332,5 +344,43 @@ export function useMaplibreMap({
     });
   }, [mapReady, debugPlaces]);
 
+  // User location marker -- blue dot with accuracy circle
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    if (userMarkRef.current) {
+      userMarkRef.current.remove();
+      userMarkRef.current = null;
+    }
+
+    if (!userLocation) return;
+    
+    const el = document.createElement("div");
+    el.style.width = "18px";
+    el.style.height = "18px";
+    el.style.borderRadius = "50%";
+    el.style.background = "#3B82F6";
+    el.style.border = "3px solid white";
+    el.style.cursor = "pointer";
+    el.style.boxShadow = "0 0px 3px rgba(59,130,246,0.3), 0 2px 8px rgba(0,0,0,0.3)";
+  
+    // el.style.cssText = 
+    //   "width: 18px; height: 18px; border-radius: 50%; background: #3B82F6;" +
+    //   "border: 3px solid white; cursor: pointer;" +
+    //   "box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: relative;";
+    
+    // const ring = document.createElement("div");
+    // ring.style.cssText = 
+    //   "position: absolute; inset: -6px; border-radius: 50%;" +
+    //   "border: 2.5px solid rgba(59,130,246,0.35);" +
+    //   "animation: pulse-ring 2s  ease-in-out infinite;";
+    // el.appendChild(ring);
+    
+    const marker = new maplibregl.Marker(el)
+      .setLngLat([userLocation.longitude, userLocation.latitude])
+      .addTo(map);
+    userMarkRef.current = marker;
+  }, [mapReady, userLocation, styleVersion]);
   return { mapDivRef, mapReady };
 }

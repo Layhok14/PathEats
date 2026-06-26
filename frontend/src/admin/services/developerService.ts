@@ -1,203 +1,144 @@
 import api from "../../shared/services/axiosService";
 
 export interface DevTableInfo {
-  name: string;
-  rowCount: string;
-  size: string;
-  status: string;
-  deadTuples: number;
+  name: string; rowCount: string; size: string; status: string; deadTuples: number;
 }
-
 export interface DevDatabaseData {
-  instance: {
-    engine: string;
-    version: string;
-    region: string;
-    connections: string;
-    uptime: string;
-  };
-  storage: {
-    used: string;
-    total: string;
-    usedBytes: number;
-    totalBytes: number;
-  };
+  instance: { engine: string; version: string; region: string; connections: string; uptime: string; };
+  storage: { used: string; total: string; usedBytes: number; totalBytes: number; };
   tables: DevTableInfo[];
 }
-
 export interface DevLogEntry {
-  id: string;
-  level: "CRITICAL" | "WARNING" | "INFO";
-  status: number;
-  timestamp: string;
-  endpoint: string;
-  message: string;
+  id: string; level: "CRITICAL" | "WARNING" | "INFO"; status: number;
+  timestamp: string; endpoint: string; message: string;
 }
-
-export interface DevLogsData {
-  logs: DevLogEntry[];
-  summary: { critical: number; warning: number; info: number };
-}
-
+export interface DevLogsData { logs: DevLogEntry[]; summary: { critical: number; warning: number; info: number }; }
 export interface DevBackup {
-  id: string;
-  profileName: string;
-  method: string;
-  scope: string;
-  scheduleInterval: string | null;
-  scheduleUnit: string | null;
-  createdAt: string;
-  status: string;
-  size: string;
+  id: string; profileName: string; method: string; scope: string;
+  scheduleInterval: string | null; scheduleUnit: string | null;
+  createdAt: string; status: string; size: string;
 }
-
 export interface DevRecovery {
-  id: string;
-  type: string;
-  fileName: string;
-  status: string;
-  createdAt: string;
-  message: string;
+  id: string; type: string; fileName: string; status: string; createdAt: string; message: string;
 }
-
-export interface DevHealth {
-  status: string;
-  uptime: number;
-  dbConnected: boolean;
-  dbLatency: number;
-  timestamp: string;
-}
+export interface DevHealth { status: string; uptime: number; dbConnected: boolean; dbLatency: number; timestamp: string; }
 
 export async function getDevHealth(): Promise<DevHealth> {
-  const response = await api.get<{ success: boolean; data: DevHealth }>("/dev/health");
-  return response.data.data;
+  const r = await api.get<{ success: boolean; data: DevHealth }>("/dev/health");
+  return r.data.data;
 }
-
 export async function getDevDatabase(): Promise<DevDatabaseData> {
-  const response = await api.get<{ success: boolean; data: DevDatabaseData }>("/dev/database");
-  return response.data.data;
+  const r = await api.get<{ success: boolean; data: DevDatabaseData }>("/dev/database");
+  return r.data.data;
 }
-
-export async function getDevLogs(params?: {
-  severity?: string;
-  search?: string;
-  limit?: number;
-}): Promise<DevLogsData> {
-  const response = await api.get<{ success: boolean; data: DevLogsData }>("/dev/logs", { params });
-  return response.data.data;
+export async function getDevLogs(params?: { severity?: string; search?: string; limit?: number }): Promise<DevLogsData> {
+  const r = await api.get<{ success: boolean; data: DevLogsData }>("/dev/logs", { params });
+  return r.data.data;
 }
-
 export async function postDevSeed(): Promise<{ message: string }> {
-  const response = await api.post<{ success: boolean; data: { message: string } }>("/dev/seed");
-  return response.data.data;
+  const r = await api.post<{ success: boolean; data: { message: string } }>("/dev/seed");
+  return r.data.data;
 }
-
-export async function getDevApiMetrics(): Promise<{
-  totalTables: number;
-  avgLatency: string;
-  requestsToday: string;
-  uptime: number;
-}> {
-  const response = await api.get<{ success: boolean; data: { totalTables: number; avgLatency: string; requestsToday: string; uptime: number } }>("/dev/api-metrics");
-  return response.data.data;
+export async function getDevApiMetrics(): Promise<{ totalTables: number; avgLatency: string; requestsToday: string; uptime: number }> {
+  const r = await api.get<{ success: boolean; data: { totalTables: number; avgLatency: string; requestsToday: string; uptime: number } }>("/dev/api-metrics");
+  return r.data.data;
 }
-
 export async function getDevBackups(): Promise<DevBackup[]> {
-  const response = await api.get<{ success: boolean; data: DevBackup[] }>("/dev/backups");
-  return response.data.data;
+  const r = await api.get<{ success: boolean; data: DevBackup[] }>("/dev/backups");
+  return r.data.data;
 }
-
-export async function createDevBackup(payload: {
-  profileName: string;
-  method: string;
-  scope?: string;
-  scheduleInterval?: string;
-  scheduleUnit?: string;
-}): Promise<DevBackup> {
-  const response = await api.post<{ success: boolean; data: DevBackup }>("/dev/backups", payload);
-  return response.data.data;
+export async function createDevBackup(payload: { profileName: string; method: string; scope?: string; scheduleInterval?: string; scheduleUnit?: string }): Promise<DevBackup> {
+  const r = await api.post<{ success: boolean; data: DevBackup }>("/dev/backups", payload);
+  return r.data.data;
 }
-
 export async function deleteDevBackup(id: string): Promise<void> {
   await api.delete(`/dev/backups/${id}`);
 }
-
 export async function getDevRecovery(): Promise<DevRecovery[]> {
-  const response = await api.get<{ success: boolean; data: DevRecovery[] }>("/dev/recovery");
-  return response.data.data;
+  const r = await api.get<{ success: boolean; data: DevRecovery[] }>("/dev/recovery");
+  return r.data.data;
+}
+export async function initiateDevRecovery(payload: { type: string; fileName?: string }): Promise<DevRecovery> {
+  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", payload);
+  return r.data.data;
 }
 
-export async function initiateDevRecovery(payload: {
-  type: string;
-  fileName?: string;
-}): Promise<DevRecovery> {
-  const response = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", payload);
-  return response.data.data;
-}
-
-// ── SQL Query Runner ────────────────────────────────────────────────────────
+// ── SQL Query Presets (DB-backed) ───────────────────────────────────────────
 
 export interface QueryPreset {
-  name: string;
-  description: string;
-  sql: string;
+  id: string; title: string; query_string: string; category: string;
+  is_system_preset: boolean; created_by: string | null;
+  last_used_at: string | null; created_at: string;
+}
+export interface QueryResult { rows: Record<string, unknown>[]; rowCount: number; duration: number; fields: string[]; }
+
+export async function getDevQueryPresets(params?: { category?: string; search?: string }): Promise<{ presets: QueryPreset[]; totalPresets: number }> {
+  const r = await api.get<{ success: boolean; data: { presets: QueryPreset[]; totalPresets: number } }>("/dev/queries/presets", { params });
+  return r.data.data;
+}
+export async function getAllDevQueryPresets(params?: { category?: string; search?: string; page?: string; limit?: string }): Promise<{ presets: QueryPreset[]; total: number; page: number; limit: number }> {
+  const r = await api.get<{ success: boolean; data: { presets: QueryPreset[]; total: number; page: number; limit: number } }>("/dev/queries/presets/all", { params });
+  return r.data.data;
+}
+export async function createDevQueryPreset(payload: { title: string; query_string: string; category: string }): Promise<QueryPreset> {
+  const r = await api.post<{ success: boolean; data: QueryPreset }>("/dev/queries/presets", payload);
+  return r.data.data;
+}
+export async function updateDevQueryPreset(id: string, payload: { title?: string; query_string?: string; category?: string }): Promise<QueryPreset> {
+  const r = await api.put<{ success: boolean; data: QueryPreset }>(`/dev/queries/presets/${id}`, payload);
+  return r.data.data;
+}
+export async function deleteDevQueryPreset(id: string): Promise<void> {
+  await api.delete(`/dev/queries/presets/${id}`);
 }
 
-export interface QueryResult {
-  rows: Record<string, unknown>[];
-  rowCount: number;
-  fields: string[];
-}
-
-export async function getDevQueryPresets(): Promise<QueryPreset[]> {
-  const response = await api.get<{ success: boolean; data: QueryPreset[] }>("/dev/queries/presets");
-  return response.data.data;
-}
-
-export async function postDevQuery(sql: string): Promise<QueryResult> {
-  const response = await api.post<{ success: boolean; data: QueryResult }>("/dev/query", { sql });
-  return response.data.data;
+export async function postDevQuery(sql: string, presetId?: string): Promise<QueryResult> {
+  const r = await api.post<{ success: boolean; data: QueryResult }>("/dev/query", { sql, presetId });
+  return r.data.data;
 }
 
 // ── Maintenance ─────────────────────────────────────────────────────────────
 
 export interface TableMaintenanceRow {
-  name: string;
-  live_tuples: number;
-  dead_tuples: number;
-  size: string;
-  last_vacuum: string | null;
-  last_autovacuum: string | null;
-  last_analyze: string | null;
-  last_autoanalyze: string | null;
+  name: string; live_tuples: number; dead_tuples: number; size: string;
+  last_vacuum: string | null; last_autovacuum: string | null;
+  last_analyze: string | null; last_autoanalyze: string | null;
   health: "good" | "warning" | "critical";
 }
-
 export async function getDevMaintenanceStatus(): Promise<TableMaintenanceRow[]> {
-  const response = await api.get<{ success: boolean; data: TableMaintenanceRow[] }>("/dev/maintenance");
-  return response.data.data;
+  const r = await api.get<{ success: boolean; data: TableMaintenanceRow[] }>("/dev/maintenance");
+  return r.data.data;
 }
 
-export async function postDevVacuum(table: string): Promise<{ message: string }> {
-  const response = await api.post<{ success: boolean; data: { message: string } }>("/dev/maintenance/vacuum", { table });
-  return response.data.data;
-}
-
-export async function postDevAnalyze(table: string): Promise<{ message: string }> {
-  const response = await api.post<{ success: boolean; data: { message: string } }>("/dev/maintenance/analyze", { table });
-  return response.data.data;
-}
-
-// ── Error / Bug Summary ─────────────────────────────────────────────────────
+// ── Error / Bug Dashboard ───────────────────────────────────────────────────
 
 export interface DevErrorSummary {
+  totalErrors: number; totalBanned: number;
+  severityBreakdown: { high: number; medium: number; low: number };
   auditErrors: Array<{ action: string; details: Record<string, unknown> | null; created_at: string; target_type: string | null }>;
+  queryErrors: Array<{ id: string; event_type: string; actor_id: string | null; payload: string | null; executed_at: string }>;
   bannedUsers: Array<{ id: string; email: string; created_at: string }>;
-  totalErrors: number;
-  totalBanned: number;
+  loginEvents: Array<{ event_type: string; actor_id: string | null; payload: string | null; executed_at: string }>;
+  loginFailures: number;
+  sources: { consumer: string; vendor: string; admin: string; developer: string };
+}
+export async function getDevErrors(): Promise<DevErrorSummary> {
+  const r = await api.get<{ success: boolean; data: DevErrorSummary }>("/dev/errors");
+  return r.data.data;
 }
 
-export async function getDevErrors(): Promise<DevErrorSummary> {
-  const response = await api.get<{ success: boolean; data: DevErrorSummary }>("/dev/errors");
-  return response.data.data;
+// ── Activity Log ────────────────────────────────────────────────────────────
+
+export interface ActivityLogEntry { id: string; event_type: string; actor_id: string | null; payload: string | null; executed_at: string; actor_email: string | null; }
+export async function getDevActivityLog(params?: { eventType?: string; limit?: number }): Promise<ActivityLogEntry[]> {
+  const r = await api.get<{ success: boolean; data: ActivityLogEntry[] }>("/dev/activity-log", { params });
+  return r.data.data;
+}
+
+// ── Query History (DB-backed) ───────────────────────────────────────────────
+
+export interface QueryHistoryEntry { id: string; event_type: string; actor_id: string | null; payload: string | null; executed_at: string; }
+export async function getDevQueryHistory(limit = 100): Promise<QueryHistoryEntry[]> {
+  const r = await api.get<{ success: boolean; data: QueryHistoryEntry[] }>("/dev/query/history", { params: { limit } });
+  return r.data.data;
 }

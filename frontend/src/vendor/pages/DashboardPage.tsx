@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Star } from "lucide-react";
 import api from "../../shared/services/axiosService";
-import imgBaiSach from "../../imports/VendorDashboardLight-1/3048f6f12148eeea4287f0fca295f192a3c56447.png";
-import imgKuyteav from "../../imports/VendorDashboardLight-1/617a1a225ae66b185e6c03269982907fbece9a08.png";
-import imgFriedRice from "../../imports/VendorDashboardLight-1/66a037bcc802045147a6711455fa000235fc2231.png";
 
 function SvgLineChart({ data }: { data: { day: string; views: number }[] }) {
   const W = 860, H = 200, PAD = { top: 16, right: 20, bottom: 32, left: 10 };
@@ -205,8 +202,11 @@ export function DashboardPage() {
 }
 
 function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+  const time = new Date(iso).getTime();
+  if (isNaN(time)) return "—";
+  const diff = Date.now() - time;
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
