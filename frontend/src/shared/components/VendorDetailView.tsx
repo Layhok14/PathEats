@@ -172,7 +172,7 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
       setSuccessState({ message: "Stall created." });
     } catch (err) {
       console.error("[VendorDetailView] Failed to create stall:", err);
-      toast.error("Could not create stall.");
+      toast.error((err as any)?.response?.data?.message || "Could not create stall.");
     }
   };
 
@@ -193,9 +193,9 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
       setMenuCreateForm({ placeId: "", name: "", price: "", category: "snack" });
       loadData();
       setSuccessState({ message: "Menu item created." });
-    } catch (err) {
+    } catch (err: any) {
       console.error("[VendorDetailView] Failed to create menu item:", err);
-      toast.error("Could not create menu item.");
+      toast.error(err?.response?.data?.message || "Could not create menu item.");
     }
   };
 

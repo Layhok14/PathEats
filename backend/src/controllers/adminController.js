@@ -30,7 +30,8 @@ class AdminController {
     try {
       const page = Number(req.query.page || 1);
       const limit = Number(req.query.limit || 20);
-      const result = await this.service.getUsers(page, limit);
+      const roleScope = req.query.role_scope || req.query.role || null;
+      const result = await this.service.getUsers(page, limit, roleScope);
       res.status(200).json({ success: true, data: result });
     } catch (error) {
       next(error);

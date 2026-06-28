@@ -102,6 +102,13 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
   return response.data.data.users;
 }
 
+export async function getAdminUsersByRole(role: string): Promise<AdminUser[]> {
+  const response = await api.get<{ success: boolean; data: { users: AdminUser[] } }>("/admin/users", {
+    params: { role_scope: role, limit: 1000 },
+  });
+  return response.data.data.users;
+}
+
 export async function getAdminUserManagementOverview(search = ""): Promise<AdminUserOverviewRow[]> {
   const response = await api.get<{ success: boolean; data: AdminUserOverviewRow[] }>("/admin/user-management/overview", {
     params: search ? { search } : undefined,
@@ -309,11 +316,6 @@ export async function getAdminAllStalls(): Promise<AdminStallRow[]> {
 export async function getAdminStallsByOwner(ownerId: string): Promise<AdminStallRow[]> {
   const response = await api.get<{ success: boolean; data: AdminStallRow[] }>(`/admin/stalls/owner/${ownerId}`);
   return response.data.data;
-}
-
-export async function getAdminUsersByRole(role: string): Promise<AdminUser[]> {
-  const all = await getAdminUsers();
-  return all.filter((u) => u.role === role);
 }
 
 export async function getAdminStallById(id: string): Promise<AdminStallRow> {

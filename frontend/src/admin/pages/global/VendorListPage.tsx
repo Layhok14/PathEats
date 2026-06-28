@@ -4,7 +4,7 @@ import { Search, Store, Plus, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
-  getAdminUsers,
+  getAdminUsersByRole,
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
@@ -28,8 +28,8 @@ export default function VendorListPage() {
   const loadVendors = async () => {
     try {
       setLoading(true);
-      const all = await getAdminUsers();
-      setVendors(all.filter((u) => u.role === "VENDOR"));
+      const all = await getAdminUsersByRole("VENDOR");
+      setVendors(all);
     } catch (err) {
       toast.error("Could not load vendors.");
     } finally {

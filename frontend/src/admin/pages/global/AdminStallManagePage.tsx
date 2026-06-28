@@ -141,7 +141,7 @@ export default function AdminStallManagePage() {
       setSuccessState({ message: "Stall created." });
     } catch (err) {
       console.error("[AdminStallManagePage] Failed to create stall:", err);
-      toast.error("Could not create stall.");
+      toast.error((err as any)?.response?.data?.message || "Could not create stall.");
     }
   };
 

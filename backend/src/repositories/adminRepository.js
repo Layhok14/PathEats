@@ -168,8 +168,10 @@ export const getDashboardTelemetry = async () => {
   };
 };
 
-export const findAllUsers = async (page, limit) => {
+export const findAllUsers = async (page, limit, roleScope = null) => {
   const offset = (page - 1) * limit;
+  const whereClause = roleScope ? "WHERE role_scope = $3" : "";
+  const params = roleScope ? [limit, offset, roleScope] : [limit, offset];
   const rows = await pool.query(
     `
     SELECT
@@ -181,10 +183,11 @@ export const findAllUsers = async (page, limit) => {
       is_banned,
       created_at
     FROM users
+    ${whereClause}
     ORDER BY created_at DESC
     LIMIT $1 OFFSET $2
     `,
-    [limit, offset]
+    params
   );
 
   return rows.rows.map((user) => ({
@@ -195,6 +198,15 @@ export const findAllUsers = async (page, limit) => {
     status: toStatus(user.is_banned),
     createdAt: user.created_at,
   }));
+};
+
+export const countUsersByRole = async (roleScope = null) => {
+  if (!roleScope) return countRows("users");
+  const { rows } = await pool.query(
+    "SELECT COUNT(*)::int AS count FROM users WHERE role_scope = $1",
+    [roleScope]
+  );
+  return rows[0]?.count ?? 0;
 };
 
 export const createUser = async (userData) => {
@@ -612,13 +624,25 @@ export const getStallManagementOptions = async () => {
 export const createStall = async ({ ownerId, categoryId, name, description, address, priceRange, photoUrl, latitude, longitude }) => {
   const columns = await getColumns("places");
   const allowed = new Set(columns);
+  const lat = latitude ?? 11.5564;
+  const lng = longitude ?? 104.9282;
 
-  if (allowed.has("location") && latitude != null && longitude != null) {
+  if (allowed.has("location")) {
     const result = await pool.query(
       `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, location)
        VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'APPROVED', ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
        RETURNING *`,
-      [ownerId || null, categoryId, name, description || null, address || null, priceRange || null, photoUrl || null, longitude, latitude]
+      [
+        ownerId || null,
+        categoryId,
+        name,
+        description || null,
+        address || null,
+        priceRange == null ? null : Number(priceRange),
+        photoUrl || null,
+        lng,
+        lat,
+      ]
     );
     return result.rows[0] ?? null;
   }
@@ -654,8 +678,8 @@ export const createStallMenuItem = async (placeId, payload) => {
     description: payload.description || null,
     price: payload.price,
     category: menuItemCategory(payload.category),
-    image_url: payload.imageUrl || null,
-    is_available: payload.isAvailable ?? true,
+    image_url: payload.imageUrl || payload.image_url || null,
+    is_available: payload.isAvailable ?? payload.is_available ?? true,
   });
 };
 

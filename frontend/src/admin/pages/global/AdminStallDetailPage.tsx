@@ -96,7 +96,7 @@ function MenuItemModal({
 }: {
   item: Partial<AdminMenuItemRow> | null;
   onClose: () => void;
-  onSave: (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => Promise<void>;
+  onSave: (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => Promise<boolean | void>;
 }) {
   const [form, setForm] = useState({
     name: item?.name ?? "",
@@ -111,9 +111,15 @@ function MenuItemModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave(form);
-    setSaving(false);
-    onClose();
+    try {
+      const saved = await onSave(form);
+      if (saved !== false) onClose();
+    } catch (err: any) {
+      const message = err?.response?.data?.message || "Could not save menu item.";
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -239,14 +245,21 @@ export default function AdminStallDetailPage() {
 
   const handleSaveItem = async (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => {
     if (!stallId) return;
-    if (editItem?.id) {
-      await api.patch(`/admin/menu-items/${editItem.id}`, data);
-      setSuccessMsg("Menu item updated.");
-    } else {
-      await api.post(`/admin/stalls/${stallId}/menu-items`, data);
-      setSuccessMsg("Menu item created.");
+    try {
+      if (editItem?.id) {
+        await api.patch(`/admin/menu-items/${editItem.id}`, data);
+        setSuccessMsg("Menu item updated.");
+      } else {
+        await api.post(`/admin/stalls/${stallId}/menu-items`, data);
+        setSuccessMsg("Menu item created.");
+      }
+      await loadData();
+      return true;
+    } catch (err: any) {
+      console.error("[AdminStallDetailPage] Failed to save menu item:", err);
+      toast.error(err?.response?.data?.message || "Could not save menu item.");
+      return false;
     }
-    await loadData();
   };
 
   const handleDeleteItem = async (item: AdminMenuItemRow) => {

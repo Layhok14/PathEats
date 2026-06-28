@@ -3,7 +3,7 @@ import { Search, Plus, Pencil, Trash2, X, Ban, CheckCircle } from "lucide-react"
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
-  getAdminUsers,
+  getAdminUsersByRole,
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
@@ -27,8 +27,8 @@ export default function ConsumerManagementPage() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const all = await getAdminUsers();
-      setUsers(all.filter((u) => u.role === "CONSUMER"));
+      const all = await getAdminUsersByRole("CONSUMER");
+      setUsers(all);
     } catch (err) {
       toast.error("Could not load consumers.");
     } finally {

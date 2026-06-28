@@ -10,10 +10,10 @@ export const getDashboardTelemetry = async () => {
   return adminRepository.getDashboardTelemetry();
 };
 
-export const getUsers = async (page, limit) => {
+export const getUsers = async (page, limit, roleScope = null) => {
   const [users, total] = await Promise.all([
-    adminRepository.findAllUsers(page, limit),
-    adminRepository.countUsers(),
+    adminRepository.findAllUsers(page, limit, roleScope),
+    adminRepository.countUsersByRole(roleScope),
   ]);
 
   return {
@@ -94,7 +94,15 @@ export const getStallManagementOptions = async () => {
 };
 
 export const createStall = async (payload) => {
-  return adminRepository.createStall(payload);
+  const name = String(payload.name ?? "").trim();
+  if (!name) throw new AppError("Stall name is required", 400);
+  if (!payload.ownerId) throw new AppError("Vendor owner is required", 400);
+  if (!payload.categoryId) throw new AppError("Stall category is required", 400);
+
+  return adminRepository.createStall({
+    ...payload,
+    name,
+  });
 };
 
 export const deleteStall = async (id) => {
@@ -102,7 +110,22 @@ export const deleteStall = async (id) => {
 };
 
 export const createStallMenuItem = async (placeId, payload) => {
-  return adminRepository.createStallMenuItem(placeId, payload);
+  const stall = await adminRepository.findStallById(placeId);
+  if (!stall) throw new AppError("Stall not found", 404);
+
+  const name = String(payload.name ?? "").trim();
+  if (!name) throw new AppError("Menu item name is required", 400);
+
+  const price = Number(payload.price);
+  if (!Number.isFinite(price) || price < 0) {
+    throw new AppError("Menu item price must be a valid number", 400);
+  }
+
+  return adminRepository.createStallMenuItem(placeId, {
+    ...payload,
+    name,
+    price,
+  });
 };
 
 export const deleteStallMenuItem = async (id) => {
