@@ -1,4 +1,4 @@
-import * as adminService from "../services/adminService.js";
+import * as adminService from "../services/AdminService.js";
 
 class AdminController {
   constructor(service) {
