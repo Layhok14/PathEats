@@ -139,10 +139,12 @@ export function useMaplibreMap({
 
     // Cleanup previous listeners
     if (routeListenersRef.current) {
-      const { mousemove, mouseleave, click } = routeListenersRef.current;
+      const { mousemove, mousedown, mouseup, mouseleave, mapMouseUp } = routeListenersRef.current;
       map.off("mousemove", "route-line", mousemove);
+      map.off("mousedown", "route-line", mousedown);
+      map.off("mouseup", "route-line", mouseup);
       map.off("mouseleave", "route-line", mouseleave);
-      map.off("click", "route-line", click);
+      map.off("mouseup", mapMouseUp);
       routeListenersRef.current = null;
     }
 
@@ -185,8 +187,8 @@ export function useMaplibreMap({
     }
     const Ael = makeEndpointElement("#10b981", "A");
     const Bel = makeEndpointElement("#ef4444", "B");
-    const A = new maplibregl.Marker(Ael, { draggable: true }).setLngLat(first).addTo(map);
-    const B = new maplibregl.Marker(Bel, { draggable: true }).setLngLat(last).addTo(map);
+    const A = new maplibregl.Marker(Ael, { draggable: editRouteMode }).setLngLat(first).addTo(map);
+    const B = new maplibregl.Marker(Bel, { draggable: editRouteMode }).setLngLat(last).addTo(map);
 
     A.on("dragend", () => {
       if (onEndpointDrag) {
@@ -212,28 +214,50 @@ export function useMaplibreMap({
     ghostEl.style.width = "14px";
     ghostEl.style.height = "14px";
     ghostEl.style.borderRadius = "50%";
-    ghostEl.style.background = "#3B82F6";
-    ghostEl.style.opacity = "0.7";
-    ghostEl.style.border = "2px solid #3B82F6";
+    ghostEl.style.background = "#f59e0b";
+    ghostEl.style.opacity = "0.85";
+    ghostEl.style.border = "2px solid #f59e0b";
     const ghostMarker = new maplibregl.Marker(ghostEl).setLngLat(coords[0]);
     ghostMarkerRef.current = ghostMarker;
 
+    let isDragging = false;
+
     const onMouseMove = (e) => {
       if (!editModeRef.current) return;
+      map.getCanvas().style.cursor = isDragging ? "grabbing" : "grab";
       ghostMarker.setLngLat(e.lngLat);
       if (!ghostMarker._map) ghostMarker.addTo(map);
     };
-    const onMouseLeave = () => {
+    const onMouseDown = () => {
+      if (!editModeRef.current) return;
+      isDragging = true;
+      map.getCanvas().style.cursor = "grabbing";
+    };
+    const onMouseUp = (e) => {
+      if (!editModeRef.current || !isDragging) return;
+      isDragging = false;
+      onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
       ghostMarker.remove();
     };
-    const onClick = (e) => {
-      if (editModeRef.current) onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
+    const onMouseLeave = () => {
+      map.getCanvas().style.cursor = "";
+      isDragging = false;
+      ghostMarker.remove();
+    };
+
+    const onMapMouseUp = (e) => {
+      if (!editModeRef.current || !isDragging) return;
+      isDragging = false;
+      onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
+      ghostMarker.remove();
     };
 
     map.on("mousemove", "route-line", onMouseMove);
+    map.on("mousedown", "route-line", onMouseDown);
+    map.on("mouseup", "route-line", onMouseUp);
     map.on("mouseleave", "route-line", onMouseLeave);
-    map.on("click", "route-line", onClick);
-    routeListenersRef.current = { mousemove: onMouseMove, mouseleave: onMouseLeave, click: onClick };
+    map.on("mouseup", onMapMouseUp);
+    routeListenersRef.current = { mousemove: onMouseMove, mousedown: onMouseDown, mouseup: onMouseUp, mouseleave: onMouseLeave, mapMouseUp: onMapMouseUp };
 
     // Fit bounds
     const bounds = coords.reduce(
@@ -241,7 +265,7 @@ export function useMaplibreMap({
       new maplibregl.LngLatBounds(coords[0], coords[0]),
     );
     map.fitBounds(bounds, { padding: 40 });
-  }, [mapReady, routePoints, styleVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, routePoints, styleVersion, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vendor markers — marker pool with ID-based diffing, popups, and auto-fit bounds
   useEffect(() => {
@@ -382,5 +406,23 @@ export function useMaplibreMap({
       .addTo(map);
     userMarkRef.current = marker;
   }, [mapReady, userLocation, styleVersion]);
+
+  // Lock/unlock map panning based on edit mode
+  useEffect(() => {
+      if (!mapReady || !mapRef.current) return;
+          const map = mapRef.current;
+      if (editRouteMode) {
+          map.dragPan.disable();
+          map.boxZoom.disable();
+          map.doubleClickZoom.disable();
+          map.keyboard.disable();
+          map.getCanvas().style.cursor = "default";
+      } else {
+          map.dragPan.enable();
+          map.boxZoom.enable();
+          map.doubleClickZoom.enable();
+          map.keyboard.enable();
+      }
+  }, [editRouteMode, mapReady]);
   return { mapDivRef, mapReady };
 }

@@ -13,7 +13,7 @@ function AppRoutes() {
   return (
     <ThemeProvider>
       <Routes>
-        <Route index element={<Navigate to="/user" replace />} />
+        <Route index element={<Navigate to="/user/login" replace />} />
         {UserRoutes()}
         {VendorRoutes()}
         <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -28,7 +28,7 @@ function AppRoutes() {
             <Route key={i} index={child.index} path={child.path} element={child.element} />
           ))}
         </Route>
-        <Route path="*" element={<Navigate to="/user" replace />} />
+        <Route path="*" element={<Navigate to="/user/login" replace />} />
       </Routes>
       <Toaster position="top-right" richColors />
     </ThemeProvider>

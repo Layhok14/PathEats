@@ -10,7 +10,7 @@ interface GeolocationState {
 export function useGeolocation() {
     const [state, setState] = useState<GeolocationState>({
         latitude: null,
-        longititude: null,
+        longitude: null,
         error: null,
         loading: true,
     });

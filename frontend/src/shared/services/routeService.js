@@ -22,13 +22,14 @@ function createFallbackRoute(origin, destination) {
   return interpolateRoute(validOrigin, validDest);
 }
 
-export async function getRoute(origin, destination) {
+export async function getRoute(origin, destination, waypoints = []) {
   if (!isValidCoord(origin) || !isValidCoord(destination)) {
     console.warn("[routeService] Invalid origin/destination — using fallback route");
     return createFallbackRoute(origin, destination);
   }
 
-  const coords = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
+  const allPoints = [origin, ...waypoints, destination];
+  const coords = allPoints.map((p) => `${p.lng},${p.lat}`).join(";");
   const url = `${OSRM_BASE_URL}/route/v1/driving/${coords}?geometries=geojson&overview=full`;
 
   try {

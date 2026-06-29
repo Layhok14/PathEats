@@ -77,18 +77,6 @@ export function NavRail({
         <MapPin size={18} className="text-white" />
       </button>
 
-      {isGuest && (
-        <button
-          onClick={() => onAuthRequired?.()}
-          className="flex flex-col items-center justify-center gap-1 w-[56px] py-2.5 rounded-xl transition-all hover:brightness-110 active:scale-95"
-          style={{ background: "#22c55e", color: "white" }}
-        >
-          <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.25)" }}>
-            <span className="text-[11px] font-bold text-white">+</span>
-          </div>
-          <span className="text-[8px] font-bold tracking-wide text-white">Sign In</span>
-        </button>
-      )}
       {TABS.map(({ id, Icon, label }) => {
         const active = activeTab === id;
         return (

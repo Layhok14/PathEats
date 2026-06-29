@@ -57,60 +57,35 @@ export function VendorDetail({
       <div
         className="absolute inset-0 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-white/10"
         style={{ background: c.bg }}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Hero */}
-        <div className="relative h-56 shrink-0">
-          <img
-            src={vendor.photo_url}
-            alt={vendor.name}
-            className="w-full h-full object-cover"
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(to top, ${c.bg} 0%, rgba(0,0,0,0.35) 60%, transparent 100%)`,
-            }}
-          />
+        {/* Header with close + favorite */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
           <button
             onClick={onClose}
-            className="absolute top-4 left-4 w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-            style={{ background: c.backBtn, backdropFilter: "blur(8px)" }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/10 transition-colors"
+            style={{ color: c.text }}
           >
-            <ArrowLeft size={17} className="text-white" />
+            <ArrowLeft size={16} />
           </button>
           <button
             onClick={onToggleFavorite}
-            className="absolute top-4 right-4 w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/20 transition-colors"
-            style={{ background: c.backBtn, backdropFilter: "blur(8px)" }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/10 transition-colors"
           >
             <Heart
-              size={17}
-              className={
-                isFavorite ? "fill-red-400 text-red-400" : "text-white"
-              }
+              size={16}
+              className={isFavorite ? "fill-red-400 text-red-400" : ""}
+              style={{ color: isFavorite ? undefined : c.textMid }}
             />
           </button>
-          <div className="absolute bottom-3 left-4 right-4">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span
-                className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                style={{
-                  background: "rgba(255,255,255,0.15)",
-                  color: "rgba(255,255,255,0.85)",
-                  backdropFilter: "blur(8px)",
-                }}
-              >
-                {vendor.cuisine}
-              </span>
-              <span
-                className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${vendor.open_now ? "bg-emerald-500/25 text-emerald-400" : "bg-red-500/20 text-red-400"}`}
-              >
-                {vendor.open_now ? "● Open" : "● Closed"}
-              </span>
-            </div>
-            <h2 className="text-xl font-bold text-white leading-snug">
-              {vendor.name}
-            </h2>
+        </div>
+        <div className="px-4 pt-1 pb-2">
+          <h2 className="text-lg font-bold" style={{ color: c.text }}>{vendor.name}</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ background: c.surface, color: c.textMid }}>{vendor.cuisine}</span>
+            <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${vendor.open_now ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/10 text-red-500"}`}>
+              {vendor.open_now ? "● Open" : "● Closed"}
+            </span>
           </div>
         </div>
 
