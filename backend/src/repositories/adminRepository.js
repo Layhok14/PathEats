@@ -1331,15 +1331,27 @@ export const getOnboardingConfig = async () => {
 
 export const updateOnboardingConfig = async (data) => {
   const { rows } = await pool.query(
-    `UPDATE onboarding_config
-     SET telegram_link = COALESCE($1, telegram_link),
-         message = COALESCE($2, message),
-         updated_at = NOW()
-     WHERE id = (SELECT id FROM onboarding_config LIMIT 1)
-     RETURNING id, telegram_link, message, updated_at`,
+    `WITH existing AS (
+       SELECT id FROM onboarding_config LIMIT 1
+     ),
+     updated AS (
+       UPDATE onboarding_config
+       SET telegram_link = COALESCE($1, telegram_link),
+           message = COALESCE($2, message),
+           updated_at = NOW()
+       WHERE id = (SELECT id FROM existing)
+       RETURNING id, telegram_link, message, updated_at
+     ),
+     inserted AS (
+       INSERT INTO onboarding_config (telegram_link, message, updated_at)
+       SELECT COALESCE($1, ''), COALESCE($2, ''), NOW()
+       WHERE NOT EXISTS (SELECT 1 FROM existing)
+       RETURNING id, telegram_link, message, updated_at
+     )
+     SELECT * FROM updated UNION ALL SELECT * FROM inserted`,
     [data.telegramLink ?? null, data.message ?? null]
   );
-  return rows[0] ?? null;
+  return rows[0];
 };
 
 // ── Review Moderation ─────────────────────────────────────────────────

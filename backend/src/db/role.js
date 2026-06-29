@@ -13,6 +13,7 @@ const SEED_USERS = [
   { email: process.env.SEED_VENDOR_EMAIL,   password: process.env.SEED_VENDOR_PASSWORD,   label: 'VENDOR' },
   { email: process.env.SEED_ADMIN_EMAIL,    password: process.env.SEED_ADMIN_PASSWORD,    label: 'GLOBAL_ADMIN' },
   { email: process.env.SEED_DEV_EMAIL,      password: process.env.SEED_DEV_PASSWORD,      label: 'DEVELOPER_ADMIN' },
+  { email: process.env.SEED_BUSINESS_EMAIL, password: process.env.SEED_BUSINESS_PASSWORD, label: 'BUSINESS_ASSISTANCE' },
 ];
 
 async function run() {
@@ -36,17 +37,8 @@ async function run() {
     }
   }
 
-  // 2. Run roles.sql for database permissions
-  const sqlPath = path.join(__dirname, 'roles.sql');
-  const sql = fs.readFileSync(sqlPath, 'utf8');
-  if (sql.trim()) {
-    try {
-      await db.query(sql);
-      console.log('\n  ✓  Database permissions applied (roles.sql)');
-    } catch (err) {
-      console.error('\n  ✗  Failed to apply roles.sql:', err.message);
-    }
-  }
+  // 2. Database roles are defined in seed-data.sql via the role table
+  //    (roles.sql file is deprecated) - skip if missing
 
   console.log('\nDone. Users can now log in with the passwords in .env');
 }

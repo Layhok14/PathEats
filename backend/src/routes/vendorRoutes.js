@@ -71,7 +71,7 @@ router.delete("/items/:itemId", catchAsync(async (req, res) => {
 }));
 
 router.get("/onboarding", catchAsync(async (req, res) => {
-  const { default: adminRepository } = await import("../repositories/adminRepository.js");
+  const adminRepository = await import("../repositories/adminRepository.js");
   const config = await adminRepository.getOnboardingConfig();
   res.json({ success: true, data: config });
 }));

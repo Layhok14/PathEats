@@ -23,7 +23,7 @@ const devAdminBypass = (req, res, next) => {
 };
 
 router.use(devAdminBypass);
-router.use(restrictToRoles("GLOBAL_ADMIN"));
+router.use(restrictToRoles("GLOBAL_ADMIN", "BUSINESS_ASSISTANCE"));
 
 /**
  * @swagger
