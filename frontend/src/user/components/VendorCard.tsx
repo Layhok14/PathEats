@@ -4,6 +4,7 @@ import { Star, Timer, MapPin, Heart } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { PRICE_LABELS } from "../../shared/constants/appConfig";
 import { scoreColor } from "../../shared/utils/geoUtils";
+import { VendorPhoto } from "./VendorPhoto";
 
 /**
  * @param {{ vendor: object, rank: number, isFavorite: boolean,
@@ -31,11 +32,7 @@ export function VendorCard({
         {rank}
       </div>
       <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0">
-        <img
-          src={vendor.photo_url}
-          alt={vendor.name}
-          className="w-full h-full object-cover"
-        />
+        <VendorPhoto vendor={vendor} className="w-full h-full object-cover" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">

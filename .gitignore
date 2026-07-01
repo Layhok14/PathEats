@@ -7,10 +7,12 @@
 # Optional but common:
 **/dist/          # build output
 coverage/      # test coverage
-*.log          # log files
+*.log
 .commandcode
 .vscode
 **.sql
+!backend/src/db/*.sql
+!backend/src/db/migrations/*.sql
 to-integrate/
 
 .opencode/

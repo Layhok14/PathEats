@@ -27,6 +27,7 @@ function ItemFormModal({
     description: item?.description ?? "",
     price: item ? String(item.price) : "",
     imageUrl: item?.imageUrl ?? "",
+    storageImage: item?.storageImage ?? null,
     category: (item?.category as MenuCategory) ?? "Snack",
     isAvailable: item?.isAvailable ?? true,
   });
@@ -44,11 +45,14 @@ function ItemFormModal({
         description: form.description,
         price: priceNum,
         imageUrl: form.imageUrl,
+        storageImage: form.storageImage,
         category: form.category,
         isAvailable: form.isAvailable,
       });
       toast.success(item ? "Menu item updated." : "New item created.");
       onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not save menu item.");
     } finally {
       setSaving(false);
     }
@@ -87,7 +91,7 @@ function ItemFormModal({
             <label style={lbl}>Item Photo</label>
             <PhotoUpload
               value={form.imageUrl}
-              onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+              onChange={(url, storageImage) => setForm((f) => ({ ...f, imageUrl: url, storageImage }))}
               label="Upload item photo"
               aspectRatio="square"
             />
@@ -134,9 +138,13 @@ export function MenuItemsPage() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
-    await deleteItem(deleteTarget.id);
-    toast.success(`"${deleteTarget.name}" deleted.`);
-    setDeleteTarget(null);
+    try {
+      await deleteItem(deleteTarget.id);
+      toast.success(`"${deleteTarget.name}" deleted.`);
+      setDeleteTarget(null);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not delete menu item.");
+    }
   }
 
   return (

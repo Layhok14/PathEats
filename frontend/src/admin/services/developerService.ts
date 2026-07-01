@@ -1,4 +1,8 @@
 import api from "../../shared/services/axiosService";
+import type {
+  AdminUserOverviewRow,
+  AdminVendorOverviewRow,
+} from "./adminDashboardService";
 
 export interface DevTableInfo {
   name: string; rowCount: string; size: string; status: string; deadTuples: number;
@@ -51,6 +55,15 @@ export async function createDevBackup(payload: { profileName: string; method: st
   const r = await api.post<{ success: boolean; data: DevBackup }>("/dev/backups", payload);
   return r.data.data;
 }
+export async function downloadDevBackup(id: string): Promise<{ blob: Blob; filename: string }> {
+  const r = await api.get<Blob>(`/dev/backups/${id}/download`, { responseType: "blob" });
+  const disposition = r.headers["content-disposition"] || "";
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+  return {
+    blob: r.data,
+    filename: filenameMatch?.[1] || `patheats-backup-${id}.dump`,
+  };
+}
 export async function deleteDevBackup(id: string): Promise<void> {
   await api.delete(`/dev/backups/${id}`);
 }
@@ -58,8 +71,20 @@ export async function getDevRecovery(): Promise<DevRecovery[]> {
   const r = await api.get<{ success: boolean; data: DevRecovery[] }>("/dev/recovery");
   return r.data.data;
 }
-export async function initiateDevRecovery(payload: { type: string; fileName?: string }): Promise<DevRecovery> {
-  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", payload);
+export async function initiateDevRecovery(payload: {
+  type: string;
+  file: File;
+  confirmationText: string;
+  targetTable?: string;
+}): Promise<DevRecovery> {
+  const form = new FormData();
+  form.append("type", payload.type);
+  form.append("file", payload.file);
+  form.append("confirmationText", payload.confirmationText);
+  if (payload.targetTable) form.append("targetTable", payload.targetTable);
+  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return r.data.data;
 }
 
@@ -140,5 +165,19 @@ export async function getDevActivityLog(params?: { eventType?: string; limit?: n
 export interface QueryHistoryEntry { id: string; event_type: string; actor_id: string | null; payload: string | null; executed_at: string; }
 export async function getDevQueryHistory(limit = 100): Promise<QueryHistoryEntry[]> {
   const r = await api.get<{ success: boolean; data: QueryHistoryEntry[] }>("/dev/query/history", { params: { limit } });
+  return r.data.data;
+}
+
+export async function getDevUserManagementOverview(search = ""): Promise<AdminUserOverviewRow[]> {
+  const r = await api.get<{ success: boolean; data: AdminUserOverviewRow[] }>("/dev/user-management/overview", {
+    params: search ? { search } : undefined,
+  });
+  return r.data.data;
+}
+
+export async function getDevVendorManagementOverview(search = ""): Promise<AdminVendorOverviewRow[]> {
+  const r = await api.get<{ success: boolean; data: AdminVendorOverviewRow[] }>("/dev/vendor-management/overview", {
+    params: search ? { search } : undefined,
+  });
   return r.data.data;
 }

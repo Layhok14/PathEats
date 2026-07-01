@@ -8,6 +8,9 @@ import {
 import { scoreColor } from "../../shared/utils/geoUtils";
 import { PRICE_LABELS } from "../../shared/constants/appConfig";
 
+const ROUTE_LAYER_ID = "route-line";
+const ROUTE_HITBOX_LAYER_ID = "route-hitbox";
+
 function styleUrl(dark) {
   return dark ? DARK_VECTOR_STYLE : LIGHT_VECTOR_STYLE;
 }
@@ -59,6 +62,38 @@ function makeEndpointElement(bg, label) {
   return el;
 }
 
+function makeUserLocationElement() {
+  const wrapper = document.createElement("div");
+  wrapper.style.position = "relative";
+  wrapper.style.width = "26px";
+  wrapper.style.height = "26px";
+  wrapper.style.display = "flex";
+  wrapper.style.alignItems = "center";
+  wrapper.style.justifyContent = "center";
+  wrapper.style.cursor = "default";
+  wrapper.title = "Your current location";
+
+  const ring = document.createElement("div");
+  ring.style.position = "absolute";
+  ring.style.inset = "0";
+  ring.style.borderRadius = "999px";
+  ring.style.background = "rgba(249,115,22,0.24)";
+  ring.style.animation = "pulse-ring 1.8s ease-out infinite";
+
+  const dot = document.createElement("div");
+  dot.style.position = "relative";
+  dot.style.width = "15px";
+  dot.style.height = "15px";
+  dot.style.borderRadius = "999px";
+  dot.style.background = "#f97316";
+  dot.style.border = "3px solid white";
+  dot.style.boxShadow = "0 2px 10px rgba(124,45,18,0.35)";
+
+  wrapper.appendChild(ring);
+  wrapper.appendChild(dot);
+  return wrapper;
+}
+
 export function useMaplibreMap({
   darkMode,
   routePoints,
@@ -70,6 +105,7 @@ export function useMaplibreMap({
   onWaypointAdded,
   onEndpointDrag,
   debugPlaces = [],
+  userLocation = null,
 }) {
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
@@ -80,6 +116,7 @@ export function useMaplibreMap({
   const editModeRef = useRef(false);
   const routeListenersRef = useRef(null);
   const debugMarkersRef = useRef([]);
+  const userMarkRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
 
@@ -101,6 +138,12 @@ export function useMaplibreMap({
     mapRef.current = map;
     map.on("load", () => {
       setMapReady(true);
+      if (!document.getElementById("pl-pulse-style")) {
+        const s = document.createElement("style");
+        s.id = "pl-pulse-style";
+        s.textContent = `@keyframes pulse-ring { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.8); opacity: 0; } }`;
+        document.head.appendChild(s);
+      }
     });
     return () => {
       map.remove();
@@ -127,15 +170,23 @@ export function useMaplibreMap({
 
     // Cleanup previous listeners
     if (routeListenersRef.current) {
-      const { mousemove, mouseleave, click } = routeListenersRef.current;
-      map.off("mousemove", "route-line", mousemove);
-      map.off("mouseleave", "route-line", mouseleave);
-      map.off("click", "route-line", click);
+      const { mousemove, mousedown, mouseup, mouseleave, mapMouseMove, mapMouseUp } = routeListenersRef.current;
+      map.off("mousemove", ROUTE_HITBOX_LAYER_ID, mousemove);
+      map.off("mousedown", ROUTE_HITBOX_LAYER_ID, mousedown);
+      map.off("mouseup", ROUTE_HITBOX_LAYER_ID, mouseup);
+      map.off("mouseleave", ROUTE_HITBOX_LAYER_ID, mouseleave);
+      map.off("mousemove", ROUTE_LAYER_ID, mousemove);
+      map.off("mousedown", ROUTE_LAYER_ID, mousedown);
+      map.off("mouseup", ROUTE_LAYER_ID, mouseup);
+      map.off("mouseleave", ROUTE_LAYER_ID, mouseleave);
+      map.off("mousemove", mapMouseMove);
+      map.off("mouseup", mapMouseUp);
       routeListenersRef.current = null;
     }
 
     if (!routePoints || routePoints.length < 2) {
-      if (map.getLayer("route-line")) map.removeLayer("route-line");
+      if (map.getLayer(ROUTE_HITBOX_LAYER_ID)) map.removeLayer(ROUTE_HITBOX_LAYER_ID);
+      if (map.getLayer(ROUTE_LAYER_ID)) map.removeLayer(ROUTE_LAYER_ID);
       if (map.getSource("route")) map.removeSource("route");
       return;
     }
@@ -154,11 +205,18 @@ export function useMaplibreMap({
         data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } },
       });
       map.addLayer({
-        id: "route-line",
+        id: ROUTE_LAYER_ID,
         type: "line",
         source: "route",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: { "line-color": "#3B82F6", "line-width": 4, "line-opacity": 0.85 },
+      });
+      map.addLayer({
+        id: ROUTE_HITBOX_LAYER_ID,
+        type: "line",
+        source: "route",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: { "line-color": "#000000", "line-width": 24, "line-opacity": 0 },
       });
     }
 
@@ -173,8 +231,8 @@ export function useMaplibreMap({
     }
     const Ael = makeEndpointElement("#10b981", "A");
     const Bel = makeEndpointElement("#ef4444", "B");
-    const A = new maplibregl.Marker(Ael, { draggable: true }).setLngLat(first).addTo(map);
-    const B = new maplibregl.Marker(Bel, { draggable: true }).setLngLat(last).addTo(map);
+    const A = new maplibregl.Marker(Ael, { draggable: editRouteMode }).setLngLat(first).addTo(map);
+    const B = new maplibregl.Marker(Bel, { draggable: editRouteMode }).setLngLat(last).addTo(map);
 
     A.on("dragend", () => {
       if (onEndpointDrag) {
@@ -200,28 +258,62 @@ export function useMaplibreMap({
     ghostEl.style.width = "14px";
     ghostEl.style.height = "14px";
     ghostEl.style.borderRadius = "50%";
-    ghostEl.style.background = "#3B82F6";
-    ghostEl.style.opacity = "0.7";
-    ghostEl.style.border = "2px solid #3B82F6";
+    ghostEl.style.background = "#f59e0b";
+    ghostEl.style.opacity = "0.85";
+    ghostEl.style.border = "2px solid #f59e0b";
     const ghostMarker = new maplibregl.Marker(ghostEl).setLngLat(coords[0]);
     ghostMarkerRef.current = ghostMarker;
 
+    let isDragging = false;
+
     const onMouseMove = (e) => {
       if (!editModeRef.current) return;
+      map.getCanvas().style.cursor = isDragging ? "grabbing" : "grab";
       ghostMarker.setLngLat(e.lngLat);
       if (!ghostMarker._map) ghostMarker.addTo(map);
     };
-    const onMouseLeave = () => {
+    const onMouseDown = (e) => {
+      if (!editModeRef.current) return;
+      e.preventDefault?.();
+      e.originalEvent?.preventDefault?.();
+      isDragging = true;
+      ghostMarker.setLngLat(e.lngLat);
+      if (!ghostMarker._map) ghostMarker.addTo(map);
+      map.getCanvas().style.cursor = "grabbing";
+    };
+    const onMouseUp = (e) => {
+      if (!editModeRef.current || !isDragging) return;
+      isDragging = false;
+      onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
       ghostMarker.remove();
     };
-    const onClick = (e) => {
-      if (editModeRef.current) onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
+    const onMouseLeave = () => {
+      if (isDragging) return;
+      map.getCanvas().style.cursor = "";
+      ghostMarker.remove();
     };
 
-    map.on("mousemove", "route-line", onMouseMove);
-    map.on("mouseleave", "route-line", onMouseLeave);
-    map.on("click", "route-line", onClick);
-    routeListenersRef.current = { mousemove: onMouseMove, mouseleave: onMouseLeave, click: onClick };
+    const onMapMouseMove = (e) => {
+      if (!editModeRef.current || !isDragging) return;
+      map.getCanvas().style.cursor = "grabbing";
+      ghostMarker.setLngLat(e.lngLat);
+      if (!ghostMarker._map) ghostMarker.addTo(map);
+    };
+
+    const onMapMouseUp = (e) => {
+      if (!editModeRef.current || !isDragging) return;
+      isDragging = false;
+      onWaypointAdded(e.lngLat.lat, e.lngLat.lng);
+      ghostMarker.remove();
+    };
+
+    map.on("mousemove", ROUTE_HITBOX_LAYER_ID, onMouseMove);
+    map.on("mousedown", ROUTE_HITBOX_LAYER_ID, onMouseDown);
+    map.on("mouseup", ROUTE_HITBOX_LAYER_ID, onMouseUp);
+    map.on("mouseleave", ROUTE_HITBOX_LAYER_ID, onMouseLeave);
+    map.on("mousemove", onMapMouseMove);
+    map.on("mouseup", onMapMouseUp);
+    routeListenersRef.current = { mousemove: onMouseMove, mousedown: onMouseDown, mouseup: onMouseUp, mouseleave: onMouseLeave, mapMouseMove: onMapMouseMove, mapMouseUp: onMapMouseUp };
 
     // Fit bounds
     const bounds = coords.reduce(
@@ -229,7 +321,7 @@ export function useMaplibreMap({
       new maplibregl.LngLatBounds(coords[0], coords[0]),
     );
     map.fitBounds(bounds, { padding: 40 });
-  }, [mapReady, routePoints, styleVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, routePoints, styleVersion, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vendor markers — marker pool with ID-based diffing, popups, and auto-fit bounds
   useEffect(() => {
@@ -331,6 +423,42 @@ export function useMaplibreMap({
       debugMarkersRef.current.push(marker);
     });
   }, [mapReady, debugPlaces]);
+
+  // User location marker — blue dot
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    if (userMarkRef.current) {
+      userMarkRef.current.remove();
+      userMarkRef.current = null;
+    }
+
+    if (!userLocation) return;
+
+    const marker = new maplibregl.Marker(makeUserLocationElement())
+      .setLngLat([userLocation.longitude, userLocation.latitude])
+      .addTo(map);
+    userMarkRef.current = marker;
+  }, [mapReady, userLocation, styleVersion]);
+
+  // Lock/unlock map panning based on edit mode
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+    if (editRouteMode) {
+      map.dragPan.disable();
+      map.boxZoom.disable();
+      map.doubleClickZoom.disable();
+      map.keyboard.disable();
+      map.getCanvas().style.cursor = "default";
+    } else {
+      map.dragPan.enable();
+      map.boxZoom.enable();
+      map.doubleClickZoom.enable();
+      map.keyboard.enable();
+    }
+  }, [editRouteMode, mapReady]);
 
   return { mapDivRef, mapReady };
 }

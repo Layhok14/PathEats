@@ -1,0 +1,1 @@
+function e(t){return t%1===0?`$${t}`:`$${t.toFixed(2)}`}function n(t){const o=Math.floor((Date.now()-new Date(t).getTime())/6e4);if(o<60)return`${o}m ago`;const r=Math.floor(o/60);return r<24?`${r}h ago`:`${Math.floor(r/24)}d ago`}export{e as f,n as t};

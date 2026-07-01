@@ -6,6 +6,11 @@ import AuthService from "../services/AuthService.js";
 const authService = new AuthService();
 const router = Router();
 
+const requestContext = (req) => ({
+  ipAddress: req.ip || req.headers["x-forwarded-for"] || null,
+  userAgent: req.get("user-agent") || null,
+});
+
 /**
  * @swagger
  * components:
@@ -59,7 +64,8 @@ const router = Router();
  *                 firstName: { type: string }
  *                 lastName: { type: string }
  *                 role_scope: { type: string }
- *             token: { type: string }
+ *             accessToken: { type: string }
+ *             refreshToken: { type: string }
  *     MessageResponse:
  *       type: object
  *       properties:
@@ -100,7 +106,10 @@ router.post("/register", catchAsync(async (req, res) => {
       message: "Missing required fields: email, password, firstName, lastName",
     });
   }
-  const result = await authService.register({ email, password, firstName, lastName, phone, roleScope });
+  const result = await authService.register(
+    { email, password, firstName, lastName, phone, roleScope },
+    requestContext(req)
+  );
   res.status(201).json({ success: true, data: result });
 }));
 
@@ -127,14 +136,75 @@ router.post("/register", catchAsync(async (req, res) => {
  *         description: Invalid email or password
  */
 router.post("/login", catchAsync(async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, expectedRole, expectedRoles } = req.body;
   if (!email || !password) {
     return res.status(400).json({
       success: false,
       message: "Email and password are required",
     });
   }
-  const result = await authService.login(email, password);
+  const result = await authService.login(email, password, {
+    ...requestContext(req),
+    expectedRole,
+    expectedRoles,
+  });
+  res.json({ success: true, data: result });
+}));
+
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Refresh access token using refresh token
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken: { type: string }
+ *     responses:
+ *       200:
+ *         description: Tokens refreshed
+ *       401:
+ *         description: Invalid or expired refresh token
+ */
+router.post("/refresh", catchAsync(async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    return res.status(400).json({ success: false, message: "Refresh token is required" });
+  }
+  const result = await authService.refreshAccessToken(refreshToken, requestContext(req));
+  res.json({ success: true, data: result });
+}));
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Logout and revoke refresh token
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken: { type: string }
+ *     responses:
+ *       200:
+ *         description: Logged out
+ */
+router.post("/logout", catchAsync(async (req, res) => {
+  const { refreshToken } = req.body;
+  const result = await authService.logout(refreshToken, requestContext(req));
+  res.json({ success: true, data: result });
+}));
+
+router.post("/logout-all", authMiddleware, catchAsync(async (req, res) => {
+  const result = await authService.logoutAll(req.user.sub, requestContext(req));
   res.json({ success: true, data: result });
 }));
 

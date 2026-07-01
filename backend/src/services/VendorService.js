@@ -2,6 +2,23 @@ import VendorRepository from "../repositories/VendorRepository.js";
 import VendorModel from "../models/vendorModel.js";
 import AppError from "../utils/AppError.js";
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const normalizeMenuItemIds = (data) => {
+  const rawIds = data.menu_item_ids ?? data.menuItemIds ?? [];
+  if (!Array.isArray(rawIds)) {
+    throw new AppError("Menu item IDs must be an array", 400);
+  }
+
+  const ids = [...new Set(rawIds.map((id) => String(id).trim()).filter(Boolean))];
+  const invalidId = ids.find((id) => !UUID_PATTERN.test(id));
+  if (invalidId) {
+    throw new AppError("Menu item IDs must be valid UUIDs", 400);
+  }
+
+  return ids;
+};
+
 class VendorService {
   constructor() {
     this.vendorRepo = new VendorRepository();
@@ -17,11 +34,13 @@ class VendorService {
   }
 
   async createStall(ownerId, data) {
+    if (!ownerId) throw new AppError("Vendor owner is required", 401);
+
     const { valid, errors } = VendorModel.validateCreate(data);
     if (!valid) throw new AppError(errors.join("; "), 400);
 
     let categoryId = data.category_id;
-    if (categoryId && !categoryId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (categoryId && !UUID_PATTERN.test(categoryId)) {
       const cat = await this.vendorRepo.findCategory(categoryId);
       if (cat) {
         categoryId = cat.id;
@@ -34,6 +53,7 @@ class VendorService {
       owner_id: ownerId,
       ...data,
       category_id: categoryId,
+      menu_item_ids: normalizeMenuItemIds(data),
     });
 
     return VendorModel.toResponse(stall);
@@ -48,7 +68,7 @@ class VendorService {
   async updateStall(ownerId, stallId, data) {
     const stall = await this.vendorRepo.findOwnedById(stallId, ownerId);
     if (!stall) throw new AppError("Stall not found", 404);
-    const updated = await this.vendorRepo.update(stallId, data);
+    const updated = await this.vendorRepo.update(stallId, ownerId, data);
     return VendorModel.toResponse(updated);
   }
 
@@ -68,7 +88,7 @@ class VendorService {
   }
 
   async createMenuItemGlobal(ownerId, data) {
-    if (!data.name || data.price === undefined) {
+    if (!data.name || data.price === undefined || data.price === null || data.price === "") {
       throw new AppError("Name and price are required", 400);
     }
     const stalls = await this.vendorRepo.findByOwner(ownerId);
@@ -99,7 +119,7 @@ class VendorService {
   }
 
   async createMenuItem(ownerId, placeId, data) {
-    if (!data.name || !data.price) {
+    if (!data.name || data.price === undefined || data.price === null || data.price === "") {
       throw new AppError("Name and price are required", 400);
     }
     const item = await this.vendorRepo.createMenuItem(placeId, ownerId, data);

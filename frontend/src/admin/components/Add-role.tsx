@@ -126,7 +126,7 @@ export default function CreateRoleModal({ isOpen, onClose, onCreated, role }: Cr
             placeholder="Enter role name"
             value={roleName}
             onChange={(event) => setRoleName(event.target.value)}
-            className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 outline-none focus:border-[#006e2f]"
+            className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 outline-none focus:border-[#006e2f] bg-white text-[#374151]"
           />
         </div>
 
@@ -135,7 +135,7 @@ export default function CreateRoleModal({ isOpen, onClose, onCreated, role }: Cr
           <select
             value={selectedDb}
             onChange={(e) => setSelectedDb(e.target.value)}
-            className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 outline-none focus:border-[#006e2f]"
+            className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 outline-none focus:border-[#006e2f] bg-white text-[#374151]"
           >
             {availableDatabases.map((db) => (
               <option key={db} value={db}>{db}</option>

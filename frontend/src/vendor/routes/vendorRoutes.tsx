@@ -1,18 +1,46 @@
 import { Route, Navigate } from "react-router";
+import { lazy } from "react";
 import { AuthGuard } from "../../shared/components/AuthGuard";
-import { VendorLayout } from "../layouts/VendorLayout";
-import { VendorLoginPage } from "../pages/VendorLoginPage";
-import { VendorRegisterPage } from "../pages/VendorRegisterPage";
-import { DashboardPage } from "../pages/DashboardPage";
-import { StallListPage } from "../pages/StallListPage";
-import { StallCreatePage } from "../pages/StallCreatePage";
-import { StallDetailPage } from "../pages/StallDetailPage";
-import { StallViewPage } from "../pages/StallViewPage";
-import { LocationPinpointPage } from "../pages/LocationPinpointPage";
-import { ReviewsPage } from "../pages/ReviewsPage";
-import { SettingsPage } from "../pages/SettingsPage";
-import { OnboardingPage } from "../pages/OnboardingPage";
-import { MenuItemsPage } from "../pages/MenuItemsPage";
+
+const VendorLayout = lazy(() =>
+  import("../layouts/VendorLayout").then((module) => ({ default: module.VendorLayout }))
+);
+const VendorLoginPage = lazy(() =>
+  import("../pages/VendorLoginPage").then((module) => ({ default: module.VendorLoginPage }))
+);
+const VendorRegisterPage = lazy(() =>
+  import("../pages/VendorRegisterPage").then((module) => ({ default: module.VendorRegisterPage }))
+);
+const DashboardPage = lazy(() =>
+  import("../pages/DashboardPage").then((module) => ({ default: module.DashboardPage }))
+);
+const StallListPage = lazy(() =>
+  import("../pages/StallListPage").then((module) => ({ default: module.StallListPage }))
+);
+const StallCreatePage = lazy(() =>
+  import("../pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage }))
+);
+const StallDetailPage = lazy(() =>
+  import("../pages/StallDetailPage").then((module) => ({ default: module.StallDetailPage }))
+);
+const StallViewPage = lazy(() =>
+  import("../pages/StallViewPage").then((module) => ({ default: module.StallViewPage }))
+);
+const LocationPinpointPage = lazy(() =>
+  import("../pages/LocationPinpointPage").then((module) => ({ default: module.LocationPinpointPage }))
+);
+const MenuItemsPage = lazy(() =>
+  import("../pages/MenuItemsPage").then((module) => ({ default: module.MenuItemsPage }))
+);
+const ReviewsPage = lazy(() =>
+  import("../pages/ReviewsPage").then((module) => ({ default: module.ReviewsPage }))
+);
+const OnboardingPage = lazy(() =>
+  import("../pages/OnboardingPage").then((module) => ({ default: module.OnboardingPage }))
+);
+const SettingsPage = lazy(() =>
+  import("../pages/SettingsPage").then((module) => ({ default: module.SettingsPage }))
+);
 
 export function VendorRoutes() {
   return (

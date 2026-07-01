@@ -3,7 +3,7 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import { catchAsync } from "../utils/catchAsync.js";
 import * as adminController from "../controllers/adminController.js";
-import db from "../config/db.js";
+import db, { pool } from "../config/db.js";
 
 const router = Router();
 
@@ -12,10 +12,12 @@ const devAdminBypass = (req, res, next) => {
   const isBypassEnabled = process.env.PATHEAT_ADMIN_BYPASS === "true";
 
   if (isDevelopment && isBypassEnabled) {
+    console.warn("[BYPASS] Admin bypass active — hardcoded GLOBAL_ADMIN session");
     req.user = {
       sub: "dev-admin",
       email: "dev-admin@patheat.local",
       role_scope: "GLOBAL_ADMIN",
+      role: "GLOBAL_ADMIN",
     };
     return next();
   }
@@ -25,6 +27,8 @@ const devAdminBypass = (req, res, next) => {
 
 router.use(devAdminBypass);
 router.use(restrictToRoles("GLOBAL_ADMIN", "BUSINESS_ASSISTANCE"));
+
+const globalAdminOnly = restrictToRoles("GLOBAL_ADMIN");
 
 /**
  * @swagger
@@ -81,8 +85,8 @@ router.get("/telemetry", catchAsync(adminController.getDashboardTelemetry));
  *       201:
  *         description: Role created
  */
-router.get("/roles", catchAsync(adminController.getRoles));
-router.post("/roles", catchAsync(adminController.createRole));
+router.get("/roles", globalAdminOnly, catchAsync(adminController.getRoles));
+router.post("/roles", globalAdminOnly, catchAsync(adminController.createRole));
 
 /**
  * @swagger
@@ -123,8 +127,8 @@ router.post("/roles", catchAsync(adminController.createRole));
  *       200:
  *         description: Role deleted
  */
-router.patch("/roles/:id", catchAsync(adminController.updateRoleRecord));
-router.delete("/roles/:id", catchAsync(adminController.deleteRoleRecord));
+router.patch("/roles/:id", globalAdminOnly, catchAsync(adminController.updateRoleRecord));
+router.delete("/roles/:id", globalAdminOnly, catchAsync(adminController.deleteRoleRecord));
 
 /**
  * @swagger
@@ -162,8 +166,8 @@ router.delete("/roles/:id", catchAsync(adminController.deleteRoleRecord));
  *       201:
  *         description: User created
  */
-router.get("/users", catchAsync(adminController.getUsers));
-router.post("/users", catchAsync(adminController.createUser));
+router.get("/users", globalAdminOnly, catchAsync(adminController.getUsers));
+router.post("/users", globalAdminOnly, catchAsync(adminController.createUser));
 
 /**
  * @swagger
@@ -180,7 +184,7 @@ router.post("/users", catchAsync(adminController.createUser));
  *       200:
  *         description: Overview rows
  */
-router.get("/user-management/overview", catchAsync(adminController.getUserManagementOverview));
+router.get("/user-management/overview", globalAdminOnly, catchAsync(adminController.getUserManagementOverview));
 
 /**
  * @swagger
@@ -206,7 +210,7 @@ router.get("/user-management/overview", catchAsync(adminController.getUserManage
  *       200:
  *         description: Role updated
  */
-router.patch("/users/:id/role", catchAsync(adminController.updateRole));
+router.patch("/users/:id/role", globalAdminOnly, catchAsync(adminController.updateRole));
 
 /**
  * @swagger
@@ -232,7 +236,7 @@ router.patch("/users/:id/role", catchAsync(adminController.updateRole));
  *       200:
  *         description: Status updated
  */
-router.patch("/users/:id/status", catchAsync(adminController.updateStatus));
+router.patch("/users/:id/status", globalAdminOnly, catchAsync(adminController.updateStatus));
 
 /**
  * @swagger
@@ -258,7 +262,7 @@ router.patch("/users/:id/status", catchAsync(adminController.updateStatus));
  *       200:
  *         description: User ban status updated
  */
-router.post("/users/:id/ban", catchAsync(async (req, res, next) => {
+router.post("/users/:id/ban", globalAdminOnly, catchAsync(async (req, res, next) => {
   req.body.status = req.body.banned === false ? "Active" : "Suspended";
   return adminController.updateStatus(req, res, next);
 }));
@@ -316,9 +320,9 @@ router.post("/users/:id/ban", catchAsync(async (req, res, next) => {
  *       200:
  *         description: User deleted
  */
-router.get("/users/:id", catchAsync(adminController.getUserById));
-router.patch("/users/:id", catchAsync(adminController.updateUser));
-router.delete("/users/:id", catchAsync(adminController.deleteUser));
+router.get("/users/:id", globalAdminOnly, catchAsync(adminController.getUserById));
+router.patch("/users/:id", globalAdminOnly, catchAsync(adminController.updateUser));
+router.delete("/users/:id", globalAdminOnly, catchAsync(adminController.deleteUser));
 
 /**
  * @swagger
@@ -413,7 +417,7 @@ router.get("/stall-management/options", catchAsync(adminController.getStallManag
  *       200:
  *         description: Array of active queries
  */
-router.get("/audit/activity", catchAsync(adminController.getAuditActivity));
+router.get("/audit/activity", globalAdminOnly, catchAsync(adminController.getAuditActivity));
 
 /**
  * @swagger
@@ -430,7 +434,7 @@ router.get("/audit/activity", catchAsync(adminController.getAuditActivity));
  *       200:
  *         description: Array of audit log entries
  */
-router.get("/audit/logs", catchAsync(adminController.getAuditLogs));
+router.get("/audit/logs", globalAdminOnly, catchAsync(adminController.getAuditLogs));
 
 /**
  * @swagger
@@ -443,7 +447,7 @@ router.get("/audit/logs", catchAsync(adminController.getAuditLogs));
  *       200:
  *         description: Array of table names
  */
-router.get("/tables", catchAsync(adminController.getDatabaseTables));
+router.get("/tables", globalAdminOnly, catchAsync(adminController.getDatabaseTables));
 
 /**
  * @swagger
@@ -545,6 +549,7 @@ router.post("/stalls", catchAsync(adminController.createStall));
  *           schema:
  *             type: object
  *             properties:
+ *               ownerId: { type: string, description: "Vendor owner UUID" }
  *               name: { type: string }
  *               description: { type: string }
  *               address: { type: string }
@@ -859,7 +864,7 @@ router.delete("/stalls/reviews/:id", catchAsync(adminController.deleteStallRevie
  *       200:
  *         description: Health status
  */
-router.get("/health", catchAsync(async (req, res) => {
+router.get("/health", globalAdminOnly, catchAsync(async (req, res) => {
   try {
     const dbResult = await pool.query("SELECT NOW() AS now");
     const latency = Date.now() - req._startTime;
@@ -880,7 +885,7 @@ router.get("/health", catchAsync(async (req, res) => {
 
 // ── Kill Query ──────────────────────────────────────────────────────────────
 
-router.post("/audit/kill-query", catchAsync(async (req, res) => {
+router.post("/audit/kill-query", globalAdminOnly, catchAsync(async (req, res) => {
   const { pid } = req.body;
   if (!pid || typeof pid !== "number") {
     throw new AppError("Valid PID (number) is required", 400);

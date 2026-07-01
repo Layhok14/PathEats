@@ -3,7 +3,8 @@
 import { Heart, Star } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { PRICE_LABELS } from "../../shared/constants/appConfig";
-import type { Vendor } from "../../shared/types";
+import type { EntityId, Vendor } from "../../shared/types";
+import { VendorPhoto } from "./VendorPhoto";
 
 export function FavoritesPanel({
   favorites,
@@ -11,13 +12,13 @@ export function FavoritesPanel({
   onSelectVendor,
   onToggleFavorite,
 }: {
-  favorites: Set<number>;
+  favorites: Set<string>;
   vendors: Vendor[];
   onSelectVendor: (v: Vendor) => void;
-  onToggleFavorite: (id: number) => void;
+  onToggleFavorite: (id: EntityId) => void;
 }) {
   const { tm } = useTheme();
-  const saved = vendors.filter((v) => favorites.has(v.id));
+  const saved = vendors.filter((v) => favorites.has(String(v.id)));
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -54,11 +55,7 @@ export function FavoritesPanel({
                 className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/5"
               >
                 <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0">
-                  <img
-                    src={v.photo_url}
-                    alt={v.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <VendorPhoto vendor={v} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div

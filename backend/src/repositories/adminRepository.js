@@ -1,6 +1,14 @@
-import pool from "../config/db.js";
+import { pool } from "../config/db.js";
+import AppError from "../utils/AppError.js";
+import {
+  hasStorageImageInput,
+  imageDisplayUrlFromStorageInput,
+  upsertPrimaryMenuItemImage,
+  upsertPrimaryPlaceImage,
+} from "../utils/storageImageMetadata.js";
 
 const quoteIdent = (value) => `"${String(value).replace(/"/g, '""')}"`;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const menuItemCategory = (cat) => {
   const norm = {
@@ -16,10 +24,114 @@ const optionalRows = async (query, params = [], fallback = []) => {
     const result = await pool.query(query, params);
     return result.rows;
   } catch (error) {
-    console.warn(`[adminRepository] ${error.message}`);
+    console.error(`[adminRepository] Query failed: ${error.message}`);
+    console.error(`  SQL: ${query.slice(0, 200)}`);
     return fallback;
   }
 };
+
+const withTransaction = async (callback) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const uploadedBy = (payload, fallbackUserId = null) => payload?.uploadedBy || payload?.uploaded_by || fallbackUserId;
+
+const ensureVendorOwner = async (ownerId, client = pool) => {
+  const normalizedOwnerId = String(ownerId ?? "").trim();
+  if (!normalizedOwnerId) {
+    throw new AppError("Vendor owner is required", 400);
+  }
+
+  const result = await client.query(
+    `
+    SELECT id::text, email
+    FROM users
+    WHERE id::text = $1
+      AND role_scope = 'VENDOR'
+    LIMIT 1
+    `,
+    [normalizedOwnerId]
+  );
+
+  if (!result.rows.length) {
+    throw new AppError("Vendor owner must be a valid vendor account", 400);
+  }
+
+  return result.rows[0];
+};
+
+const getOwnedPlaceCount = async (userId, client = pool) => {
+  const result = await client.query(
+    "SELECT COUNT(*)::int AS count FROM places WHERE owner_id::text = $1",
+    [userId]
+  );
+  return Number(result.rows[0]?.count ?? 0);
+};
+
+const toStorageImage = (row) => {
+  if (!row.image_bucket || !row.image_path) return null;
+
+  return {
+    bucketName: row.image_bucket,
+    objectPath: row.image_path,
+    mimeType: row.image_mime_type || null,
+    altText: row.image_alt_text || "",
+  };
+};
+
+const withMenuImageMetadata = (item, image) => ({
+  ...item,
+  image_bucket: image?.bucket_name ?? item.image_bucket ?? null,
+  image_path: image?.object_path ?? item.image_path ?? null,
+  image_mime_type: image?.mime_type ?? item.image_mime_type ?? null,
+  image_alt_text: image?.alt_text ?? item.image_alt_text ?? null,
+});
+
+const primaryPlaceImageSelect = `
+  pi.bucket_name AS image_bucket,
+  pi.object_path AS image_path,
+  pi.mime_type AS image_mime_type,
+  pi.alt_text AS image_alt_text
+`;
+
+const primaryPlaceImageJoin = `
+  LEFT JOIN LATERAL (
+    SELECT bucket_name, object_path, mime_type, alt_text
+    FROM place_images
+    WHERE place_id::text = p.id::text
+    ORDER BY is_primary DESC, sort_order ASC, created_at ASC
+    LIMIT 1
+  ) pi ON TRUE
+`;
+
+const primaryMenuItemImageSelect = `
+  mii.bucket_name AS image_bucket,
+  mii.object_path AS image_path,
+  mii.mime_type AS image_mime_type,
+  mii.alt_text AS image_alt_text
+`;
+
+const primaryMenuItemImageJoin = `
+  LEFT JOIN LATERAL (
+    SELECT bucket_name, object_path, mime_type, alt_text
+    FROM menu_item_images
+    WHERE menu_item_id::text = mi.id::text
+    ORDER BY is_primary DESC, sort_order ASC, created_at ASC
+    LIMIT 1
+  ) mii ON TRUE
+`;
 
 const countRows = async (tableName, whereClause = "") => {
   const rows = await optionalRows(
@@ -88,10 +200,17 @@ export const logAuditAction = async (adminId, action, targetType, targetId, deta
   try {
     await pool.query(
       `
-      INSERT INTO audit_log (admin_id, action, target_type, target_id, details)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO audit_log (admin_id, actor_id, action, target_type, target_id, details)
+      VALUES ($1, $2, $3, $4, $5, $6)
       `,
-      [adminId, action, targetType, targetId, details ? JSON.stringify(details) : null]
+      [
+        adminId,
+        uuidPattern.test(String(adminId ?? "")) ? adminId : null,
+        action,
+        targetType,
+        targetId,
+        details ? JSON.stringify(details) : "{}",
+      ]
     );
   } catch (err) {
     console.warn(`[audit_log] Failed to log: ${err.message}`);
@@ -290,10 +409,7 @@ export const getUserManagementOverview = async (search = "") => {
         u.first_name ILIKE $1 OR
         u.last_name ILIKE $1 OR
         u.email ILIKE $1 OR
-        u.role_scope ILIKE $1 OR
-        up.theme ILIKE $1 OR
-        sh.query ILIKE $1 OR
-        sh.filters::text ILIKE $1
+        u.role_scope ILIKE $1
       )
     `
     : "";
@@ -310,28 +426,25 @@ export const getUserManagementOverview = async (search = "") => {
       u.created_at AS user_created_at,
       to_jsonb(u) AS user_details,
       up.id::text AS preference_id,
-      up.theme AS preference_theme,
-      to_jsonb(up) AS preference_details,
-      sh.id::text AS search_id,
-      sh.query AS search_query,
-      sh.filters AS search_filters,
-      sh.results_count AS search_results_count,
-      sh.created_at AS search_created_at,
-      to_jsonb(sh) AS search_details
+      up.updated_at AS preference_updated_at,
+      COALESCE(sh.search_count, 0)::int AS search_count,
+      sh.latest_search_at,
+      COALESCE(sh.total_results_count, 0)::int AS total_results_count
     FROM users u
     LEFT JOIN LATERAL (
-      SELECT *
+      SELECT id, updated_at
       FROM user_preferences
       WHERE user_id::text = u.id::text
       ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST
       LIMIT 1
     ) up ON true
     LEFT JOIN LATERAL (
-      SELECT *
+      SELECT
+        COUNT(*)::int AS search_count,
+        MAX(created_at) AS latest_search_at,
+        COALESCE(SUM(results_count), 0)::int AS total_results_count
       FROM search_history
       WHERE user_id::text = u.id::text
-      ORDER BY created_at DESC NULLS LAST
-      LIMIT 1
     ) sh ON true
     ${whereClause}
     ORDER BY u.created_at DESC NULLS LAST
@@ -355,14 +468,21 @@ export const getUserManagementOverview = async (search = "") => {
         details: userDetails,
       },
       preference: {
-        label: row.preference_theme || "No preference",
-        subLabel: row.preference_id ? "Theme" : "No row in user_preferences",
-        details: row.preference_details,
+        label: row.preference_id ? "Preference profile exists" : "No preference profile",
+        subLabel: row.preference_id ? "Private preference details hidden" : "No row in user_preferences",
+        details: {
+          hasPreferences: Boolean(row.preference_id),
+          lastUpdatedAt: row.preference_updated_at ?? null,
+        },
       },
       search: {
-        label: row.search_filters ? JSON.stringify(row.search_filters) : row.search_query || "No search history",
-        subLabel: row.search_query || (row.search_id ? "Search row" : "No row in search_history"),
-        details: row.search_details,
+        label: `${Number(row.search_count ?? 0)} searches`,
+        subLabel: row.latest_search_at ? "Latest search timestamp only" : "No search history",
+        details: {
+          count: Number(row.search_count ?? 0),
+          latestSearchAt: row.latest_search_at ?? null,
+          totalResultsCount: Number(row.total_results_count ?? 0),
+        },
       },
     };
   });
@@ -417,7 +537,7 @@ export const getVendorManagementOverview = async (search = "") => {
       rv.body AS review_body,
       to_jsonb(rv) AS review_details
     FROM places p
-    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
     LEFT JOIN LATERAL (
       SELECT *
@@ -506,7 +626,7 @@ export const findAllVendors = async () => {
   ];
   const joins = [
     available.has("category_id") ? "LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text" : "",
-    available.has("owner_id") ? "LEFT JOIN users u ON u.id::text = p.owner_id::text" : "",
+    available.has("owner_id") ? "JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'" : "",
   ].filter(Boolean);
   const orderBy = available.has("created_at") ? "ORDER BY p.created_at DESC" : "ORDER BY p.id DESC";
 
@@ -516,7 +636,7 @@ export const findAllVendors = async () => {
     FROM places p
     ${joins.join("\n")}
     ${orderBy}
-    LIMIT 500
+    LIMIT 5000
     `
   );
 
@@ -566,11 +686,11 @@ export const approveVendor = async (id, approved) => {
   return result.rows[0] ?? null;
 };
 
-const insertAllowed = async (tableName, values) => {
+const insertAllowed = async (tableName, values, client = pool) => {
   const allowed = new Set(await getColumns(tableName));
   const keys = Object.keys(values).filter((key) => allowed.has(key) && values[key] !== undefined);
   const placeholders = keys.map((_, index) => `$${index + 1}`);
-  const result = await pool.query(
+  const result = await client.query(
     `
     INSERT INTO ${quoteIdent(tableName)} (${keys.map(quoteIdent).join(", ")})
     VALUES (${placeholders.join(", ")})
@@ -603,7 +723,7 @@ export const getStallManagementOptions = async () => {
       `
       SELECT p.id::text, p.name, p.owner_id::text, COALESCE(u.email, '') AS owner_email
       FROM places p
-      LEFT JOIN users u ON u.id::text = p.owner_id::text
+      JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
       ORDER BY p.created_at DESC NULLS LAST
       LIMIT 300
       `
@@ -621,48 +741,71 @@ export const getStallManagementOptions = async () => {
   };
 };
 
-export const createStall = async ({ ownerId, categoryId, name, description, address, priceRange, photoUrl, latitude, longitude }) => {
+export const createStall = async (payload) => {
+  const { ownerId, categoryId, name, description, address, priceRange, latitude, longitude } = payload;
   const columns = await getColumns("places");
   const allowed = new Set(columns);
   const lat = latitude ?? 11.5564;
   const lng = longitude ?? 104.9282;
+  const displayPhotoUrl = imageDisplayUrlFromStorageInput(payload, ["photoUrl", "photo_url"]);
 
-  if (allowed.has("location")) {
-    const result = await pool.query(
-      `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, location)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'APPROVED', ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
-       RETURNING *`,
-      [
-        ownerId || null,
-        categoryId,
-        name,
-        description || null,
-        address || null,
-        priceRange == null ? null : Number(priceRange),
-        photoUrl || null,
-        lng,
-        lat,
-      ]
-    );
-    return result.rows[0] ?? null;
-  }
+  const stall = await withTransaction(async (client) => {
+    let created;
+    const owner = await ensureVendorOwner(ownerId, client);
 
-  const values = {
-    owner_id: ownerId || null,
-    category_id: categoryId,
-    name,
-    description: description || null,
-    address: address || null,
-    price_range: priceRange || null,
-    photo_url: photoUrl || null,
-    is_open: true,
-    status: "APPROVED",
-  };
+    if (allowed.has("location")) {
+      const result = await client.query(
+        `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, location)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'APPROVED', ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
+         RETURNING id::text`,
+        [
+          owner.id,
+          categoryId,
+          name,
+          description || null,
+          address || null,
+          priceRange == null ? null : Number(priceRange),
+          displayPhotoUrl ?? null,
+          lng,
+          lat,
+        ]
+      );
+      created = result.rows[0] ?? null;
+    } else {
+      created = await insertAllowed(
+        "places",
+        {
+          owner_id: owner.id,
+          category_id: categoryId,
+          name,
+          description: description || null,
+          address: address || null,
+          price_range: priceRange || null,
+          photo_url: displayPhotoUrl ?? null,
+          is_open: true,
+          status: "APPROVED",
+        },
+        client
+      );
+    }
 
-  return insertAllowed("places", values);
+    if (!created) return null;
+
+    await upsertPrimaryPlaceImage(client, created.id, payload, uploadedBy(payload, owner.id));
+    return created;
+  });
+
+  return stall ? findStallById(stall.id) : null;
 };
 
 export const deleteStall = async (id) => {
+  await pool.query(
+    `DELETE FROM menu_item_images mii
+     USING menu_items mi
+     WHERE mii.menu_item_id::text = mi.id::text
+       AND mi.place_id::text = $1`,
+    [id]
+  );
   await pool.query("DELETE FROM menu_items WHERE place_id::text = $1", [id]);
   await pool.query("DELETE FROM place_hours WHERE place_id::text = $1", [id]);
   await pool.query("DELETE FROM reviews WHERE place_id::text = $1", [id]);
@@ -672,18 +815,31 @@ export const deleteStall = async (id) => {
 };
 
 export const createStallMenuItem = async (placeId, payload) => {
-  return insertAllowed("menu_items", {
-    place_id: placeId,
-    name: payload.name,
-    description: payload.description || null,
-    price: payload.price,
-    category: menuItemCategory(payload.category),
-    image_url: payload.imageUrl || payload.image_url || null,
-    is_available: payload.isAvailable ?? payload.is_available ?? true,
+  const displayImageUrl = imageDisplayUrlFromStorageInput(payload, ["imageUrl", "image_url"]);
+  return withTransaction(async (client) => {
+    const item = await insertAllowed(
+      "menu_items",
+      {
+        place_id: placeId,
+        name: payload.name,
+        description: payload.description || null,
+        price: payload.price,
+        category: menuItemCategory(payload.category),
+        image_url: displayImageUrl ?? null,
+        is_available: payload.isAvailable ?? payload.is_available ?? true,
+      },
+      client
+    );
+
+    if (!item) return null;
+
+    const image = await upsertPrimaryMenuItemImage(client, item.id, payload, uploadedBy(payload));
+    return withMenuImageMetadata(item, image);
   });
 };
 
 export const deleteStallMenuItem = async (id) => {
+  await pool.query("DELETE FROM menu_item_images WHERE menu_item_id::text = $1", [id]);
   const result = await pool.query("DELETE FROM menu_items WHERE id::text = $1 RETURNING id::text", [id]);
   return result.rows[0] ?? null;
 };
@@ -907,12 +1063,14 @@ export const findAllStalls = async () => {
       p.address,
       p.price_range,
       p.photo_url,
+      p.is_admin_managed,
       p.is_open,
       p.status,
       CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
       p.rating_avg,
       p.rating_count,
       p.owner_id::text,
+      ${primaryPlaceImageSelect},
       COALESCE(u.email, '') AS owner_email,
       CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
       ST_AsGeoJSON(p.location)::jsonb AS location,
@@ -923,10 +1081,11 @@ export const findAllStalls = async () => {
       ) AS category,
       to_jsonb(p) AS place_details
     FROM places p
-    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
+    ${primaryPlaceImageJoin}
     ORDER BY p.created_at DESC NULLS LAST
-    LIMIT 500
+    LIMIT 5000
     `
   );
 
@@ -938,6 +1097,8 @@ export const findAllStalls = async () => {
       address: row.address,
       priceRange: row.price_range,
       photoUrl: row.photo_url,
+      storageImage: toStorageImage(row),
+      isAdminManaged: row.is_admin_managed,
       isOpen: row.is_open,
       status: row.status,
       isApproved: row.is_approved,
@@ -963,12 +1124,14 @@ export const findStallsByOwner = async (ownerId) => {
       p.address,
       p.price_range,
       p.photo_url,
+      p.is_admin_managed,
       p.is_open,
       p.status,
       CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
       p.rating_avg,
       p.rating_count,
       p.owner_id::text,
+      ${primaryPlaceImageSelect},
       COALESCE(u.email, '') AS owner_email,
       CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
       ST_AsGeoJSON(p.location)::jsonb AS location,
@@ -979,8 +1142,9 @@ export const findStallsByOwner = async (ownerId) => {
       ) AS category,
       to_jsonb(p) AS place_details
     FROM places p
-    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
+    ${primaryPlaceImageJoin}
     WHERE p.owner_id::text = $1
     ORDER BY p.created_at DESC NULLS LAST
     `,
@@ -994,6 +1158,8 @@ export const findStallsByOwner = async (ownerId) => {
     address: row.address,
     priceRange: row.price_range,
     photoUrl: row.photo_url,
+    storageImage: toStorageImage(row),
+    isAdminManaged: row.is_admin_managed,
     isOpen: row.is_open,
     status: row.status,
     isApproved: row.is_approved,
@@ -1018,12 +1184,14 @@ export const findStallById = async (id) => {
       p.address,
       p.price_range,
       p.photo_url,
+      p.is_admin_managed,
       p.is_open,
       p.status,
       CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
       p.rating_avg,
       p.rating_count,
       p.owner_id::text,
+      ${primaryPlaceImageSelect},
       COALESCE(u.email, '') AS owner_email,
       CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
       ST_AsGeoJSON(p.location)::jsonb AS location,
@@ -1034,8 +1202,9 @@ export const findStallById = async (id) => {
       ) AS category,
       to_jsonb(p) AS place_details
     FROM places p
-    LEFT JOIN users u ON u.id::text = p.owner_id::text
+    JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
+    ${primaryPlaceImageJoin}
     WHERE p.id::text = $1
     ORDER BY p.created_at DESC NULLS LAST
     LIMIT 1
@@ -1052,6 +1221,8 @@ export const findStallById = async (id) => {
     address: row.address,
     priceRange: row.price_range,
     photoUrl: row.photo_url,
+    storageImage: toStorageImage(row),
+    isAdminManaged: row.is_admin_managed,
     isOpen: row.is_open,
     status: row.status,
     isApproved: row.is_approved,
@@ -1071,13 +1242,14 @@ export const updateStall = async (id, payload) => {
   const sets = [];
   const params = [];
   let idx = 1;
+  const displayPhotoUrl = imageDisplayUrlFromStorageInput(payload, ["photoUrl", "photo_url"]);
+  const ownerIdUpdate = payload.ownerId === undefined ? null : String(payload.ownerId ?? "").trim();
 
   const fieldMap = {
     name: "name",
     description: "description",
     address: "address",
     priceRange: "price_range",
-    photoUrl: "photo_url",
     isOpen: "is_open",
     status: "status",
     isApproved: "is_approved",
@@ -1094,25 +1266,59 @@ export const updateStall = async (id, payload) => {
     }
   }
 
+  if (payload.ownerId !== undefined && allowed.has("owner_id")) {
+    if (!ownerIdUpdate) {
+      throw new AppError("Vendor owner is required", 400);
+    }
+    sets.push(`${quoteIdent("owner_id")} = $${idx++}`);
+    params.push(ownerIdUpdate);
+  }
+
+  if (displayPhotoUrl !== undefined && allowed.has("photo_url")) {
+    sets.push(`${quoteIdent("photo_url")} = $${idx++}`);
+    params.push(displayPhotoUrl);
+  }
+
   if (payload.latitude !== undefined && payload.longitude !== undefined && allowed.has("location")) {
     hasLocation = true;
     locationLat = payload.latitude;
     locationLng = payload.longitude;
   }
 
-  if (sets.length === 0 && !hasLocation) return null;
+  const hasImageUpdate = hasStorageImageInput(payload);
+  if (sets.length === 0 && !hasLocation && !hasImageUpdate) return null;
 
   if (hasLocation) {
     sets.push(`location = ST_SetSRID(ST_MakePoint($${idx++}, $${idx++}), 4326)::geography`);
     params.push(locationLng, locationLat);
   }
 
-  params.push(id);
-  const result = await pool.query(
-    `UPDATE places SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text`,
-    params
-  );
-  return result.rows[0] ?? null;
+  const updatedStall = await withTransaction(async (client) => {
+    let stall = { id };
+
+    if (ownerIdUpdate) {
+      await ensureVendorOwner(ownerIdUpdate, client);
+    }
+
+    if (sets.length > 0 || hasLocation) {
+      params.push(id);
+      const result = await client.query(
+        `UPDATE places SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text`,
+        params
+      );
+      stall = result.rows[0] ?? null;
+    } else {
+      const result = await client.query("SELECT id::text FROM places WHERE id::text = $1 LIMIT 1", [id]);
+      stall = result.rows[0] ?? null;
+    }
+
+    if (!stall) return null;
+
+    await upsertPrimaryPlaceImage(client, id, payload, uploadedBy(payload, payload.ownerId));
+    return stall;
+  });
+
+  return updatedStall ? findStallById(id) : null;
 };
 
 export const updateStallStatus = async (id, isOpen) => {
@@ -1123,7 +1329,7 @@ export const updateStallStatus = async (id, isOpen) => {
   return result.rows[0] ?? null;
 };
 
-export const findAllMenuItems = async () => {
+export const findAllMenuItems = async (placeId = null) => {
   const rows = await optionalRows(
     `
     SELECT
@@ -1133,15 +1339,18 @@ export const findAllMenuItems = async () => {
       mi.price,
       mi.category,
       mi.image_url,
+      ${primaryMenuItemImageSelect},
       mi.is_available,
       mi.place_id::text,
-      p.name AS place_name,
-      to_jsonb(mi) AS item_details
+      p.name AS place_name
     FROM menu_items mi
     LEFT JOIN places p ON p.id::text = mi.place_id::text
+    ${primaryMenuItemImageJoin}
+    ${placeId ? `WHERE mi.place_id::text = $1` : ""}
     ORDER BY p.name ASC, mi.name ASC
-    LIMIT 500
     `
+  ,
+    placeId ? [placeId] : []
   );
   return rows.map((row) => ({
     id: row.id,
@@ -1150,6 +1359,7 @@ export const findAllMenuItems = async () => {
     price: row.price,
     category: row.category,
     imageUrl: row.image_url,
+    storageImage: toStorageImage(row),
     isAvailable: row.is_available,
     placeId: row.place_id,
     placeName: row.place_name,
@@ -1161,13 +1371,13 @@ export const updateMenuItem = async (id, payload) => {
   const sets = [];
   const params = [];
   let idx = 1;
+  const displayImageUrl = imageDisplayUrlFromStorageInput(payload, ["imageUrl", "image_url"]);
 
   const fieldMap = {
     name: "name",
     description: "description",
     price: "price",
     category: "category",
-    imageUrl: "image_url",
     isAvailable: "is_available",
   };
 
@@ -1178,15 +1388,34 @@ export const updateMenuItem = async (id, payload) => {
       params.push(val);
     }
   }
+  if (displayImageUrl !== undefined && allowed.has("image_url")) {
+    sets.push(`${quoteIdent("image_url")} = $${idx++}`);
+    params.push(displayImageUrl);
+  }
 
-  if (sets.length === 0) return null;
+  const hasImageUpdate = hasStorageImageInput(payload);
+  if (sets.length === 0 && !hasImageUpdate) return null;
 
-  params.push(id);
-  const result = await pool.query(
-    `UPDATE menu_items SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text`,
-    params
-  );
-  return result.rows[0] ?? null;
+  return withTransaction(async (client) => {
+    let item = { id };
+
+    if (sets.length > 0) {
+      params.push(id);
+      const result = await client.query(
+        `UPDATE menu_items SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING *`,
+        params
+      );
+      item = result.rows[0] ?? null;
+    } else {
+      const result = await client.query("SELECT * FROM menu_items WHERE id::text = $1 LIMIT 1", [id]);
+      item = result.rows[0] ?? null;
+    }
+
+    if (!item) return null;
+
+    const image = await upsertPrimaryMenuItemImage(client, id, payload, uploadedBy(payload));
+    return withMenuImageMetadata(item, image);
+  });
 };
 
 export const getAuditActivity = async () => {
@@ -1217,17 +1446,9 @@ export const getAuditActivity = async () => {
 // ── Audit Log Table ────────────────────────────────────────────────────
 
 export const ensureAuditLogTable = async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      admin_id TEXT,
-      action TEXT NOT NULL,
-      target_type TEXT,
-      target_id TEXT,
-      details JSONB,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
+  if (!(await tableExists("audit_log"))) {
+    console.warn("[audit_log] Table missing; run the authoritative seed/migration before using audit logs.");
+  }
 };
 
 export const getAuditLogs = async (limit = 50) => {
@@ -1301,6 +1522,16 @@ export const updateUser = async (id, { firstName, lastName, email, role }) => {
   const params = [];
   let idx = 1;
 
+  if (role !== undefined && role !== "VENDOR") {
+    const ownedPlaceCount = await getOwnedPlaceCount(id);
+    if (ownedPlaceCount > 0) {
+      throw new AppError(
+        `Cannot change this vendor role while they own ${ownedPlaceCount} place${ownedPlaceCount === 1 ? "" : "s"}. Reassign or delete those places first.`,
+        409
+      );
+    }
+  }
+
   if (firstName !== undefined) {
     sets.push(`first_name = $${idx++}`);
     params.push(firstName);
@@ -1338,6 +1569,14 @@ export const updateUser = async (id, { firstName, lastName, email, role }) => {
 };
 
 export const deleteUserRecord = async (id) => {
+  const ownedPlaceCount = await getOwnedPlaceCount(id);
+  if (ownedPlaceCount > 0) {
+    throw new AppError(
+      `Cannot delete this vendor while they own ${ownedPlaceCount} place${ownedPlaceCount === 1 ? "" : "s"}. Reassign or delete those places first.`,
+      409
+    );
+  }
+
   const result = await pool.query(
     `DELETE FROM users WHERE id::text = $1 RETURNING id::text, email`,
     [id]

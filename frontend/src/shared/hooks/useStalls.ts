@@ -37,10 +37,12 @@ export function useStalls() {
         description: formData.description,
         address: formData.location.landmark,
         photo_url: formData.photoUrl,
+        storageImage: formData.storageImage,
         latitude: formData.location.latitude,
         longitude: formData.location.longitude,
         status: formData.status === "open" ? "open" : "closed",
         is_open: formData.status === "open",
+        menu_item_ids: formData.menuItemIds,
       });
       const newStall = data.data;
       setStalls((prev) => [...prev, newStall]);
@@ -57,15 +59,17 @@ export function useStalls() {
     setLoading(true);
     setError(null);
     try {
+      const photoUrl = (formData as any).photoUrl ?? (formData as any).photo_url;
       const body = {
         name: formData.name,
         description: formData.description,
         address: (formData.location as StallFormData["location"])?.landmark,
-        photo_url: (formData as any).photoUrl || formData.photo_url,
+        photo_url: photoUrl,
+        storageImage: formData.storageImage,
         latitude: formData.location?.latitude,
         longitude: formData.location?.longitude,
         status: formData.status,
-        is_open: formData.status === "open",
+        is_open: formData.status !== undefined ? formData.status === "open" : undefined,
         price_range: (formData as any).price_range,
       };
       Object.keys(body).forEach((k) => (body as any)[k] === undefined && delete (body as any)[k]);

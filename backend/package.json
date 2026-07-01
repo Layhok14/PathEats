@@ -5,6 +5,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
+    "migrate": "node src/db/migrate.js",
+    "migrate:with-rls": "node src/db/migrate.js --include-rls",
     "seed": "node src/db/seed.js"
   },
   "dependencies": {
@@ -13,6 +15,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
     "nodemailer": "^9.0.1",
     "pg": "^8.21.0",
     "swagger-jsdoc": "^6.3.0",

@@ -4,5 +4,5 @@ import { VendorDetailView } from "../../../shared/components/VendorDetailView";
 export default function DeveloperVendorDetailPage() {
   const { vendorId } = useParams<{ vendorId: string }>();
   if (!vendorId) return <p className="p-8 text-[13px] text-[#94a3b8]">Vendor ID is missing.</p>;
-  return <VendorDetailView vendorId={vendorId} backPath="/developer/vendors" title="Vendor Detail" readonly />;
+  return <VendorDetailView vendorId={vendorId} backPath="/admin/developer/vendors" title="Vendor Detail" readonly />;
 }

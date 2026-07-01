@@ -41,7 +41,7 @@ patheat/
 │       ├── shared/    # Reusable code across domains
 │       ├── user/      # Consumer domain
 │       ├── vendor/    # Vendor domain
-│       └── admin/     # Admin, CS, Developer domains
+│       └── admin/     # Admin, Developer domains
 └── docs/              # Documentation
     └── architecture/  # Architecture docs (this directory)
 ```
@@ -129,7 +129,6 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 | `backend/src/routes/vendorRoutes.js` | 4 endpoints — dashboard, stalls CRUD | ✅ |
 | `backend/src/routes/userRoutes.js` | 7 endpoints — ALL STUBS | 🟡 |
 | `backend/src/routes/adminRoutes.js` | 9 endpoints — ALL STUBS | 🟡 |
-| `backend/src/routes/csRoutes.js` | 8 endpoints — ALL STUBS | 🟡 |
 | `backend/src/routes/devRoutes.js` | 7 endpoints — ALL STUBS | 🟡 |
 | `backend/src/services/AuthService.js` | Auth logic (register, login, OTP, password reset) | ✅ |
 | `backend/src/services/VendorService.js` | Stall CRUD + dashboard | ✅ |
@@ -141,7 +140,7 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 | `backend/src/models/vendorModel.js` | Stall validation + serialization | ✅ |
 | `backend/src/utils/AppError.js` | Custom error class | ✅ (missing `isOperational`) |
 | `backend/src/utils/catchAsync.js` | Async handler wrapper | ✅ |
-| `backend/db/new-seed.sql` | Full DDL + seed data | ✅ |
+| `backend/db/seed-data.sql` | Full DDL + seed data | ✅ |
 
 ### Frontend Key Files
 
@@ -170,8 +169,6 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 - **otps** — id, email, otp_code, type, expires_at, is_used, created_at
 - **place_categories** — id, slug, name
 - **places** — id, owner_id, category_id, name, description, address, photo_url, price_range, location (GEOGRAPHY), status, is_open, is_approved, rating, created_at, updated_at
-- **orders** — id, place_id, user_id, status, total_amount, created_at, updated_at
-- **order_items** — id, order_id, menu_item_name, quantity, price
 - **reviews** — id, place_id, user_id, rating, text, created_at
 
 ## Known Bugs

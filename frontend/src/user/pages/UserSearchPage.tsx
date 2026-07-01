@@ -3,15 +3,21 @@
 
 // MapLibre GL styles
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { PenLine, Eye, BookmarkPlus, HelpCircle, LogOut, X, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router";
+import { PenLine, Eye, BookmarkPlus, LogOut, X } from "lucide-react";
 
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
+import { useGeolocation } from "../../shared/hooks/useGeolocation";
 import { PLACES, VENDOR_RANGE_DEFAULT } from "../../shared/constants/appConfig";
+import { haversineM } from "../../shared/utils/geoUtils";
 import { getRoute } from "../../shared/services/routeService";
 import { useVendors } from "../hooks/useVendors";
+import { useBookmarks } from "../hooks/useBookmarks";
+import { useSavedRoutes } from "../hooks/useSavedRoutes";
+import { useSearchHistory } from "../hooks/useSearchHistory";
 import { useMaplibreMap } from "../hooks/useMaplibreMap";
 
 import { NavRail } from "../components/NavRail";
@@ -22,29 +28,66 @@ import { HistoryPanel } from "../components/HistoryPanel";
 import { SearchHistoryPanel } from "../components/SearchHistoryPanel";
 import { VendorDetail } from "../components/VendorDetail";
 import { UserProfileModal } from "../components/UserProfileModal";
-import { AuthModal } from "../components/AuthModal";
+import { VendorPhoto } from "../components/VendorPhoto";
+import type { Vendor } from "../../shared/types";
+
+type RoutePlace = {
+  name?: string;
+  lat?: number;
+  lng?: number;
+};
+
+function hasRouteCoordinates(
+  place: RoutePlace | null | undefined,
+): place is RoutePlace & { lat: number; lng: number } {
+  return Number.isFinite(Number(place?.lat)) && Number.isFinite(Number(place?.lng));
+}
+
+function isSameRoutePoint(first: RoutePlace, second: RoutePlace) {
+  return (
+    Number(first.lat).toFixed(6) === Number(second.lat).toFixed(6) &&
+    Number(first.lng).toFixed(6) === Number(second.lng).toFixed(6)
+  );
+}
+
+function isCurrentLocationText(value = "") {
+  const normalized = value.trim().toLowerCase();
+  return ["you", "me", "my place", "my location", "current location", "your location"].includes(normalized);
+}
 
 export default function UserSearchPage() {
   const { darkMode, tm } = useTheme();
   const { user, isGuest, logout } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user || user.role_scope === "CONSUMER") return;
+    const target =
+      user.role_scope === "VENDOR"
+        ? "/vendor/stalls"
+        : user.role_scope === "DEVELOPER_ADMIN"
+          ? "/admin/developer/dashboard"
+          : "/admin";
+    navigate(target, { replace: true });
+  }, [navigate, user]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const [page, setPage] = useState("home");
   const [leftNavTab, setLeftNavTab] = useState("route");
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // ── Route ─────────────────────────────────────────────────────────────────
   const [originText, setOriginText] = useState("");
   const [destText, setDestText] = useState("");
   const [originPlace, setOriginPlace] = useState(PLACES[0]);
   const [destPlace, setDestPlace] = useState(PLACES[1]);
-  const [routePoints, setRoutePoints] = useState([]);
+  const [routePoints, setRoutePoints] = useState<[number, number][]>([]);
   const [routeReady, setRouteReady] = useState(false);
   const [editRouteMode, setEditRouteMode] = useState(false);
-  const [waypointMode, setWaypointMode] = useState(false);
   const [loadingRoute, setLoadingRoute] = useState(false);
+  const [routeError, setRouteError] = useState("");
+  const [routeFallbackWarning, setRouteFallbackWarning] = useState("");
   const [originFocus, setOriginFocus] = useState(false);
   const [destFocus, setDestFocus] = useState(false);
 
@@ -56,14 +99,42 @@ export default function UserSearchPage() {
   const [vendorRange, setVendorRange] = useState(VENDOR_RANGE_DEFAULT);
 
   // ── User data ─────────────────────────────────────────────────────────────
-  const [selectedVendor, setSelectedVendor] = useState(null);
-  const [favorites, setFavorites] = useState(new Set());
-  const [savedRoutes, setSavedRoutes] = useState([]);
-  const [searchHistory, setSearchHistory] = useState([]);
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [menuVendor, setMenuVendor] = useState<Vendor | null>(null);
+  const { bookmarks, toggleBookmark } = useBookmarks();
+  const { savedRoutes, addRoute, deleteRoute, clearRoutes } = useSavedRoutes();
+  const { history: searchHistory, addSearch, deleteSearch, clearHistory } = useSearchHistory();
 
-  const [debugShowAll, setDebugShowAll] = useState(false);
+  const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
+  const [geoFilled, setGeoFilled] = useState(false);
+  const currentLocationPlace =
+    latitude !== null && longitude !== null
+      ? { name: "Your location", lat: latitude, lng: longitude }
+      : null;
 
-  const { scoredVendors, allVendors } = useVendors({
+  useEffect(() => {
+    if (!geoLoading && latitude !== null && longitude !== null && !geoFilled) {
+      let minDist = Infinity;
+      for (const place of PLACES) {
+        const d = haversineM(latitude, longitude, place.lat, place.lng);
+        if (d < minDist) {
+          minDist = d;
+        }
+      }
+      if (minDist <= 1000 || !originText.trim()) {
+        setOriginText("Your location");
+        setOriginPlace({ name: "Your location", lat: latitude, lng: longitude });
+      }
+      setGeoFilled(true);
+    }
+  }, [geoLoading, latitude, longitude, geoFilled, originText]);
+
+  const {
+    scoredVendors,
+    loading: vendorLoading,
+    error: vendorError,
+    refetch: refetchVendors,
+  } = useVendors({
     routePoints,
     vendorRange,
     filterCuisine,
@@ -76,49 +147,71 @@ export default function UserSearchPage() {
     (filterMaxPrice < 4 ? 1 : 0) +
     (filterOpenNow ? 1 : 0);
 
-  function toggleFavorite(id) {
-    setFavorites((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
+  function handleToggleBookmark(placeId: string | number) {
+    if (user?.role_scope !== "CONSUMER") {
+      navigate("/user/login");
+      return;
+    }
+    toggleBookmark(placeId);
   }
 
-  async function handleFindRoute(overrideOrigin, overrideDest) {
+  async function handleFindRoute(overrideOrigin?: RoutePlace, overrideDest?: RoutePlace) {
+    const wantsCurrentLocation = !overrideOrigin && isCurrentLocationText(originText);
+
+    setRouteError("");
+    setRouteFallbackWarning("");
+
+    if (wantsCurrentLocation && !currentLocationPlace) {
+      setRouteError("Allow browser location access or choose a start point from the suggestions.");
+      return;
+    }
+
+    const effectiveOrigin = overrideOrigin ??
+      (wantsCurrentLocation
+        ? currentLocationPlace
+        : originPlace);
+    const effectiveDest = overrideDest ?? destPlace;
+
+    if (!hasRouteCoordinates(effectiveOrigin) || !hasRouteCoordinates(effectiveDest)) {
+      setRouteError("Choose a valid start and destination from the suggestions.");
+      return;
+    }
+
+    if (isSameRoutePoint(effectiveOrigin, effectiveDest)) {
+      setRouteError("Start and destination cannot be the same place.");
+      return;
+    }
+
+    setOriginPlace(effectiveOrigin);
+    setDestPlace(effectiveDest);
     setLoadingRoute(true);
     try {
-      const pts = await getRoute(overrideOrigin ?? originPlace, overrideDest ?? destPlace);
-      setRoutePoints(pts);
+      const displayOrigin = effectiveOrigin.name === "Your location" || isCurrentLocationText(originText)
+        ? "Your location"
+        : originText.trim();
+      const { points, wasFallback } = await getRoute(effectiveOrigin, effectiveDest);
+      if (!Array.isArray(points) || points.length < 2) {
+        throw new Error("Route service returned too few points.");
+      }
+      setRoutePoints(points);
+      if (wasFallback) {
+        setRouteFallbackWarning("Live routing unavailable — showing approximate route.");
+      }
       setRouteReady(true);
       setSelectedVendor(null);
       setPage("filter");
-      // Record every search so the History tab and recent strip stay current
       if (originText.trim() && destText.trim()) {
-        const searchedAt = new Date().toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        const entry = {
-          id: Date.now(),
-          origin: originText.trim(),
+        addSearch({
+          origin: displayOrigin,
           dest: destText.trim(),
-          originPlace,
-          destPlace,
-          searchedAt,
-        };
-        setSearchHistory((prev) =>
-          [
-            entry,
-            ...prev.filter(
-              (s) => !(s.origin === entry.origin && s.dest === entry.dest),
-            ),
-          ].slice(0, 50),
-        );
+          originPlace: effectiveOrigin,
+          destPlace: effectiveDest,
+          resultsCount: 0,
+        });
       }
     } catch (err) {
       console.error("OSRM routing failed:", err);
+      setRouteError("Could not calculate this route. Try different locations.");
     } finally {
       setLoadingRoute(false);
     }
@@ -128,61 +221,57 @@ export default function UserSearchPage() {
     setPage("home");
     setRouteReady(false);
     setEditRouteMode(false);
-    setWaypointMode(false);
     setSelectedVendor(null);
+    setRouteError("");
+    setRouteFallbackWarning("");
   }
 
   function handleSaveRoute() {
-    const label =
-      originText && destText ? `${originText} → ${destText}` : "Custom Route";
-    const savedAt = new Date().toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+    addRoute({
+      label: originText && destText ? `${originText} → ${destText}` : "Custom Route",
+      origin: originText,
+      dest: destText,
+      originPlace,
+      destPlace,
+      points: routePoints,
     });
-    setSavedRoutes((prev) =>
-      [
-        {
-          id: Date.now(),
-          label,
-          origin: originText,
-          dest: destText,
-          points: routePoints,
-          savedAt,
-        },
-        ...prev,
-      ].slice(0, 20),
-    );
   }
 
   function handleLoadRoute(r) {
     setOriginText(r.origin);
     setDestText(r.dest);
+    setOriginPlace(r.originPlace ?? { name: r.origin, lat: r.points?.[0]?.[0], lng: r.points?.[0]?.[1] });
+    setDestPlace(r.destPlace ?? { name: r.dest, lat: r.points?.[r.points.length - 1]?.[0], lng: r.points?.[r.points.length - 1]?.[1] });
     setRoutePoints(r.points);
     setRouteReady(true);
     setPage("filter");
     setLeftNavTab("route");
   }
 
-  function handleWaypointAdded(lat, lng) {
-    setRoutePoints((prev) => {
-      let bestIdx = 1,
-        bestDist = Infinity;
-      for (let i = 0; i < prev.length - 1; i++) {
-        const d = Math.sqrt(
-          (lat - (prev[i][0] + prev[i + 1][0]) / 2) ** 2 +
-            (lng - (prev[i][1] + prev[i + 1][1]) / 2) ** 2,
-        );
-        if (d < bestDist) {
-          bestDist = d;
-          bestIdx = i + 1;
-        }
+  async function handleWaypointAdded(lat, lng) {
+    setLoadingRoute(true);
+    setRouteError("");
+    try {
+      const waypoint = { name: "Waypoint", lat, lng };
+      const { points, wasFallback } = await getRoute(originPlace, destPlace, [waypoint]);
+      if (!Array.isArray(points) || points.length < 2) {
+        throw new Error("Route service returned too few points.");
       }
-      const n = [...prev];
-      n.splice(bestIdx, 0, [lat, lng]);
-      return n;
-    });
+      setRoutePoints(points);
+      if (wasFallback) {
+        setRouteFallbackWarning("Live routing unavailable — showing approximate route.");
+      }
+    } catch (err) {
+      console.error("Failed to recalculate route with waypoint:", err);
+      setRouteError("Could not customize this route. Try dragging a different part of the route.");
+    } finally {
+      setLoadingRoute(false);
+    }
+  }
+
+  function handleVendorSelect(v) {
+    setMenuVendor(v);
+    setSelectedVendor(v);
   }
 
     const { mapDivRef } = useMaplibreMap({
@@ -192,7 +281,7 @@ export default function UserSearchPage() {
     editRouteMode,
     scoredVendors,
     selectedVendorId: selectedVendor?.id ?? null,
-    onSelectVendor: setSelectedVendor,
+    onSelectVendor: handleVendorSelect,
     onWaypointAdded: handleWaypointAdded,
     onEndpointDrag: (type, lat, lng) => {
       const newOrigin = type === "origin" ? { ...originPlace, lat, lng } : originPlace;
@@ -201,10 +290,10 @@ export default function UserSearchPage() {
       else setDestPlace(newDest);
       handleFindRoute(newOrigin, newDest);
     },
-    debugPlaces: debugShowAll ? allVendors : [],
+    debugPlaces: [],
+    userLocation: latitude !== null && longitude !== null ? { latitude, longitude } : null,
   });
 
-  const stripVisible = routeReady && !editRouteMode && scoredVendors.length > 0;
   const hasRoute = routeReady && routePoints.length >= 2;
 
   return (
@@ -222,10 +311,10 @@ export default function UserSearchPage() {
           setPage("home");
           setRouteReady(false);
           setEditRouteMode(false);
-          setWaypointMode(false);
           setSelectedVendor(null);
+          setRouteError("");
         }}
-        onAuthRequired={() => setShowAuthModal(true)}
+        onAuthRequired={() => navigate("/user/login")}
       />
 
       <aside
@@ -248,10 +337,10 @@ export default function UserSearchPage() {
               className="flex flex-col flex-1 overflow-hidden"
             >
               <FavoritesPanel
-                favorites={favorites}
+                favorites={bookmarks}
                 vendors={scoredVendors}
-                onSelectVendor={setSelectedVendor}
-                onToggleFavorite={toggleFavorite}
+                onSelectVendor={(v) => { setMenuVendor(v); setSelectedVendor(v); }}
+                onToggleFavorite={handleToggleBookmark}
               />
             </motion.div>
           )}
@@ -274,10 +363,8 @@ export default function UserSearchPage() {
                   setLeftNavTab("route");
                   setPage("home");
                 }}
-                onDelete={(id) =>
-                  setSearchHistory((prev) => prev.filter((h) => h.id !== id))
-                }
-                onClearAll={() => setSearchHistory([])}
+                onDelete={(id) => deleteSearch(id)}
+                onClearAll={() => clearHistory()}
               />
             </motion.div>
           )}
@@ -293,10 +380,8 @@ export default function UserSearchPage() {
               <HistoryPanel
                 savedRoutes={savedRoutes}
                 onLoadRoute={handleLoadRoute}
-                onDeleteRoute={(id) =>
-                  setSavedRoutes((prev) => prev.filter((r) => r.id !== id))
-                }
-                onClearAll={() => setSavedRoutes([])}
+                onDeleteRoute={(id) => deleteRoute(id)}
+                onClearAll={() => clearRoutes()}
               />
             </motion.div>
           )}
@@ -326,6 +411,12 @@ export default function UserSearchPage() {
                 setVendorRange={setVendorRange}
                 savedRoutes={searchHistory}
                 loadingRoute={loadingRoute}
+                routeError={routeError}
+                routeFallbackWarning={routeFallbackWarning}
+                currentLocation={currentLocationPlace}
+                currentLocationLoading={geoLoading}
+                currentLocationError={geoError}
+                onUseCurrentLocation={() => setRouteError("")}
                 onLoadRoute={(e) => {
                   setOriginText(e.origin);
                   setDestText(e.dest);
@@ -352,7 +443,7 @@ export default function UserSearchPage() {
                 destText={destText}
                 vendorCount={scoredVendors.length}
                 scoredVendors={scoredVendors}
-                onSelectVendor={setSelectedVendor}
+                onSelectVendor={(v) => { setMenuVendor(v); setSelectedVendor(v); }}
                 filterCuisine={filterCuisine}
                 setFilterCuisine={setFilterCuisine}
                 filterMaxPrice={filterMaxPrice}
@@ -362,6 +453,8 @@ export default function UserSearchPage() {
                 vendorSearch={vendorSearch}
                 setVendorSearch={setVendorSearch}
                 onBack={handleBack}
+                favorites={bookmarks}
+                onToggleFavorite={handleToggleBookmark}
                 onResetFilters={() => {
                   setFilterCuisine("All");
                   setFilterMaxPrice(4);
@@ -369,14 +462,17 @@ export default function UserSearchPage() {
                   setVendorSearch("");
                 }}
                 activeFilterCount={activeFilterCount}
+                vendorLoading={vendorLoading}
+                vendorError={vendorError}
+                onRetryVendors={refetchVendors}
               />
             </motion.div>
           )}
         </AnimatePresence>
       </aside>
 
-      {/* Map area */}
-      <div className="flex-1 relative overflow-hidden flex flex-col">
+      {/* Map area — click outside dismisses vendor detail */}
+      <div className="flex-1 relative overflow-hidden flex flex-col" onClick={() => selectedVendor && setSelectedVendor(null)}>
         <div
           ref={mapDivRef}
           className="w-full transition-[height] duration-200"
@@ -395,7 +491,7 @@ export default function UserSearchPage() {
           >
             <PenLine size={13} className="text-white/70 shrink-0" />
             <span className="text-white text-[11px] font-medium">
-              Click route to add waypoints
+              Drag route to add waypoints
             </span>
             <div className="w-px h-4 bg-white/20 mx-1" />
             <button
@@ -409,7 +505,6 @@ export default function UserSearchPage() {
             <button
               onClick={() => {
                 setEditRouteMode(false);
-                setWaypointMode(false);
               }}
               className="flex items-center justify-center w-7 h-7 rounded-xl transition-all hover:bg-white/20 active:scale-95"
               style={{ color: "rgba(255,255,255,0.7)" }}
@@ -426,7 +521,6 @@ export default function UserSearchPage() {
               onClick={() => {
                 const n = !editRouteMode;
                 setEditRouteMode(n);
-                setWaypointMode(n);
               }}
               className="flex items-center gap-2 px-3 h-9 rounded-xl transition-all hover:brightness-110 active:scale-95"
               style={
@@ -470,45 +564,53 @@ export default function UserSearchPage() {
         )}
 
         {/* Debug toggle — shows all vendors */}
-        <button
-          onClick={() => setDebugShowAll((v) => !v)}
-          title="Toggle all vendors"
-          className="absolute top-4 right-4 z-[500] w-fit px-2.5 h-9 rounded-xl flex items-center justify-center gap-1.5 hover:bg-white/10 transition-colors"
+        <div
+          title="Map marker legend"
+          className="absolute top-4 left-4 z-[500] w-fit px-2.5 h-9 rounded-xl flex items-center justify-center gap-1.5"
           style={{
-            background: debugShowAll ? "rgba(34,197,94,0.15)" : tm.glassCard,
+            background: tm.glassCard,
             backdropFilter: "blur(12px)",
-            border: `1px solid ${debugShowAll ? "#22c55e" : tm.border}`,
+            border: `1px solid ${tm.border}`,
           }}
         >
           <div
             style={{
               width: 8, height: 8, borderRadius: "50%",
-              background: debugShowAll ? "#22c55e" : tm.text3,
+              background: "#f97316",
             }}
           />
           <span
             className="text-[10px] font-semibold"
-            style={{ color: debugShowAll ? "#22c55e" : tm.text3 }}
+            style={{ color: tm.text3 }}
           >
-            {debugShowAll ? "All On" : "All Vendors"}
+            You
           </span>
-        </button>
+          <div
+            className="rotate-[-45deg]"
+            style={{
+              width: 8, height: 8, borderRadius: "50% 50% 50% 0",
+              background: "#22c55e",
+              border: "1px solid white",
+            }}
+          />
+          <span className="text-[10px] font-semibold" style={{ color: tm.text3 }}>
+            Vendor
+          </span>
+          <div
+            className="rotate-[-45deg]"
+            style={{
+              width: 8, height: 8, borderRadius: "50% 50% 50% 0",
+              background: "#3B82F6",
+              border: "1px solid white",
+            }}
+          />
+          <span className="text-[10px] font-semibold" style={{ color: tm.text3 }}>
+            Selected
+          </span>
+        </div>
 
-        {/* Auth buttons: sign in/up for guests, logout for users */}
-        {isGuest ? (
-          <div className="absolute top-4 right-[88px] z-[500] flex gap-1.5">
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="px-3 h-9 rounded-xl flex items-center gap-1.5 transition-all hover:brightness-110 active:scale-95"
-              style={{
-                background: "#22c55e",
-                border: "none",
-              }}
-            >
-              <span className="text-[10px] font-bold text-white">Sign In</span>
-            </button>
-          </div>
-        ) : (
+        {/* Logout button for signed-in users */}
+        {!isGuest && (
           <button
             onClick={logout}
             title="Sign out"
@@ -530,10 +632,11 @@ export default function UserSearchPage() {
           © OpenStreetMap contributors
         </div>
 
-        {/* Horizontal vendor strip */}
+        {/* Menu strip — vendor tabs + menu items */}
         {hasRoute && (
           <div
             className="absolute bottom-0 left-0 right-0 z-[300]"
+            onClick={(e) => e.stopPropagation()}
             style={{
               background: darkMode
                 ? "rgba(15,23,42,0.97)"
@@ -541,82 +644,67 @@ export default function UserSearchPage() {
               borderTop: `1px solid ${tm.border}`,
             }}
           >
-            <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden">
-              <div
-                className="flex gap-2 px-4 py-3"
-                style={{ width: "max-content", minWidth: "100%" }}
-              >
-                {scoredVendors.length > 0 ? (
-                  scoredVendors.map((v, i) => {
-                    const isSelected = selectedVendor?.id === v.id;
-                    return (
-                      <button
-                        key={v.id}
-                        onClick={() => setSelectedVendor(v)}
-                        className="relative shrink-0 rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95"
-                        style={{
-                          width: 72,
-                          height: 92,
-                          outline: isSelected ? `2.5px solid #22c55e` : "none",
-                          outlineOffset: 1,
-                        }}
-                      >
-                        <img
-                          src={v.photo_url}
-                          alt={v.name}
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                        <div
-                          className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[8.5px] font-bold text-white"
-                          style={{
-                            background: v.final_score !== undefined ? (v.final_score >= 0.68 ? "#10b981" : v.final_score >= 0.50 ? "#22c55e" : "#f97316") : "#10b981",
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.5)",
-                          }}
-                        >
-                          {i + 1}
-                        </div>
-                        {v.final_score !== undefined && (
-                          <div
-                            className="absolute top-1.5 right-1.5 px-1 py-0.5 rounded text-[7px] font-bold text-white"
-                            style={{
-                              background: v.final_score >= 0.68 ? "#10b981" : v.final_score >= 0.50 ? "#22c55e" : "#f97316",
-                            }}
-                          >
-                            {Math.round((v.final_score / 0.85) * 100)}
-                          </div>
-                        )}
-                        <div
-                          className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
-                          style={{
-                            background: v.open_now
-                              ? "#00d492"
-                              : "rgba(255,255,255,0.3)",
-                          }}
-                        />
-                        <div
-                          className="absolute bottom-0 left-0 right-0 pt-6 pb-1 px-1.5"
-                          style={{
-                            background:
-                              "linear-gradient(to top, rgba(0,0,0,0.88), rgba(0,0,0,0))",
-                          }}
-                        >
-                          <p className="text-[6.5px] font-semibold text-white text-center leading-tight line-clamp-2">
-                            {v.name}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div
-                    className="flex items-center justify-center text-sm px-4"
-                    style={{ color: tm.text4, minWidth: "200px" }}
-                  >
-                    No vendors found. Try adjusting filters or range.
-                  </div>
-                )}
-              </div>
+            {/* Vendor tabs */}
+            <div className="flex items-center gap-1 px-4 pt-2 pb-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+              {scoredVendors.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => setMenuVendor(v)}
+                  className="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-lg transition-colors"
+                  style={
+                    menuVendor?.id === v.id
+                      ? { background: "#22c55e", color: "white" }
+                      : { background: tm.surface2, color: tm.text3 }
+                  }
+                >
+                  {v.name}
+                </button>
+              ))}
             </div>
+            {/* Menu items row */}
+            {menuVendor && menuVendor.menu?.length > 0 && (
+              <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                <div
+                  className="flex gap-3 px-4 py-2"
+                  style={{ width: "max-content", minWidth: "100%" }}
+                >
+                  {menuVendor.menu.map((item, i) => (
+                    <div
+                      key={i}
+                      className="shrink-0 rounded-xl border transition-colors flex flex-col overflow-hidden"
+                      style={{
+                        width: 160,
+                        borderColor: tm.border,
+                        background: darkMode ? "rgba(255,255,255,0.04)" : "#fafafa",
+                      }}
+                    >
+                      <div className="h-20 overflow-hidden bg-[#e2e8f0] shrink-0">
+                        <VendorPhoto
+                          vendor={{
+                            name: item.name,
+                            photo_url: item.image_url || menuVendor.photo_url,
+                          }}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="p-2.5 flex flex-col flex-1">
+                        <p className="text-[11px] font-semibold leading-tight" style={{ color: tm.text1 }}>
+                          {item.name}
+                        </p>
+                        {item.desc && (
+                          <p className="text-[9px] mt-0.5 leading-tight line-clamp-2" style={{ color: tm.text4 }}>
+                            {item.desc}
+                          </p>
+                        )}
+                        <p className="text-[11px] font-bold mt-auto pt-1" style={{ color: "#22c55e" }}>
+                          ${Number(item.price).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -633,8 +721,8 @@ export default function UserSearchPage() {
             <VendorDetail
               vendor={selectedVendor}
               onClose={() => setSelectedVendor(null)}
-              isFavorite={favorites.has(selectedVendor.id)}
-              onToggleFavorite={() => toggleFavorite(selectedVendor.id)}
+              isFavorite={bookmarks.has(String(selectedVendor.id))}
+              onToggleFavorite={() => handleToggleBookmark(selectedVendor.id)}
             />
           )}
         </div>
@@ -643,7 +731,6 @@ export default function UserSearchPage() {
       {showProfile && (
         <UserProfileModal onClose={() => setShowProfile(false)} />
       )}
-      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 }

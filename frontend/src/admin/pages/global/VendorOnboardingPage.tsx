@@ -143,7 +143,7 @@ export default function VendorOnboardingPage() {
               <div>
                 <h1 className="text-[26px] font-bold text-[#0b1c30]">Vendor Onboarding</h1>
                 <p className="text-[14px] text-[#64748b] mt-2 leading-relaxed">
-                  {message || "Connect your vendor account to Telegram for real-time notifications, support, and verification."}
+                  {message || "Connect your vendor account to Telegram for onboarding help, account verification, and vendor updates."}
                 </p>
               </div>
 
@@ -161,7 +161,7 @@ export default function VendorOnboardingPage() {
               ) : (
                 <div className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-6 py-4 text-[13px] text-[#92400e] flex items-center gap-3 w-full max-w-xs">
                   <ShieldCheck size={18} className="shrink-0" />
-                  <span>Telegram onboarding not yet available. Check back later or contact support.</span>
+                  <span>Telegram onboarding is not configured yet. Add the official Telegram link above.</span>
                 </div>
               )}
 
@@ -194,7 +194,7 @@ export default function VendorOnboardingPage() {
                   {[
                     "We never ask for your password or OTP on Telegram",
                     "Always verify the account handle matches exactly",
-                    "Report suspicious messages via the app",
+                    "Use only the official Telegram link shown on this page",
                   ].map((tip, i) => (
                     <div key={i} className="flex items-start gap-3">
                       <ShieldCheck size={14} className="text-[#006e2f] mt-0.5 shrink-0" />
@@ -205,7 +205,7 @@ export default function VendorOnboardingPage() {
               </div>
 
               <p className="text-[11px] text-[#94a3b8]">
-                Questions? Contact support from your vendor dashboard.
+                Questions? Vendors should use the official Telegram channel configured here.
               </p>
             </div>
           </div>

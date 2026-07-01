@@ -69,6 +69,14 @@ function mapItem(row: any): MenuItem {
     description: row.description || "",
     price: parseFloat(row.price),
     imageUrl: row.image_url || "",
+    storageImage: row.storageImage || (row.image_bucket && row.image_path
+      ? {
+          bucketName: row.image_bucket,
+          objectPath: row.image_path,
+          mimeType: row.image_mime_type || null,
+          altText: row.image_alt_text || "",
+        }
+      : null),
     category: mapCategory(row.category),
     isAvailable: row.is_available,
   };

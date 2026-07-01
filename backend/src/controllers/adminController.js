@@ -319,7 +319,8 @@ class AdminController {
 
   getAllMenuItems = async (req, res, next) => {
     try {
-      const items = await this.service.getAllMenuItems();
+      const { placeId } = req.query;
+      const items = await this.service.getAllMenuItems(placeId || null);
       res.json({ success: true, data: items });
     } catch (error) {
       next(error);

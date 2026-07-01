@@ -65,7 +65,6 @@ PathEats/
 | `/user/*` | Consumer experience | Optional (JWT) |
 | `/vendor/*` | Vendor stall management | Vendor JWT |
 | `/admin/*` | Global admin panel | GLOBAL_ADMIN JWT |
-| `/customer-service/*` | CS moderation | CUSTOMER_SERVICE_ADMIN JWT |
 | `/developer/*` | System ops | DEVELOPER_ADMIN JWT |
 | `/` | Redirects to `/user` | — |
 
@@ -83,7 +82,7 @@ frontend/src/
 │   ├── pages/        Stall management
 │   ├── components/   Stall forms, photo upload, map view
 │   └── routes/       Route definitions
-├── admin/            Admin & CS panels
+├── admin/            Admin & Developer panels
 │   └── routes/       Route definitions (lazy-loaded pages)
 ├── shared/           Cross-domain code
 │   ├── constants/    appConfig.js, vendorData.ts
@@ -150,7 +149,6 @@ backend/src/
 │   ├── userRoutes.js       Consumer profile, favorites, history (WIP)
 │   ├── vendorRoutes.js     Dashboard, stalls CRUD
 │   ├── adminRoutes.js      User list, ban, role change, settings, audit (WIP)
-│   ├── csRoutes.js         Customer service moderation (WIP)
 │   └── devRoutes.js        System health, backups, logs, database stats (WIP)
 ├── middlewares/
 │   ├── authMiddleware.js   JWT verification → req.user

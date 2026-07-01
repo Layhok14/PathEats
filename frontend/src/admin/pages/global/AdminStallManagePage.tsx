@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Plus, Search, List, Map, Info, X } from "lucide-react";
@@ -19,51 +19,113 @@ type ViewMode = "list" | "map";
 
 const PAGE_SIZE = 10;
 
-function StallMap({ stalls, loading = false }: { stalls: AdminStallRow[]; loading?: boolean }) {
+function StallMap({
+  stalls,
+  loading = false,
+  onPinClick,
+}: {
+  stalls: AdminStallRow[];
+  loading?: boolean;
+  onPinClick: (stall: AdminStallRow) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const mappableStalls = useMemo(() => stalls.filter((stall) => {
+    const coordinates = stall.location?.coordinates;
+    return (
+      Array.isArray(coordinates) &&
+      coordinates.length >= 2 &&
+      Number.isFinite(coordinates[0]) &&
+      Number.isFinite(coordinates[1])
+    );
+  }), [stalls]);
 
   useEffect(() => {
-    if (mapRef.current || !containerRef.current || stalls.length === 0) return;
+    const container = containerRef.current;
+    if (!container || mappableStalls.length === 0) return;
 
-    const withLoc = stalls.filter((s) => s.location?.coordinates?.length >= 2);
-    if (withLoc.length === 0) return;
+    if (!mapRef.current) {
+      const firstCoordinates = mappableStalls[0].location!.coordinates as [number, number];
+      const map = new maplibregl.Map({
+        container,
+        style: LIGHT_VECTOR_STYLE,
+        center: firstCoordinates,
+        zoom: 12,
+        attributionControl: false,
+      });
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      mapRef.current = map;
+    }
 
-    const lngs = withLoc.map((s) => s.location!.coordinates[0]);
-    const lats = withLoc.map((s) => s.location!.coordinates[1]);
+    const map = mapRef.current;
+    if (!map) return;
+    let cancelled = false;
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: LIGHT_VECTOR_STYLE,
-      center: [(Math.min(...lngs) + Math.max(...lngs)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2],
-      zoom: 12,
-      attributionControl: false,
-    });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-    mapRef.current = map;
+    const refreshMarkers = () => {
+      if (cancelled) return;
 
-    map.on("load", () => {
-      withLoc.forEach((stall) => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+
+      const bounds = new maplibregl.LngLatBounds();
+      mappableStalls.forEach((stall) => {
+        const coordinates = stall.location!.coordinates as [number, number];
         const el = document.createElement("div");
         const color = stall.isOpen ? "#006e2f" : "#d4183d";
         el.innerHTML = `<svg width="24" height="32" viewBox="0 0 24 32" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="${color}" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="white"/></svg>`;
-        el.style.cursor = "pointer";
-        el.title = stall.name;
-        const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement })
-          .setLngLat(stall.location!.coordinates as [number, number])
+        const markerElement = el.firstElementChild as HTMLElement;
+        markerElement.style.cursor = "pointer";
+        markerElement.title = stall.name;
+        markerElement.addEventListener("click", () => onPinClick(stall));
+
+        const marker = new maplibregl.Marker({ element: markerElement })
+          .setLngLat(coordinates)
           .addTo(map);
+        bounds.extend(coordinates);
         markersRef.current.push(marker);
       });
-    });
+
+      if (mappableStalls.length === 1) {
+        map.setCenter(mappableStalls[0].location!.coordinates as [number, number]);
+        map.setZoom(14);
+      } else {
+        map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
+      }
+      map.resize();
+    };
+
+    if (map.loaded()) {
+      refreshMarkers();
+    } else {
+      map.once("load", refreshMarkers);
+    }
 
     return () => {
-      markersRef.current.forEach((m) => m.remove());
+      cancelled = true;
+      map.off("load", refreshMarkers);
+      markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
-      map.remove();
+    };
+  }, [mappableStalls, onPinClick]);
+
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [stalls]);
+  }, []);
+
+  useEffect(() => {
+    if (mappableStalls.length > 0) return;
+
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    mapRef.current?.remove();
+    mapRef.current = null;
+  }, [mappableStalls.length]);
 
   if (loading) {
     return (
@@ -74,8 +136,15 @@ function StallMap({ stalls, loading = false }: { stalls: AdminStallRow[]; loadin
     );
   }
 
-  if (stalls.length === 0) return <div className="flex items-center justify-center h-80 text-[13px] text-[#94a3b8]">No stalls to display on map.</div>;
-  return <div ref={containerRef} className="w-full rounded-lg overflow-hidden" style={{ height: "480px" }} />;
+  if (stalls.length === 0) {
+    return <div className="flex items-center justify-center h-80 text-[13px] text-[#94a3b8]">No stalls to display on map.</div>;
+  }
+
+  if (mappableStalls.length === 0) {
+    return <div className="flex items-center justify-center h-80 text-[13px] text-[#94a3b8]">No pinned stall locations match this view.</div>;
+  }
+
+  return <div ref={containerRef} className="w-full rounded-lg overflow-hidden min-h-[420px]" />;
 }
 
 export default function AdminStallManagePage() {
@@ -181,7 +250,13 @@ export default function AdminStallManagePage() {
           </div>
         </div>
 
-        {viewMode === "map" && <StallMap stalls={filteredStalls} loading={loadingStalls} />}
+        {viewMode === "map" && (
+          <StallMap
+            stalls={filteredStalls}
+            loading={loadingStalls}
+            onPinClick={(stall) => navigate(vendorId ? `/admin/vendors/${vendorId}/stall/${stall.id}` : `/admin/stalls/stall/${stall.id}`)}
+          />
+        )}
 
         {viewMode === "list" && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">

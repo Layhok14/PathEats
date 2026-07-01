@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useAuth } from "../../shared/hooks/useAuth";
+import { getApiErrorMessage } from "../../shared/utils/apiError";
 
 export function VendorRegisterPage() {
   const { vendorSignup } = useAuth();
@@ -25,7 +26,7 @@ export function VendorRegisterPage() {
       await vendorSignup({ firstName, lastName, email, password });
       navigate("/vendor/stalls", { replace: true });
     } catch (err: any) {
-      setError(err.message ?? "Registration failed.");
+      setError(getApiErrorMessage(err, "Registration failed."));
     } finally {
       setLoading(false);
     }
@@ -35,9 +36,7 @@ export function VendorRegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff] px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl border border-[#e2e8f0] shadow-sm p-8">
         <div className="text-center mb-8">
-          <div className="w-10 h-10 rounded-full bg-[#006e2f] flex items-center justify-center mx-auto mb-3">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-          </div>
+          <img src="/logo-to-use.png" alt="PathEats" className="w-10 h-10 mx-auto mb-3 object-cover rounded-full" />
           <h1 className="text-lg font-bold text-[#0b1c30]">Vendor Registration</h1>
           <p className="text-xs text-[#64748b] mt-1">Create your vendor account</p>
         </div>

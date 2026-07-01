@@ -1,6 +1,14 @@
 // Filter sidebar — search, cuisine chips, price tier, open-now toggle, and vendor list.
 
-import { Filter, Search, ArrowLeft, X } from "lucide-react";
+import {
+  AlertCircle,
+  Filter,
+  Loader2,
+  RefreshCw,
+  Search,
+  ArrowLeft,
+  X,
+} from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { CUISINES, PRICE_LABELS } from "../../shared/constants/appConfig";
 import { VendorCard } from "./VendorCard";
@@ -12,7 +20,10 @@ import { VendorCard } from "./VendorCard";
  *           filterMaxPrice:number, setFilterMaxPrice:(p:number)=>void,
  *           filterOpenNow:boolean, setFilterOpenNow:(v:boolean)=>void,
  *           vendorSearch:string, setVendorSearch:(v:string)=>void,
- *           onBack:()=>void, onResetFilters:()=>void, activeFilterCount:number }} props
+ *           onBack:()=>void, onResetFilters:()=>void, activeFilterCount:number,
+ *           vendorLoading?:boolean, vendorError?:string|null,
+ *           onRetryVendors?:()=>void,
+ *           favorites?:Set<string>, onToggleFavorite?:(id:string|number)=>void }} props
  */
 export function FilterPanel({
   originText,
@@ -31,8 +42,18 @@ export function FilterPanel({
   onBack,
   onResetFilters,
   activeFilterCount,
+  vendorLoading = false,
+  vendorError = null,
+  onRetryVendors,
+  favorites = new Set(),
+  onToggleFavorite = () => {},
 }) {
   const { darkMode, tm } = useTheme();
+  const statusText = vendorLoading
+    ? "Loading vendors..."
+    : vendorError
+      ? "Vendor data unavailable"
+      : `${vendorCount} vendors found · scroll map strip below`;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -56,7 +77,7 @@ export function FilterPanel({
             {originText} → {destText}
           </div>
           <div className="text-[10px]" style={{ color: tm.text4 }}>
-            {vendorCount} vendors found · scroll map strip below
+            {statusText}
           </div>
         </div>
       </div>
@@ -115,6 +136,39 @@ export function FilterPanel({
             </button>
           )}
         </div>
+
+        {vendorLoading && (
+          <div
+            className="flex items-center gap-2 rounded-xl px-3 py-2 text-[12px]"
+            style={{ background: tm.surface1, color: tm.text4 }}
+          >
+            <Loader2 size={13} className="animate-spin shrink-0" />
+            <span>Loading vendor data...</span>
+          </div>
+        )}
+
+        {vendorError && (
+          <div
+            className="flex items-start gap-2 rounded-xl px-3 py-2 text-[12px]"
+            style={{
+              background: darkMode ? "rgba(248,113,113,0.12)" : "#FEF2F2",
+              color: darkMode ? "#FCA5A5" : "#B91C1C",
+            }}
+          >
+            <AlertCircle size={13} className="mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p>{vendorError}</p>
+              {onRetryVendors && (
+                <button
+                  onClick={onRetryVendors}
+                  className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold hover:opacity-75"
+                >
+                  <RefreshCw size={11} /> Retry
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Cuisine chips */}
         <div>
@@ -192,7 +246,7 @@ export function FilterPanel({
           </button>
         </div>
 
-        {vendorCount === 0 && (
+        {!vendorLoading && !vendorError && vendorCount === 0 && (
           <p className="text-xs text-center py-4" style={{ color: tm.text4 }}>
             No vendors match these filters.
           </p>
@@ -212,9 +266,9 @@ export function FilterPanel({
                   key={v.id}
                   vendor={v}
                   rank={i + 1}
-                  isFavorite={false}
+                  isFavorite={favorites.has(String(v.id))}
                   onSelect={() => onSelectVendor(v)}
-                  onToggleFavorite={(e) => { e.stopPropagation(); }}
+                  onToggleFavorite={(e) => { e.stopPropagation(); onToggleFavorite(v.id); }}
                 />
               ))}
             </div>

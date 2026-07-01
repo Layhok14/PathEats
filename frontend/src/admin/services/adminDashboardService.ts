@@ -57,7 +57,7 @@ export interface AdminVendorOverviewRow {
 export interface StallManagementOptions {
   vendors: Array<{ id: string; name: string; email: string }>;
   categories: Array<{ id: string; name: string; slug?: string; description?: string | null }>;
-  places: Array<{ id: string; name: string; owner_id?: string; owner_email?: string }>;
+  places: Array<{ id: string; name: string; owner_id: string; owner_email: string }>;
 }
 
 export interface AdminRestaurant {
@@ -98,13 +98,8 @@ export async function getAdminDashboardTelemetry(): Promise<AdminDashboardTeleme
 }
 
 export async function getAdminUsers(): Promise<AdminUser[]> {
-  const response = await api.get<{ success: boolean; data: { users: AdminUser[] } }>("/admin/users");
-  return response.data.data.users;
-}
-
-export async function getAdminUsersByRole(role: string): Promise<AdminUser[]> {
   const response = await api.get<{ success: boolean; data: { users: AdminUser[] } }>("/admin/users", {
-    params: { role_scope: role, limit: 1000 },
+    params: { limit: 1000 },
   });
   return response.data.data.users;
 }
@@ -276,7 +271,7 @@ export interface AdminStallRow {
   rating: number | null;
   ratingAvg: number | null;
   ratingCount: number;
-  ownerId: string | null;
+  ownerId: string;
   ownerEmail: string;
   ownerName: string;
   category: { id: string; name: string; slug: string } | null;
@@ -316,6 +311,13 @@ export async function getAdminAllStalls(): Promise<AdminStallRow[]> {
 export async function getAdminStallsByOwner(ownerId: string): Promise<AdminStallRow[]> {
   const response = await api.get<{ success: boolean; data: AdminStallRow[] }>(`/admin/stalls/owner/${ownerId}`);
   return response.data.data;
+}
+
+export async function getAdminUsersByRole(role: string): Promise<AdminUser[]> {
+  const response = await api.get<{ success: boolean; data: { users: AdminUser[] } }>("/admin/users", {
+    params: { role_scope: role, limit: 1000 },
+  });
+  return response.data.data.users;
 }
 
 export async function getAdminStallById(id: string): Promise<AdminStallRow> {

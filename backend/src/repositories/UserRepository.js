@@ -32,7 +32,23 @@ class UserRepository {
    */
   async findById(id) {
     const { rows } = await db.query(
-      `SELECT id, email, first_name, last_name, phone_number, role_scope, is_banned, created_at FROM users WHERE id = $1`,
+      `SELECT
+         u.id,
+         u.email,
+         u.first_name,
+         u.last_name,
+         u.phone_number,
+         u.role_scope,
+         u.is_banned,
+         u.created_at,
+         upi.bucket_name AS profile_image_bucket,
+         upi.object_path AS profile_image_path,
+         upi.mime_type AS profile_image_mime_type,
+         upi.size_bytes AS profile_image_size_bytes,
+         upi.alt_text AS profile_image_alt_text
+       FROM users u
+       LEFT JOIN user_profile_images upi ON upi.user_id = u.id
+       WHERE u.id = $1`,
       [id]
     );
     return rows[0] || null;
@@ -93,7 +109,7 @@ class UserRepository {
   }
 
   /**
-   * Update user profile (name, phone, photo).
+   * Update user profile fields. Profile images live in user_profile_images.
    */
   async updateProfile(id, data) {
     const setClauses = [];
@@ -112,11 +128,6 @@ class UserRepository {
       setClauses.push(`phone_number = $${idx++}`);
       values.push(data.phone_number);
     }
-    if (data.photo_url !== undefined) {
-      setClauses.push(`photo_url = $${idx++}`);
-      values.push(data.photo_url);
-    }
-
     if (setClauses.length === 0) return null;
 
     setClauses.push(`updated_at = NOW()`);

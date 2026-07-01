@@ -6,6 +6,8 @@ export type Cuisine =
   | "Rice" | "Nom Banh Chok" | "Kuytev" | "Nompang" | "Chek Chen"
   | "Cafe" | "Banh Sung" | "Banh Xeo" | "Others";
 
+export type EntityId = string | number;
+
 // ── User-domain types (consumer search, vendor detail, reviews) ───────────
 export interface Place {
   name: string;
@@ -18,10 +20,20 @@ export interface MenuItem {
   price: number;
   desc?: string;
   category?: string;
+  image_url?: string;
+  storage_image?: StorageImage | null;
+}
+
+export interface StorageImage {
+  bucketName: string;
+  objectPath: string;
+  mimeType?: string | null;
+  sizeBytes?: number;
+  altText?: string;
 }
 
 export interface Vendor {
-  id: number;
+  id: EntityId;
   name: string;
   cuisine: Cuisine;
   price_range: number;
@@ -29,7 +41,8 @@ export interface Vendor {
   wait_time_est: number;
   lat: number;
   lng: number;
-  photo_url: string;
+  photo_url?: string | null;
+  storage_image?: StorageImage | null;
   description: string;
   open_now: boolean;
   hours: string;
@@ -50,7 +63,7 @@ export interface User {
 
 export interface Review {
   id: string;
-  vendor_id: number;
+  vendor_id: EntityId;
   user_id: string;
   user_name: string;
   stars: number;
@@ -59,7 +72,7 @@ export interface Review {
 }
 
 export interface SavedRoute {
-  id: number;
+  id: EntityId;
   label: string;
   origin: string;
   dest: string;
@@ -94,6 +107,7 @@ export interface Stall {
   id: string;
   name: string;
   photoUrl: string;
+  storageImage?: StorageImage | null;
   category: StallCategory;
   description: string;
   operatingHours: OperatingSchedule;
@@ -113,6 +127,7 @@ export interface VendorMenuItem {
   description: string;
   price: number;
   imageUrl: string;
+  storageImage?: StorageImage | null;
   category: MenuCategory;
   isAvailable: boolean;
 }
@@ -120,6 +135,7 @@ export interface VendorMenuItem {
 export interface StallFormData {
   name: string;
   photoUrl: string;
+  storageImage?: StorageImage | null;
   category: StallCategory;
   description: string;
   operatingHours: OperatingSchedule;

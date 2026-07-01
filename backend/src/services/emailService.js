@@ -1,14 +1,80 @@
 import nodemailer from "nodemailer";
+import AppError from "../utils/AppError.js";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: parseInt(process.env.SMTP_PORT || "587") === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+let transporter = null;
+
+function cleanEnv(value) {
+  return String(value || "").trim();
+}
+
+function isPlaceholder(value) {
+  const normalized = cleanEnv(value).toLowerCase();
+  return !normalized || normalized.includes("your_") || normalized.includes("change_me");
+}
+
+function smtpConfig() {
+  const port = Number.parseInt(process.env.SMTP_PORT || "587", 10);
+  return {
+    host: cleanEnv(process.env.SMTP_HOST || "smtp.gmail.com"),
+    port: Number.isFinite(port) ? port : 587,
+    user: cleanEnv(process.env.SMTP_USER),
+    pass: cleanEnv(process.env.SMTP_PASS),
+    from: cleanEnv(process.env.SMTP_FROM) || cleanEnv(process.env.SMTP_USER),
+  };
+}
+
+export function getSmtpStatus() {
+  const config = smtpConfig();
+  const missing = [];
+
+  if (!config.host) missing.push("SMTP_HOST");
+  if (!config.port) missing.push("SMTP_PORT");
+  if (isPlaceholder(config.user)) missing.push("SMTP_USER");
+  if (isPlaceholder(config.pass)) missing.push("SMTP_PASS");
+  if (!config.from) missing.push("SMTP_FROM");
+
+  return {
+    configured: missing.length === 0,
+    missing,
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
+    from: config.from,
+  };
+}
+
+function requireSmtpConfig() {
+  const status = getSmtpStatus();
+  if (status.configured) return smtpConfig();
+
+  throw new AppError("SMTP is not configured for OTP email.", 503, {
+    code: "SMTP_NOT_CONFIGURED",
+    safeMessage: "Password reset email is not configured yet. Ask an administrator to finish SMTP setup.",
+    details: { missing: status.missing },
+  });
+}
+
+function getTransporter() {
+  if (transporter) return transporter;
+
+  const config = requireSmtpConfig();
+  transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
+    auth: {
+      user: config.user,
+      pass: config.pass,
+    },
+  });
+
+  return transporter;
+}
+
+export async function verifyEmailTransport() {
+  await getTransporter().verify();
+  return getSmtpStatus();
+}
 
 /**
  * Send an OTP email to the user.
@@ -17,6 +83,7 @@ const transporter = nodemailer.createTransport({
  * @param {'email_verify'|'password_reset'} type - purpose
  */
 export async function sendOTPEmail(to, otp, type = "password_reset") {
+  const config = requireSmtpConfig();
   const subject =
     type === "email_verify"
       ? "Verify Your Email - PathEats"
@@ -39,8 +106,8 @@ export async function sendOTPEmail(to, otp, type = "password_reset") {
   `;
 
   try {
-    const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM || "noreply@patheat.com",
+    const info = await getTransporter().sendMail({
+      from: config.from,
       to,
       subject,
       html,
@@ -48,7 +115,15 @@ export async function sendOTPEmail(to, otp, type = "password_reset") {
     console.log(`Email sent: ${info.messageId}`, { to, type });
     return info;
   } catch (error) {
+    if (error?.isOperational) throw error;
     console.error("Email sending failed:", error.message, { to, type });
-    throw error;
+    throw new AppError("SMTP email delivery failed.", 502, {
+      code: "SMTP_DELIVERY_FAILED",
+      safeMessage: "Could not send the OTP email. Check SMTP credentials and try again.",
+      details: {
+        responseCode: error.responseCode || null,
+        command: error.command || null,
+      },
+    });
   }
 }

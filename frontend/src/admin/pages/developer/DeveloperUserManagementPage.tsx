@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Ban, CheckCircle } from "lucide-react";
+import { Search, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { MetricCard } from "../../components/MetricCard";
-import {
-  getAdminUserManagementOverview,
-  updateAdminUserStatus,
-  type AdminUserOverviewRow,
-} from "../../services/adminDashboardService";
+import type { AdminUserOverviewRow } from "../../services/adminDashboardService";
+import { getDevUserManagementOverview } from "../../services/developerService";
 import { DetailModal, SummaryCell, USER_STATUS_FILTERS } from "./devShared";
 
 export default function DeveloperUserManagementPage() {
@@ -21,7 +18,7 @@ export default function DeveloperUserManagementPage() {
   const loadOverview = async (searchText = query) => {
     try {
       setLoading(true);
-      const overviewRows = await getAdminUserManagementOverview(searchText);
+      const overviewRows = await getDevUserManagementOverview(searchText);
       setRows(overviewRows);
     } catch (err) {
       console.error("[UserManagementPage] Failed to load:", err);
@@ -49,24 +46,12 @@ export default function DeveloperUserManagementPage() {
   const visibleRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const bannedUsers = rows.filter((row) => row.status === "Suspended").length;
 
-  const handleUserStatus = async (row: AdminUserOverviewRow) => {
-    const nextStatus = row.status === "Suspended" ? "Active" : "Suspended";
-    try {
-      await updateAdminUserStatus(row.id, nextStatus);
-      toast.success(nextStatus === "Active" ? "User unbanned." : "User banned.");
-      await loadOverview(query);
-    } catch (err) {
-      console.error("[UserManagementPage] Status update failed:", err);
-      toast.error("Could not update user account.");
-    }
-  };
-
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
-          <h1 className="text-[26px] font-bold text-[#0b1c30]">User Management</h1>
-          <p className="text-[13px] text-[#64748b] mt-0.5">View, search, and manage platform users and their accounts.</p>
+          <h1 className="text-[26px] font-bold text-[#0b1c30]">User Diagnostics</h1>
+          <p className="text-[13px] text-[#64748b] mt-0.5">Inspect user records, preferences, search history, and account status.</p>
         </div>
 
         {activeDetail && <DetailModal title={activeDetail.title} details={activeDetail.details} onClose={() => setActiveDetail(null)} />}
@@ -113,12 +98,9 @@ export default function DeveloperUserManagementPage() {
                     <SummaryCell tableName="search_history" cell={row.search} onView={() => setActiveDetail({ title: "search_history row details", details: row.search.details })} />
                   </td>
                   <td className="px-6 py-3">
-                    <button onClick={() => handleUserStatus(row)}
-                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${row.status === "Suspended" ? "bg-green-50 text-[#006e2f] hover:bg-green-100" : "bg-red-50 text-[#ba1a1a] hover:bg-red-100"}`}>
-                      {row.status === "Suspended" ? <CheckCircle size={14} /> : <Ban size={14} />}
-                      {row.status === "Suspended" ? "Unban" : "Ban"}
-                    </button>
-                    <p className={`mt-1 text-[11px] ${row.status === "Suspended" ? "text-[#ba1a1a]" : "text-[#64748b]"}`}>{row.status}</p>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${row.status === "Suspended" ? "bg-red-50 text-[#ba1a1a]" : "bg-green-50 text-[#006e2f]"}`}>
+                      {row.status}
+                    </span>
                   </td>
                 </tr>
               ))}

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Upload, Eye, Trash2, CheckCircle, AlertTriangle, X } from "lucide-react";
+import { Search, Upload, Eye, Trash2, CheckCircle, AlertTriangle, X, ShieldAlert, Download } from "lucide-react";
 import { toast } from "sonner";
 import {
   getDevBackups,
   createDevBackup,
+  downloadDevBackup,
   deleteDevBackup,
   getDevRecovery,
   initiateDevRecovery,
@@ -12,85 +13,35 @@ import {
   type DevRecovery,
   type DevTableInfo,
 } from "../../services/developerService";
+import { DetailModal } from "./devShared";
 
-const BACKUP_METHODS = ["Entire Database", "Specific Tables", "Specific Rows"];
+const BACKUP_METHODS = ["Entire Database", "Specific Tables"];
+const RECOVERY_TYPES = ["PostgreSQL Dump", "Row Level CSV"];
 const SCHEDULE_UNITS = ["Hours", "Days", "Months"];
 const DB_SCHEMAS = ["public"];
-const BACKUP_TABLES = [
-  "users", "places", "menu_items", "place_categories", "place_hours",
-  "reviews", "place_images", "bookmarks", "routes", "search_history",
-  "user_preferences", "role",
-];
-
-function formatValue(value: unknown) {
-  if (value === null || value === undefined) return "NULL";
-  if (typeof value === "object") return JSON.stringify(value, null, 2);
-  return String(value);
-}
-
-function DetailModal({ title, details, onClose }: { title: string; details: Record<string, unknown> | null; onClose: () => void }) {
-  const entries = Object.entries(details ?? {});
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-[680px] max-h-[calc(100vh-32px)] overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
-          <div>
-            <h2 className="text-[18px] font-bold text-[#0b1c30]">{title}</h2>
-            <p className="text-[12px] text-[#64748b]">All available columns</p>
-          </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-[#334155] hover:bg-[#f1f5f9]">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="max-h-[65vh] overflow-y-auto p-6">
-          {entries.length === 0 ? (
-            <div className="rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-4 py-6 text-center text-[13px] text-[#64748b]">No data available.</div>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-[#e2e8f0]">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-[#f8fafc]">
-                    <th className="w-[210px] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Column</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map(([key, value]) => (
-                    <tr key={key} className="border-t border-[#f1f5f9]">
-                      <td className="px-4 py-3 font-mono text-[12px] font-medium text-[#0b1c30]">{key}</td>
-                      <td className="whitespace-pre-wrap break-words px-4 py-3 text-[12px] text-[#475569]">{formatValue(value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+const MAX_RECOVERY_FILE_BYTES = 100 * 1024 * 1024;
+const POSTGRES_DUMP_CONFIRMATION = "RESTORE POSTGRES DUMP";
+const DEFAULT_RECOVERY_CONFIRMATION = "RECOVER";
 
 function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => void; onCreated: (name: string) => void; tables: string[] }) {
   const [profileName, setProfileName] = useState("");
   const [method, setMethod] = useState("");
   const [selectedSchema, setSelectedSchema] = useState("");
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
-  const [selectedRowTable, setSelectedRowTable] = useState("");
-  const [whereClause, setWhereClause] = useState("");
   const [scheduleInterval, setScheduleInterval] = useState("");
   const [scheduleUnit, setScheduleUnit] = useState("Hours");
 
-  const canProceed = profileName.trim() && method;
+  const hasBackupTarget =
+    method === "Entire Database" ||
+    (method === "Specific Tables" && selectedTables.length > 0);
+  const canProceed = profileName.trim() && method && hasBackupTarget;
 
   const handleCreate = async () => {
     try {
       const scope =
         method === "Entire Database"
           ? `schema:${selectedSchema || DB_SCHEMAS[0]}`
-          : method === "Specific Tables"
-            ? `tables:${selectedTables.join(",") || "all"}`
-            : `table:${selectedRowTable}`;
+          : `tables:${selectedTables.join(",") || "all"}`;
 
       await createDevBackup({
         profileName: profileName.trim(),
@@ -99,28 +50,6 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
         scheduleInterval: scheduleInterval || undefined,
         scheduleUnit: scheduleInterval ? scheduleUnit : undefined,
       });
-
-      if (method === "Specific Rows" && selectedRowTable) {
-        const header = "id,name,email,created_at";
-        const sampleRows = ["1,John Doe,john@example.com,2024-01-15", "2,Jane Smith,jane@example.com,2024-02-20"];
-        const csv = `${header}\n${sampleRows.join("\n")}`;
-        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${profileName.trim().replace(/\s+/g, "_")}_${selectedRowTable}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
-        toast.success(`CSV extracted for table ${selectedRowTable}.`);
-      } else {
-        const sqlContent = `-- ${method} backup: ${profileName}\n-- Generated: ${new Date().toISOString()}\n\nSELECT * FROM ${method === "Entire Database" ? "pg_catalog" : selectedTables.join(", ") || "information_schema.tables"};\n`;
-        const url = URL.createObjectURL(new Blob([sqlContent], { type: "application/sql;charset=utf-8;" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${profileName.trim().replace(/\s+/g, "_")}.sql`;
-        link.click();
-        URL.revokeObjectURL(url);
-        toast.success(`${method} SQL script downloaded.`);
-      }
 
       onCreated(profileName.trim());
     } catch (err) {
@@ -133,7 +62,7 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-[560px] rounded-xl bg-white shadow-xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
-          <h2 className="text-[16px] font-bold text-[#0b1c30]">Create New Backup</h2>
+          <h2 className="text-[16px] font-bold text-[#0b1c30]">Create Backup Profile</h2>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-[#334155] hover:bg-[#f1f5f9]">
             <X size={18} />
           </button>
@@ -179,24 +108,6 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
             </div>
           )}
 
-          {method === "Specific Rows" && (
-            <>
-              <div>
-                <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Select Target Table</label>
-                <select value={selectedRowTable} onChange={(e) => setSelectedRowTable(e.target.value)} className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
-                  <option value="">— Select a table —</option>
-                  {tables.map((t) => (<option key={t} value={t}>{t}</option>))}
-                </select>
-              </div>
-              {selectedRowTable && (
-                <div>
-                  <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Filter Criteria <span className="font-normal text-[#94a3b8]">(SELECT * FROM {selectedRowTable} ...)</span></label>
-                  <textarea value={whereClause} onChange={(e) => setWhereClause(e.target.value)} placeholder="WHERE / HAVING / GROUP BY / ORDER BY criteria..." rows={3} className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] font-mono resize-none" />
-                </div>
-              )}
-            </>
-          )}
-
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Schedule (optional)</label>
             <div className="flex gap-2">
@@ -210,7 +121,7 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
 
         <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
           <button onClick={onClose} className="px-4 py-1.5 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] bg-white hover:bg-gray-50">Cancel</button>
-          <button onClick={handleCreate} disabled={!canProceed} className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">Save & Download</button>
+          <button onClick={handleCreate} disabled={!canProceed} className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">Create Backup Profile</button>
         </div>
       </div>
     </div>
@@ -218,6 +129,7 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
 }
 
 function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitiated: () => void }) {
+  const [step, setStep] = useState<"form" | "confirm">("form");
   const [recoveryType, setRecoveryType] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -227,6 +139,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   const [selectedTable, setSelectedTable] = useState("");
   const [tables, setTables] = useState<DevTableInfo[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [confirmationText, setConfirmationText] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -241,53 +154,134 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   }, []);
 
   const availableDbs = [...new Set(tables.map((t) => t.name.split("_")[0] || "public"))];
+  const allowedExtensions = recoveryType === "Row Level CSV"
+    ? [".csv"]
+    : [".dump", ".backup", ".pgdump"];
+  const expectedExtensionLabel = allowedExtensions.join(", ");
+  const requiredConfirmation = recoveryType === "PostgreSQL Dump"
+    ? POSTGRES_DUMP_CONFIRMATION
+    : DEFAULT_RECOVERY_CONFIRMATION;
 
   const handleFileDrop = (droppedFile: File) => {
     setError("");
     setSuccess("");
     setFile(droppedFile);
 
-    if (recoveryType === "Row Level CSV") {
-      if (!droppedFile.name.endsWith(".csv")) {
-        setError("Row Level CSV requires a .csv file.");
-        setFile(null);
-        return;
-      }
-    } else {
-      if (!droppedFile.name.endsWith(".sql")) {
-        setError(`${recoveryType} requires a .sql file.`);
-        setFile(null);
-        return;
-      }
+    if (!recoveryType) {
+      setError("Select a recovery type before choosing a file.");
+      setFile(null);
+      return;
     }
+
+    if (!allowedExtensions.some((extension) => droppedFile.name.toLowerCase().endsWith(extension))) {
+      setError(`${recoveryType} requires a ${expectedExtensionLabel} file.`);
+      setFile(null);
+      return;
+    }
+
+    if (droppedFile.size > MAX_RECOVERY_FILE_BYTES) {
+      setError("File exceeds 100 MB limit.");
+      setFile(null);
+      return;
+    }
+
+  };
+
+  const handleReview = () => {
+    if (!recoveryType) { setError("Select a recovery type."); return; }
+    if (!file) { setError("Upload a file."); return; }
+    if (recoveryType === "Row Level CSV" && !selectedTable) { setError("Select a target table."); return; }
+    setConfirmationText("");
+    setStep("confirm");
   };
 
   const handleInitiate = async () => {
-    if (!recoveryType) { setError("Select a recovery type."); return; }
-    if (!file) { setError("Upload a file."); return; }
-
+    if (confirmationText.trim() !== requiredConfirmation) {
+      setError(`Type ${requiredConfirmation} to confirm this recovery.`);
+      return;
+    }
     try {
       setProcessing(true);
       setError("");
 
-      if (recoveryType === "Row Level CSV" && !selectedTable) {
-        setError("Select a target table.");
-        setProcessing(false);
-        return;
-      }
+      await initiateDevRecovery({
+        type: recoveryType,
+        file: file!,
+        confirmationText: confirmationText.trim(),
+        targetTable: recoveryType === "Row Level CSV" ? selectedTable : undefined,
+      });
 
-      await initiateDevRecovery({ type: recoveryType, fileName: file.name });
-
-      setSuccess(`${recoveryType} recovery from "${file.name}" completed successfully.`);
-      toast.success("Recovery initiated.");
+      setSuccess(`${recoveryType} recovery from "${file!.name}" completed successfully.`);
+      toast.success("Recovery completed.");
       setTimeout(() => onInitiated(), 1500);
-    } catch (err) {
-      console.error("[RecoveryModal] Failed:", err);
-      setError("Recovery failed. Check file format and try again.");
+    } catch (err: unknown) {
+      const response = (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
+      const msg = response?.error || response?.message || "Recovery failed. Check file format and try again.";
+      setError(msg);
     } finally {
       setProcessing(false);
     }
   };
+
+  if (step === "confirm") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="w-full max-w-[520px] rounded-xl bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
+            <h2 className="text-[16px] font-bold text-[#ba1a1a]">Confirm Recovery</h2>
+            <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-[#334155] hover:bg-[#f1f5f9]"><X size={18} /></button>
+          </div>
+          <div className="p-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+              <ShieldAlert size={20} className="text-[#ba1a1a] shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[14px] font-bold text-[#ba1a1a]">This action cannot be undone</p>
+                <p className="text-[12px] text-[#64748b] mt-1">
+                  You are about to execute <strong>{recoveryType}</strong> from <strong>{file?.name}</strong>
+                  {selectedTable ? ` into table "${selectedTable}"` : ""}. Existing data may be overwritten or modified.
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg border border-[#e2e8f0] bg-[#f8fafc] px-4 py-3">
+              <label htmlFor="recovery-confirmation" className="block text-[12px] font-semibold text-[#374151]">
+                Type {requiredConfirmation} to confirm
+              </label>
+              <p className="mt-1 text-[11px] text-[#64748b]">
+                PostgreSQL dump recovery runs in data-only, single-transaction mode and may insert or overwrite database data.
+              </p>
+              <input
+                id="recovery-confirmation"
+                type="text"
+                value={confirmationText}
+                onChange={(e) => setConfirmationText(e.target.value.toUpperCase())}
+                placeholder={requiredConfirmation}
+                className="mt-3 w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] font-semibold tracking-widest text-[#374151] outline-none focus:border-[#ba1a1a]"
+              />
+            </div>
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <AlertTriangle size={14} className="text-[#ba1a1a] shrink-0" />
+                <span className="text-[12px] text-[#ba1a1a]">{error}</span>
+              </div>
+            )}
+            {success && (
+              <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                <CheckCircle size={14} className="text-[#006e2f] shrink-0" />
+                <span className="text-[12px] text-[#006e2f]">{success}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
+            <button onClick={() => setStep("form")} className="px-4 py-1.5 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] bg-white hover:bg-gray-50">Back</button>
+            <button onClick={handleInitiate} disabled={processing || confirmationText.trim() !== requiredConfirmation}
+              className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#ba1a1a] text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              {processing ? "Executing..." : "Confirm & Execute Recovery"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -300,10 +294,10 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
         <div className="p-6 flex flex-col gap-4">
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-2 block">Recovery Type</label>
-            <div className="flex gap-2">
-              {["Full DB Dump", "Selected Tables", "Row Level CSV"].map((t) => (
+            <div className="grid grid-cols-2 gap-2">
+              {RECOVERY_TYPES.map((t) => (
                 <button key={t} onClick={() => { setRecoveryType(t); setError(""); setSuccess(""); setFile(null); }}
-                  className={`flex-1 px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors ${recoveryType === t ? "bg-[#006e2f] text-white border-[#006e2f]" : "border-[#e2e8f0] text-[#374151] hover:bg-gray-50"}`}>
+                  className={`px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors ${recoveryType === t ? "bg-[#006e2f] text-white border-[#006e2f]" : "border-[#e2e8f0] text-[#374151] hover:bg-gray-50"}`}>
                   {t}
                 </button>
               ))}
@@ -341,10 +335,10 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
               <>
                 <Upload size={24} className="mx-auto mb-2 text-[#94a3b8]" />
                 <p className="text-[13px] text-[#64748b]">
-                  Drag & drop a {recoveryType === "Row Level CSV" ? ".csv" : ".sql"} file, or{' '}
+                  Drag & drop a {expectedExtensionLabel} file, or{' '}
                   <label className="text-[#006e2f] cursor-pointer hover:underline">
                     browse
-                    <input type="file" accept={recoveryType === "Row Level CSV" ? ".csv" : ".sql"} className="hidden"
+                    <input type="file" accept={allowedExtensions.join(",")} className="hidden"
                       onChange={(e) => { if (e.target.files?.[0]) handleFileDrop(e.target.files[0]); }} />
                   </label>
                 </p>
@@ -369,9 +363,9 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
 
         <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
           <button onClick={onClose} className="px-4 py-1.5 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] bg-white hover:bg-gray-50">Cancel</button>
-          <button onClick={handleInitiate} disabled={!recoveryType || !file || processing}
+          <button onClick={handleReview} disabled={!recoveryType || !file || processing}
             className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">
-            {processing ? "Processing..." : "Execute Recovery"}
+            Review & Confirm
           </button>
         </div>
       </div>
@@ -386,6 +380,7 @@ function BackupTab() {
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewBackup, setViewBackup] = useState<DevBackup | null>(null);
+  const [tables, setTables] = useState<string[]>([]);
 
   const loadBackups = async () => {
     try {
@@ -402,12 +397,19 @@ function BackupTab() {
 
   useEffect(() => { loadBackups(); }, []);
 
+  useEffect(() => {
+    getDevDatabase().then((db) => {
+      setTables(db.tables.map((t) => t.name));
+    }).catch(() => {});
+  }, []);
+
   const filtered = useMemo(
     () => backups.filter((b) => b.profileName.toLowerCase().includes(searchQuery.toLowerCase())),
     [backups, searchQuery]
   );
 
   const handleDelete = async (id: string) => {
+    if (!confirm("Delete this backup profile? This does not delete database data.")) return;
     try {
       await deleteDevBackup(id);
       toast.success("Backup deleted.");
@@ -415,6 +417,26 @@ function BackupTab() {
     } catch (err) {
       console.error("[BackupTab] Delete failed:", err);
       toast.error("Could not delete backup.");
+    }
+  };
+
+  const handleDownload = async (backup: DevBackup) => {
+    try {
+      const { blob, filename } = await downloadDevBackup(backup.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setExecutionLog((prev) => [`[${new Date().toLocaleTimeString()}] Local backup downloaded: ${filename}`, ...prev]);
+      toast.success("Backup downloaded to your device.");
+      await loadBackups();
+    } catch (err) {
+      console.error("[BackupTab] Download failed:", err);
+      toast.error("Could not generate backup file.");
     }
   };
 
@@ -428,7 +450,7 @@ function BackupTab() {
         </div>
         <button onClick={() => setShowCreator(true)}
           className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[#005a26]">
-          <Upload size={14} /> Create New Backup
+          <Upload size={14} /> Create Backup Profile
         </button>
       </div>
 
@@ -455,6 +477,7 @@ function BackupTab() {
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button onClick={() => setViewBackup(b)} className="rounded-lg p-1.5 text-[#006e2f] hover:bg-green-50" title="View Properties"><Eye size={14} /></button>
+                    <button onClick={() => handleDownload(b)} className="rounded-lg p-1.5 text-[#2563eb] hover:bg-blue-50" title="Download PostgreSQL Dump"><Download size={14} /></button>
                     <button onClick={() => handleDelete(b.id)} className="rounded-lg p-1.5 text-[#ba1a1a] hover:bg-red-50" title="Delete"><Trash2 size={14} /></button>
                   </div>
                 </td>
@@ -470,7 +493,7 @@ function BackupTab() {
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-4">
         <h3 className="text-[13px] font-semibold text-[#0b1c30] mb-2">Execution Ledger</h3>
         {executionLog.length === 0 ? (
-          <p className="text-[12px] text-[#94a3b8]">No recent backup executions.</p>
+          <p className="text-[12px] text-[#94a3b8]">No recent backup profile changes.</p>
         ) : (
           <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
             {executionLog.map((entry, i) => (
@@ -484,11 +507,11 @@ function BackupTab() {
         <BackupCreatorModal
           onClose={() => setShowCreator(false)}
           onCreated={(name) => {
-            setExecutionLog((prev) => [`[${new Date().toLocaleTimeString()}] Backup created: ${name}`, ...prev]);
+            setExecutionLog((prev) => [`[${new Date().toLocaleTimeString()}] Backup profile configured: ${name}`, ...prev]);
             setShowCreator(false);
             loadBackups();
           }}
-          tables={BACKUP_TABLES}
+          tables={tables}
         />
       )}
 
@@ -583,7 +606,7 @@ export default function BackupManagerPage() {
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
           <h1 className="text-[26px] font-bold text-[#0b1c30]">Backup & Recovery</h1>
-          <p className="text-[13px] text-[#64748b] mt-0.5">Create, schedule, and manage database backups and restores.</p>
+          <p className="text-[13px] text-[#64748b] mt-0.5">Download PostgreSQL dump backups and recover from files selected on this device.</p>
         </div>
 
         <div className="flex gap-1 border-b border-[#e2e8f0]">

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { MapPin } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -15,51 +15,99 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const mappableStalls = useMemo(() => stalls.filter((stall) =>
+    Number.isFinite(stall.location?.latitude) &&
+    Number.isFinite(stall.location?.longitude)
+  ), [stalls]);
 
   useEffect(() => {
-    if (mapRef.current || !mapContainerRef.current || stalls.length === 0) return;
+    const container = mapContainerRef.current;
+    if (!container || mappableStalls.length === 0) return;
 
-    const lats = stalls.map((s) => s.location.latitude);
-    const lngs = stalls.map((s) => s.location.longitude);
-    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+    if (!mapRef.current) {
+      const first = mappableStalls[0];
+      mapRef.current = new maplibregl.Map({
+        container,
+        style: LIGHT_VECTOR_STYLE,
+        center: [first.location.longitude, first.location.latitude],
+        zoom: 13,
+        attributionControl: false,
+      });
+      mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    }
 
-    const map = new maplibregl.Map({
-      container: mapContainerRef.current,
-      style: LIGHT_VECTOR_STYLE,
-      center: [centerLng, centerLat],
-      zoom: 13,
-      attributionControl: false,
-    });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-    mapRef.current = map;
+    const map = mapRef.current;
+    if (!map) return;
+    let cancelled = false;
 
-    map.on("load", () => {
-      stalls.forEach((stall) => {
+    const refreshMarkers = () => {
+      if (cancelled) return;
+
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+
+      const bounds = new maplibregl.LngLatBounds();
+      mappableStalls.forEach((stall) => {
         const el = document.createElement("div");
         const isOpen = stall.status === "open";
         const color = isOpen ? "#006e2f" : "#d4183d";
         el.innerHTML = `<svg width="28" height="36" viewBox="0 0 24 36" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="${color}" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
-        el.style.cursor = "pointer";
-        el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
-        el.title = stall.name;
+        const markerElement = el.firstElementChild as HTMLElement;
+        markerElement.style.cursor = "pointer";
+        markerElement.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
+        markerElement.title = stall.name;
+        markerElement.addEventListener("click", () => onPinClick(stall.id));
 
-        const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement })
-          .setLngLat([stall.location.longitude, stall.location.latitude])
+        const lngLat: [number, number] = [stall.location.longitude, stall.location.latitude];
+        const marker = new maplibregl.Marker({ element: markerElement })
+          .setLngLat(lngLat)
           .addTo(map);
 
-        el.addEventListener("click", () => onPinClick(stall.id));
+        bounds.extend(lngLat);
         markersRef.current.push(marker);
       });
-    });
+
+      if (mappableStalls.length === 1) {
+        const only = mappableStalls[0];
+        map.setCenter([only.location.longitude, only.location.latitude]);
+        map.setZoom(14);
+      } else {
+        map.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 0 });
+      }
+      map.resize();
+    };
+
+    if (map.loaded()) {
+      refreshMarkers();
+    } else {
+      map.once("load", refreshMarkers);
+    }
 
     return () => {
-      markersRef.current.forEach((m) => m.remove());
+      cancelled = true;
+      map.off("load", refreshMarkers);
+      markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
-      map.remove();
+    };
+  }, [mappableStalls, onPinClick]);
+
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [stalls]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (mappableStalls.length > 0) return;
+
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    mapRef.current?.remove();
+    mapRef.current = null;
+  }, [mappableStalls.length]);
 
   if (loading) {
     return (
@@ -89,6 +137,20 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
     );
   }
 
+  if (mappableStalls.length === 0) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center h-64 rounded-[var(--radius-lg)] border"
+        style={{ background: "var(--muted)", borderColor: "var(--border)" }}
+      >
+        <MapPin size={36} style={{ color: "var(--muted-foreground)" }} />
+        <p className="mt-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
+          No pinned stall locations match this view.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-[var(--radius-lg)] border overflow-hidden" style={{ borderColor: "var(--border)" }}>
       <div
@@ -105,7 +167,7 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
         </div>
         <span className="ml-auto">Click a pin to manage the stall</span>
       </div>
-      <div ref={mapContainerRef} className="w-full" style={{ height: "420px" }} />
+      <div ref={mapContainerRef} className="w-full min-h-[360px] md:min-h-[420px]" />
     </div>
   );
 }

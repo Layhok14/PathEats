@@ -17,6 +17,7 @@ import { scoreColor, calcMetricScores } from "../../shared/utils/geoUtils";
 import { VendorMenuAccordion } from "./VendorMenuAccordion";
 import { VendorReviews } from "./VendorReviews";
 import { AuthModal } from "./AuthModal";
+import { VendorPhoto } from "./VendorPhoto";
 
 /**
  * @param {{ vendor: object, onClose: ()=>void, isFavorite: boolean, onToggleFavorite: ()=>void }} props
@@ -57,14 +58,11 @@ export function VendorDetail({
       <div
         className="absolute inset-0 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-white/10"
         style={{ background: c.bg }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Hero */}
         <div className="relative h-56 shrink-0">
-          <img
-            src={vendor.photo_url}
-            alt={vendor.name}
-            className="w-full h-full object-cover"
-          />
+          <VendorPhoto vendor={vendor} className="w-full h-full object-cover" />
           <div
             className="absolute inset-0"
             style={{
@@ -122,17 +120,17 @@ export function VendorDetail({
                 icon: (
                   <Star size={14} className="text-amber-400 fill-amber-400" />
                 ),
-                val: Number(vendor.rating).toFixed(1),
+                val: vendor.rating ? Number(vendor.rating).toFixed(1) : "—",
                 label: "Rating",
               },
               {
                 icon: <Timer size={14} className="text-blue-400" />,
-                val: `~${vendor.wait_time_est}m`,
+                val: vendor.wait_time_est ? `~${vendor.wait_time_est}m` : "—",
                 label: "Wait",
               },
               {
                 icon: <Wallet size={14} className="text-emerald-400" />,
-                val: PRICE_LABELS[vendor.price_range],
+                val: vendor.price_range ? PRICE_LABELS[vendor.price_range] : "—",
                 label: "Price",
               },
             ].map(({ icon, val, label }) => (
@@ -156,7 +154,7 @@ export function VendorDetail({
           </div>
 
           <p className="text-sm leading-relaxed" style={{ color: c.textMid }}>
-            {vendor.description}
+            {vendor.description || "No description available."}
           </p>
 
           <div className="space-y-2">
@@ -169,7 +167,7 @@ export function VendorDetail({
                 style={{ color: c.textDim }}
                 className="shrink-0"
               />{" "}
-              {vendor.hours}
+              {vendor.hours || "Hours not available"}
             </div>
             <div
               className="flex items-center gap-2 text-xs"
@@ -180,7 +178,7 @@ export function VendorDetail({
                 style={{ color: c.textDim }}
                 className="shrink-0"
               />{" "}
-              {vendor.address}
+              {vendor.address || "Address not available"}
             </div>
           </div>
 
@@ -208,7 +206,7 @@ export function VendorDetail({
                     className="text-xs font-medium"
                     style={{ color: c.textFaint }}
                   >
-                    PathEat Value Score
+                    PathEats Value Score
                   </span>
                   <span
                     className="font-bold text-sm"

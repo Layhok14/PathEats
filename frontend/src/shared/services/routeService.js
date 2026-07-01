@@ -22,13 +22,17 @@ function createFallbackRoute(origin, destination) {
   return interpolateRoute(validOrigin, validDest);
 }
 
-export async function getRoute(origin, destination) {
+export async function getRoute(origin, destination, waypoints = []) {
   if (!isValidCoord(origin) || !isValidCoord(destination)) {
     console.warn("[routeService] Invalid origin/destination — using fallback route");
-    return createFallbackRoute(origin, destination);
+    return { points: createFallbackRoute(origin, destination), wasFallback: true };
   }
 
-  const coords = `${origin.lng},${origin.lat};${destination.lng},${destination.lat}`;
+  let coords = `${origin.lng},${origin.lat}`;
+  for (const wp of waypoints) {
+    if (isValidCoord(wp)) coords += `;${wp.lng},${wp.lat}`;
+  }
+  coords += `;${destination.lng},${destination.lat}`;
   const url = `${OSRM_BASE_URL}/route/v1/driving/${coords}?geometries=geojson&overview=full`;
 
   try {
@@ -40,9 +44,9 @@ export async function getRoute(origin, destination) {
 
     const pts = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
     if (!pts.every((p) => isFinite(p[0]) && isFinite(p[1]))) throw new Error("Route contains NaN");
-    return pts;
+    return { points: pts, wasFallback: false };
   } catch (err) {
     console.warn("[routeService] OSRM unavailable, using interpolated route:", err.message);
-    return createFallbackRoute(origin, destination);
+    return { points: createFallbackRoute(origin, destination), wasFallback: true };
   }
 }

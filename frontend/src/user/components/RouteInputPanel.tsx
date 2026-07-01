@@ -1,6 +1,13 @@
 // Route input panel — origin/dest autocomplete, range slider, recent saved routes.
 
-import { Search, Navigation2, Clock, ChevronRight, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  Search,
+  Navigation2,
+  Clock,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import {
   PLACES,
@@ -16,12 +23,17 @@ import {
  *           originFocus:boolean, setOriginFocus:(v:boolean)=>void,
  *           destFocus:boolean, setDestFocus:(v:boolean)=>void,
  *           vendorRange:number, setVendorRange:(v:number)=>void,
- *           savedRoutes:object[], loadingRoute?:boolean,
- *           onLoadRoute:(r:object)=>void,
+ *           savedRoutes:object[], loadingRoute?:boolean, routeError?:string,
+ *           routeFallbackWarning?:string, onLoadRoute:(r:object)=>void,
  *           onViewMoreHistory:()=>void, onFindRoute:()=>void }} props
  */
 function findPlaceByName(name) {
   return PLACES.find((p) => p.name.toLowerCase() === name.toLowerCase());
+}
+
+function isCurrentLocationAlias(value) {
+  const normalized = value.trim().toLowerCase();
+  return ["you", "me", "my place", "my location", "current location", "your location"].includes(normalized);
 }
 
 export function RouteInputPanel({
@@ -41,11 +53,22 @@ export function RouteInputPanel({
   setVendorRange,
   savedRoutes,
   loadingRoute,
+  routeError,
+  routeFallbackWarning = "",
+  currentLocation,
+  currentLocationLoading = false,
+  currentLocationError = "",
+  onUseCurrentLocation,
   onLoadRoute,
   onViewMoreHistory,
   onFindRoute,
 }) {
   const { tm } = useTheme();
+  const canUseCurrentLocation = Boolean(currentLocation);
+  const originUsesCurrentLocation =
+    isCurrentLocationAlias(originText) ||
+    originPlace?.name === "Your location" ||
+    originPlace?.name === "My Place";
   const filteredOrigin = PLACES.filter((p) =>
     p.name.toLowerCase().includes(originText.toLowerCase()),
   );
@@ -56,6 +79,10 @@ export function RouteInputPanel({
 
   const handleOriginChange = (value) => {
     setOriginText(value);
+    if (isCurrentLocationAlias(value) && currentLocation) {
+      setOriginPlace(currentLocation);
+      return;
+    }
     const matched = findPlaceByName(value);
     if (matched) setOriginPlace(matched);
   };
@@ -67,11 +94,24 @@ export function RouteInputPanel({
   };
 
   const handleFindRouteClick = () => {
-    const originMatched = findPlaceByName(originText);
+    const originMatched = isCurrentLocationAlias(originText)
+      ? currentLocation
+      : findPlaceByName(originText);
     const destMatched = findPlaceByName(destText);
     if (originMatched) setOriginPlace(originMatched);
     if (destMatched) setDestPlace(destMatched);
-    onFindRoute();
+    onFindRoute(
+      originMatched ?? { name: originText },
+      destMatched ?? { name: destText },
+    );
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!currentLocation) return;
+    setOriginPlace(currentLocation);
+    setOriginText("Your location");
+    setOriginFocus(false);
+    onUseCurrentLocation?.();
   };
 
   const inp = {
@@ -96,7 +136,7 @@ export function RouteInputPanel({
         </div>
         <div>
           <h1 className="text-sm font-bold" style={{ color: tm.text1 }}>
-            PathEat
+            PathEats
           </h1>
           <p className="text-[10px]" style={{ color: tm.text4 }}>
             Route-aware food discovery
@@ -106,7 +146,10 @@ export function RouteInputPanel({
 
       {/* Origin */}
       <div className="relative">
-        <div className="w-2 h-2 rounded-full absolute left-3 top-1/2 -translate-y-1/2 shrink-0 bg-emerald-400" />
+        <div
+          className="w-2 h-2 rounded-full absolute left-3 top-1/2 -translate-y-1/2 shrink-0"
+          style={{ background: originUsesCurrentLocation ? "#f97316" : "#34d399" }}
+        />
         <input
           value={originText}
           onChange={(e) => handleOriginChange(e.target.value)}
@@ -114,13 +157,34 @@ export function RouteInputPanel({
           onBlur={() => setTimeout(() => setOriginFocus(false), 150)}
           placeholder="From — start point"
           className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none"
-          style={inp}
+          style={{
+            ...inp,
+            border: originUsesCurrentLocation ? "1px solid #f97316" : inp.border,
+            boxShadow: originUsesCurrentLocation ? "0 0 0 3px rgba(249,115,22,0.14)" : undefined,
+          }}
         />
-        {originFocus && originText && filteredOrigin.length > 0 && (
+        {originFocus && (originText || canUseCurrentLocation) && (
           <div
             className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden max-h-44 overflow-y-auto"
             style={drop}
           >
+            <button
+              disabled={!canUseCurrentLocation}
+              onMouseDown={handleUseCurrentLocation}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-white/10 text-left disabled:opacity-50"
+            >
+              <Navigation2 size={11} style={{ color: "#f97316" }} />
+              <div className="min-w-0">
+                <span className="block text-xs truncate font-semibold" style={{ color: canUseCurrentLocation ? "#f97316" : tm.text4 }}>
+                  Use your current location
+                </span>
+                <span className="block text-[10px]" style={{ color: tm.text5 }}>
+                  {currentLocationLoading
+                    ? "Requesting browser location..."
+                    : currentLocationError || "Shown as the orange marker on the map"}
+                </span>
+              </div>
+            </button>
             {filteredOrigin.map((p) => (
               <button
                 key={p.name}
@@ -137,6 +201,11 @@ export function RouteInputPanel({
                 </span>
               </button>
             ))}
+            {originText && filteredOrigin.length === 0 && !isCurrentLocationAlias(originText) && (
+              <div className="px-3 py-2.5 text-xs" style={{ color: tm.text4 }}>
+                No place found. Choose a suggestion or use your current location.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -187,6 +256,26 @@ export function RouteInputPanel({
         {loadingRoute ? <Loader2 size={14} className="animate-spin" /> : <Navigation2 size={14} />}
         {loadingRoute ? "Routing..." : "Find Route"}
       </button>
+
+      {routeError && (
+        <div
+          className="flex items-start gap-2 rounded-xl px-3 py-2 text-[12px]"
+          style={{ background: tm.surface1, color: "#ef4444" }}
+        >
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span>{routeError}</span>
+        </div>
+      )}
+
+      {routeFallbackWarning && !routeError && (
+        <div
+          className="flex items-start gap-2 rounded-xl px-3 py-2 text-[12px]"
+          style={{ background: tm.surface1, color: "#f59e0b" }}
+        >
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span>{routeFallbackWarning}</span>
+        </div>
+      )}
 
       {/* Range slider */}
       <div>

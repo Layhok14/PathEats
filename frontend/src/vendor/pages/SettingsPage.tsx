@@ -1,18 +1,31 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../../shared/hooks/useAuth";
-import { Camera, Save, Lock } from "lucide-react";
+import api from "../../shared/services/axiosService";
+import { getApiErrorMessage } from "../../shared/utils/apiError";
+import { Camera, Save, Lock, LogOut } from "lucide-react";
+
+interface VendorProfile {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone_number: string | null;
+  role_scope: string;
+}
 
 export function SettingsPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
-  const [phone, setPhone] = useState(user?.phone || "");
+  const [phone, setPhone] = useState("");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -20,6 +33,19 @@ export function SettingsPage() {
   const [changingPassword, setChangingPassword] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    api.get("/vendor/profile")
+      .then((res) => {
+        const p = res.data.data as VendorProfile;
+        setProfile(p);
+        setFirstName(p.first_name || "");
+        setLastName(p.last_name || "");
+        setPhone(p.phone_number || "");
+      })
+      .catch((err) => toast.error(getApiErrorMessage(err, "Failed to load profile")))
+      .finally(() => setLoading(false));
+  }, []);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -31,9 +57,15 @@ export function SettingsPage() {
 
   async function handleSaveProfile() {
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success("Profile saved.");
-    setSaving(false);
+    try {
+      const { data } = await api.put("/vendor/profile", { firstName, lastName, phone: phone || undefined });
+      setProfile(data.data);
+      toast.success("Profile saved.");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Failed to save profile"));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleChangePassword() {
@@ -46,12 +78,22 @@ export function SettingsPage() {
       return;
     }
     setChangingPassword(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success("Password updated.");
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setChangingPassword(false);
+    try {
+      await api.post("/vendor/change-password", { currentPassword, newPassword });
+      toast.success("Password updated.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Failed to change password"));
+    } finally {
+      setChangingPassword(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await logout();
+    navigate("/vendor/login", { replace: true });
   }
 
   const initials = `${firstName?.charAt(0) || ""}${lastName?.charAt(0) || ""}`.toUpperCase() || "V";
@@ -73,6 +115,14 @@ export function SettingsPage() {
     color: "var(--brand-text-dark)", display: "flex", alignItems: "center",
     gap: "8px", marginBottom: "20px",
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[50vh]">
+        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)" }}>Loading settings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 flex flex-col gap-5 max-w-[700px] mx-auto">
@@ -119,7 +169,7 @@ export function SettingsPage() {
 
         <div className="mb-4">
           <label style={lbl}>Email Address</label>
-          <input type="email" value={user?.email || ""} disabled style={{ ...inp, background: "var(--muted)", color: "var(--brand-text-muted)", cursor: "not-allowed" }} />
+          <input type="email" value={profile?.email || user?.email || ""} disabled style={{ ...inp, background: "var(--muted)", color: "var(--brand-text-muted)", cursor: "not-allowed" }} />
           <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", marginTop: "4px" }}>
             Contact support to change your primary email.
           </p>
@@ -164,9 +214,24 @@ export function SettingsPage() {
             disabled={changingPassword}
             style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-text-dark)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", alignSelf: "flex-start", opacity: changingPassword ? 0.7 : 1 }}
           >
-            {changingPassword ? "Sending OTP..." : "Update Password"}
+            {changingPassword ? "Updating..." : "Update Password"}
           </button>
         </div>
+      </div>
+
+      {/* Sign Out */}
+      <div style={sectionCard}>
+        <p style={sectionTitle}><LogOut size={18} /> Sign Out</p>
+        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginBottom: "16px" }}>
+          Sign out of your vendor account and return to the login page.
+        </p>
+        <button
+          onClick={handleSignOut}
+          style={{ padding: "10px 24px", borderRadius: "6px", border: "1px solid #ef4444", background: "white", color: "#ef4444", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}
+        >
+          <LogOut size={16} style={{ display: "inline", marginRight: "6px", verticalAlign: "middle" }} />
+          Sign Out
+        </button>
       </div>
     </div>
   );

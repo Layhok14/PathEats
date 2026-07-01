@@ -6,6 +6,7 @@ import adminRoutes from "./adminRoutes.js";
 // import csRoutes from "./csRoutes.js";
 import devRoutes from "./devRoutes.js";
 import placesRoutes from "./placesRoutes.js";
+import uploadRoutes from "./uploadRoutes.js";
 
 const router = Router();
 
@@ -30,11 +31,12 @@ router.get("/health", (req, res) => {
 
 // ── Domain Routes ──────────────────────────────────────────────────────────
 router.use("/auth", authRoutes);       // Public
+router.use("/uploads", uploadRoutes);  // Public uploaded image reads
 router.use("/user", userRoutes);       // CONSUMER
 router.use("/vendor", vendorRoutes);   // VENDOR
 router.use("/admin", adminRoutes);     // GLOBAL_ADMIN
 // router.use("/cs", csRoutes);         // CUSTOMER_SERVICE_ADMIN — removed
-router.use("/dev", devRoutes);         // DEVELOPER_ADMIN
+router.use("/dev", devRoutes);         // GLOBAL_ADMIN / DEVELOPER_ADMIN
 router.use("/places", placesRoutes);   // Public (reviews POST requires auth)
 
 export default router;

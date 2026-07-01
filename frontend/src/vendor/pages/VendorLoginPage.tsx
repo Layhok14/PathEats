@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useAuth } from "../../shared/hooks/useAuth";
+import { consumeSessionNotice } from "../../shared/utils/authRedirect";
+import { getApiErrorMessage } from "../../shared/utils/apiError";
 
 export function VendorLoginPage() {
   const { login } = useAuth();
@@ -9,17 +11,31 @@ export function VendorLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const message = consumeSessionNotice();
+    if (message) setNotice(message);
+
+    const handleNotice = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (detail) setNotice(detail);
+    };
+
+    window.addEventListener("patheats:session-notice", handleNotice);
+    return () => window.removeEventListener("patheats:session-notice", handleNotice);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, "VENDOR");
       navigate("/vendor/stalls", { replace: true });
     } catch (err: any) {
-      setError(err.message ?? "Login failed.");
+      setError(getApiErrorMessage(err, "Login failed."));
     } finally {
       setLoading(false);
     }
@@ -29,12 +45,15 @@ export function VendorLoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#f8f9ff] px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl border border-[#e2e8f0] shadow-sm p-8">
         <div className="text-center mb-8">
-          <div className="w-10 h-10 rounded-full bg-[#006e2f] flex items-center justify-center mx-auto mb-3">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-          </div>
+          <img src="/logo-to-use.png" alt="PathEats" className="w-10 h-10 mx-auto mb-3 object-cover rounded-full" />
           <h1 className="text-lg font-bold text-[#0b1c30]">Vendor Sign In</h1>
           <p className="text-xs text-[#64748b] mt-1">Access your vendor dashboard</p>
         </div>
+        {notice && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            {notice}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs font-medium text-[#374151] block mb-1.5">Email</label>

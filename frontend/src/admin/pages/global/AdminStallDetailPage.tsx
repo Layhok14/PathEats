@@ -11,7 +11,7 @@ import api from "../../../shared/services/axiosService";
 import { formatPrice } from "../../../shared/utils/formatters";
 import { ReviewsManager } from "../../../shared/components/ReviewsManager";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
-import type { AdminStallRow, AdminMenuItemRow } from "../../services/adminDashboardService";
+import { getAdminPlaceCategories, type AdminStallRow, type AdminMenuItemRow } from "../../services/adminDashboardService";
 import { LIGHT_VECTOR_STYLE } from "../../../shared/constants/appConfig";
 
 type Tab = "info" | "menu" | "reviews";
@@ -92,11 +92,12 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
 }
 
 function MenuItemModal({
-  item, onClose, onSave,
+  item, onClose, onSave, categories,
 }: {
   item: Partial<AdminMenuItemRow> | null;
   onClose: () => void;
-  onSave: (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => Promise<boolean | void>;
+  onSave: (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => Promise<void>;
+  categories: string[];
 }) {
   const [form, setForm] = useState({
     name: item?.name ?? "",
@@ -111,15 +112,9 @@ function MenuItemModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    try {
-      const saved = await onSave(form);
-      if (saved !== false) onClose();
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Could not save menu item.";
-      toast.error(message);
-    } finally {
-      setSaving(false);
-    }
+    await onSave(form);
+    setSaving(false);
+    onClose();
   }
 
   return (
@@ -146,7 +141,7 @@ function MenuItemModal({
             <div>
               <label className="text-[12px] font-medium text-[#64748b]">Category</label>
               <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
-                {["snack", "main course", "drink", "dessert"].map(c => <option key={c} value={c}>{c}</option>)}
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -173,7 +168,6 @@ function MenuItemModal({
 export default function AdminStallDetailPage() {
   const { vendorId, stallId } = useParams<{ vendorId: string; stallId: string }>();
   const navigate = useNavigate();
-  const backPath = vendorId ? `/admin/vendors/${vendorId}` : "/admin/stalls";
   const [tab, setTab] = useState<Tab>("info");
   const [stall, setStall] = useState<AdminStallRow | null>(null);
   const [menuItems, setMenuItems] = useState<AdminMenuItemRow[]>([]);
@@ -184,18 +178,21 @@ export default function AdminStallDetailPage() {
   const [showCreateItem, setShowCreateItem] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [categories, setCategories] = useState<string[]>(["snack", "main course", "drink", "dessert"]);
 
   const loadData = async () => {
     if (!stallId) return;
     setLoading(true);
     try {
-      const [stallRes, menuRes] = await Promise.all([
+      const [stallRes, menuRes, catRes] = await Promise.all([
         api.get<{ success: boolean; data: AdminStallRow }>(`/admin/stalls/${stallId}`),
-        api.get<{ success: boolean; data: AdminMenuItemRow[] }>("/admin/menu-items"),
+        api.get<{ success: boolean; data: AdminMenuItemRow[] }>(`/admin/menu-items?placeId=${stallId}`),
+        getAdminPlaceCategories().catch(() => [] as { name: string }[]),
       ]);
       setStall(stallRes.data.data);
       setEditForm(stallRes.data.data);
-      setMenuItems(menuRes.data.data.filter(m => m.placeId === stallId));
+      setMenuItems(menuRes.data.data);
+      if (catRes.length > 0) setCategories(catRes.map((c: { name: string }) => c.name));
     } catch (err) {
       console.error("[AdminStallDetailPage] Failed to load data:", err);
       toast.error("Could not load stall data.");
@@ -237,7 +234,7 @@ export default function AdminStallDetailPage() {
     try {
       await api.delete(`/admin/stalls/${stallId}`);
       toast.success("Stall deleted.");
-      navigate(backPath);
+      navigate(`/admin/vendors/${vendorId}`);
     } catch (err) {
       toast.error("Could not delete stall.");
     }
@@ -245,21 +242,14 @@ export default function AdminStallDetailPage() {
 
   const handleSaveItem = async (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => {
     if (!stallId) return;
-    try {
-      if (editItem?.id) {
-        await api.patch(`/admin/menu-items/${editItem.id}`, data);
-        setSuccessMsg("Menu item updated.");
-      } else {
-        await api.post(`/admin/stalls/${stallId}/menu-items`, data);
-        setSuccessMsg("Menu item created.");
-      }
-      await loadData();
-      return true;
-    } catch (err: any) {
-      console.error("[AdminStallDetailPage] Failed to save menu item:", err);
-      toast.error(err?.response?.data?.message || "Could not save menu item.");
-      return false;
+    if (editItem?.id) {
+      await api.patch(`/admin/menu-items/${editItem.id}`, data);
+      setSuccessMsg("Menu item updated.");
+    } else {
+      await api.post(`/admin/stalls/${stallId}/menu-items`, data);
+      setSuccessMsg("Menu item created.");
     }
+    await loadData();
   };
 
   const handleDeleteItem = async (item: AdminMenuItemRow) => {
@@ -296,7 +286,7 @@ export default function AdminStallDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
         <p className="text-[13px] text-[#94a3b8]">Stall not found.</p>
-        <button onClick={() => navigate(backPath)} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white">Back to Stalls</button>
+        <button onClick={() => navigate(`/admin/vendors/${vendorId}`)} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white">Back to Stalls</button>
       </div>
     );
   }
@@ -304,7 +294,7 @@ export default function AdminStallDetailPage() {
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="h-14 bg-white border-b border-[#e2e8f0] flex items-center px-8 gap-4 shrink-0">
-        <button onClick={() => navigate(backPath)} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30]">
+        <button onClick={() => navigate(`/admin/vendors/${vendorId}`)} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30]">
           <ArrowLeft size={14} /> Back
         </button>
         <div className="w-px h-6 bg-[#e2e8f0]" />
@@ -540,6 +530,7 @@ export default function AdminStallDetailPage() {
           item={editItem}
           onClose={() => setEditItem(null)}
           onSave={handleSaveItem}
+          categories={categories}
         />
       )}
 
@@ -548,6 +539,7 @@ export default function AdminStallDetailPage() {
           item={null}
           onClose={() => setShowCreateItem(false)}
           onSave={handleSaveItem}
+          categories={categories}
         />
       )}
 

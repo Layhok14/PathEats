@@ -11,12 +11,10 @@ export default function DeveloperLayout() {
   const navigate = useNavigate();
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: "#f8fafc" }}>
-      <aside className="w-[210px] flex flex-col h-full shrink-0" style={{ background: "#004b1e" }}>
+      <aside className="w-[240px] flex flex-col h-full shrink-0" style={{ background: "#004b1e" }}>
         <div className="flex items-center gap-2 px-4 py-4" style={{ borderBottom: "1px solid rgba(188,203,185,0.15)" }}>
-          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#004b1e"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-          </div>
-          <div><p className="text-white font-bold text-[15px] leading-tight">PathEat</p><p className="text-[10px] uppercase tracking-widest" style={{ color: "#bec6e0" }}>Developer Portal</p></div>
+          <img src="/logo-to-use.png" alt="PathEats" className="w-8 h-8 rounded-full object-cover shrink-0" />
+          <div><p className="text-white font-bold text-[15px] leading-tight">PathEats</p><p className="text-[10px] uppercase tracking-widest" style={{ color: "#bec6e0" }}>Developer Portal</p></div>
         </div>
         <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto">
           {navItems.map((item) => (

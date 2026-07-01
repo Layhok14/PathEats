@@ -92,21 +92,21 @@ export default function DeveloperDashboard() {
                 <thead>
                   <tr className="bg-[#f8fafc]">
                     {["LEVEL", "STATUS", "ENDPOINT", "MESSAGE"].map((h) => (
-                      <th key={h} className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
+                      <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {logs.map((log, i) => (
                     <tr key={log.id || i} className="border-t border-[#f1f5f9]">
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3">
                         <span className={`text-[11px] font-bold px-2 py-1 rounded ${log.level === "CRITICAL" ? "bg-red-100 text-red-700" : log.level === "WARNING" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
                           {log.level}
                         </span>
                       </td>
-                      <td className="px-4 py-3"><span className="text-[11px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700">{log.status}</span></td>
-                      <td className="px-4 py-3 font-mono text-[12px] text-[#006e2f] max-w-[180px] truncate">{log.endpoint}</td>
-                      <td className="px-4 py-3 text-[12px] text-[#374151] max-w-[200px] truncate">{log.message}</td>
+                      <td className="px-5 py-3"><span className="text-[11px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700">{log.status}</span></td>
+                      <td className="px-5 py-3 font-mono text-[12px] text-[#006e2f] max-w-[180px] truncate">{log.endpoint}</td>
+                      <td className="px-5 py-3 text-[12px] text-[#374151] max-w-[200px] truncate">{log.message}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -119,7 +119,7 @@ export default function DeveloperDashboard() {
             <div className="flex flex-col gap-3">
               {[
                 { name: "Database Cluster", status: health?.dbConnected ? "Online" : "Offline" },
-                { name: "API Gateway", status: "Online" },
+                { name: "API Service", status: health ? "Online" : "Offline" },
                 { name: "Storage", status: health?.status === "healthy" ? "Online" : "Degraded" },
               ].map((s) => (
                 <div key={s.name} className="flex items-center justify-between py-2 border-b border-[#f1f5f9] last:border-0">

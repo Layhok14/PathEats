@@ -1,3 +1,14 @@
+const toStorageImage = (row) => {
+  if (!row.image_bucket || !row.image_path) return null;
+
+  return {
+    bucketName: row.image_bucket,
+    objectPath: row.image_path,
+    mimeType: row.image_mime_type || null,
+    altText: row.image_alt_text || "",
+  };
+};
+
 class VendorModel {
   static validateCreate(data) {
     const errors = [];
@@ -29,6 +40,7 @@ class VendorModel {
       name: row.name,
       description: row.description || "",
       photoUrl: row.photo_url || "",
+      storageImage: toStorageImage(row),
       category: row.category_name || "Others",
       category_id: row.category_id,
       price_range: row.price_range || 1,

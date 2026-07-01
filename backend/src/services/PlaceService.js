@@ -13,6 +13,17 @@ const CATEGORY_TO_CUISINE = {
   "Others": "Others",
 };
 
+const toStorageImage = (row) => {
+  if (!row.image_bucket || !row.image_path) return null;
+
+  return {
+    bucketName: row.image_bucket,
+    objectPath: row.image_path,
+    mimeType: row.image_mime_type || null,
+    altText: row.image_alt_text || "",
+  };
+};
+
 class PlaceService {
   constructor() {
     this.placeRepo = new PlaceRepository();
@@ -60,6 +71,7 @@ class PlaceService {
       lat: parseFloat(row.lat),
       lng: parseFloat(row.lng),
       photo_url: row.photo_url || "",
+      storage_image: toStorageImage(row),
       description: row.description || "",
       open_now: row.open_now,
       hours: "",
@@ -69,6 +81,8 @@ class PlaceService {
         price: parseFloat(m.price),
         desc: m.description || undefined,
         category: m.category || undefined,
+        image_url: m.image_url || undefined,
+        storage_image: toStorageImage(m),
       })),
     };
   }

@@ -10,35 +10,19 @@ import { useReviews } from "../hooks/useReviews";
 
 const AVATAR_COLORS = ["#22C55E", "#005AC2", "#9333EA", "#F59E0B"];
 
-// Seeded fallback so the panel never looks empty on first load
-const SEED_POOL = [
-  {
-    avatar: "S",
-    name: "Sophea M.",
-    text: "Generous portions, authentic flavours. Will come back!",
-    stars: 5,
-  },
-  {
-    avatar: "R",
-    name: "Ratha K.",
-    text: "Very good value. A bit busy at lunch but worth the wait.",
-    stars: 5,
-  },
-  {
-    avatar: "D",
-    name: "Dara V.",
-    text: "Fresh ingredients and fast service. One of my regular stops.",
-    stars: 4,
-  },
-];
-
 /**
  * @param {{ vendor: object, colors: object, onSignInRequest: ()=>void }} props
  */
 export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
   const { tm } = useTheme();
   const { user, isLoggedIn } = useAuth();
-  const { reviews, submit, submitting } = useReviews(vendor.id);
+  const {
+    reviews,
+    submit,
+    submitting,
+    loading,
+    error: reviewLoadError,
+  } = useReviews(vendor.id);
 
   const [stars, setStars] = useState(0);
   const [hover, setHover] = useState(0);
@@ -46,18 +30,16 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  const idNum = vendor.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const display =
-    reviews.length > 0
-      ? reviews
-      : [
-          SEED_POOL[idNum % SEED_POOL.length],
-          SEED_POOL[(idNum + 1) % SEED_POOL.length],
-        ];
+  const storedRating = Number(vendor.rating) || 0;
   const avg =
     reviews.length > 0
       ? (reviews.reduce((s, r) => s + r.stars, 0) / reviews.length).toFixed(1)
-      : Number(vendor.rating).toFixed(1);
+      : storedRating.toFixed(1);
+  const ratingCounts = [5, 4, 3, 2, 1].map((starsValue) => ({
+    stars: starsValue,
+    count: reviews.filter((review) => review.stars === starsValue).length,
+  }));
+  const maxRatingCount = Math.max(...ratingCounts.map((item) => item.count), 1);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -83,7 +65,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
       setSubmitted(true);
       setTimeout(() => setSubmitted(false), 3000);
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : "Could not submit review.");
     }
   }
 
@@ -95,7 +77,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
       >
         <Star size={13} className="text-amber-400 fill-amber-400" /> Reviews
         <span className="text-[11px] font-normal" style={{ color: c.textDim }}>
-          ({display.length})
+          ({reviews.length})
         </span>
       </h3>
 
@@ -119,7 +101,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
                 key={s}
                 size={10}
                 className={
-                  s <= Math.round(vendor.rating)
+                  s <= Math.round(storedRating)
                     ? "fill-amber-400 text-amber-400"
                     : "text-gray-400"
                 }
@@ -131,7 +113,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
           </div>
         </div>
         <div className="flex-1 space-y-1">
-          {[5, 4, 3, 2, 1].map((s) => (
+          {ratingCounts.map(({ stars: s, count }) => (
             <div key={s} className="flex items-center gap-2">
               <span
                 className="text-[10px] w-3 shrink-0 text-right"
@@ -150,7 +132,9 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
                 <div
                   className="h-full rounded-full"
                   style={{
-                    width: `${Math.max(4, 55 + (vendor.id % 5) * 5 - (5 - s) * 12)}%`,
+                    width: reviews.length > 0
+                      ? `${Math.max(6, (count / maxRatingCount) * 100)}%`
+                      : "0%",
                     background: "#F59E0B",
                   }}
                 />
@@ -162,9 +146,34 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
 
       {/* Review cards */}
       <div className="space-y-3">
-        {display.map((r, i) => (
+        {loading && (
+          <p className="text-[12px]" style={{ color: c.textFaint }}>
+            Loading reviews...
+          </p>
+        )}
+
+        {!loading && reviewLoadError && (
+          <p className="text-[12px] text-red-400">{reviewLoadError}</p>
+        )}
+
+        {!loading && !reviewLoadError && reviews.length === 0 && (
           <div
-            key={"id" in r ? r.id : i}
+            className="rounded-xl p-3.5 text-[12px]"
+            style={{
+              background: c.surface,
+              borderWidth: 1,
+              borderStyle: "solid",
+              borderColor: c.scoreCardBorder,
+              color: c.textFaint,
+            }}
+          >
+            No reviews yet.
+          </div>
+        )}
+
+        {!loading && !reviewLoadError && reviews.map((r, i) => (
+          <div
+            key={r.id ?? i}
             className="rounded-xl p-3.5"
             style={{
               background: c.surface,
@@ -178,14 +187,14 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
                 className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
                 style={{ background: AVATAR_COLORS[i % 4] }}
               >
-                {"avatar" in r ? r.avatar : r.user_name[0]}
+                {r.user_name?.[0] ?? "?"}
               </div>
               <div className="flex-1">
                 <div
                   className="text-[12px] font-semibold"
                   style={{ color: c.text }}
                 >
-                  {"name" in r ? r.name : r.user_name}
+                  {r.user_name}
                 </div>
                 <div className="flex gap-0.5 mt-0.5">
                   {[1, 2, 3, 4, 5].map((s) => (
@@ -202,14 +211,14 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
                 </div>
               </div>
               <span className="text-[10px]" style={{ color: c.textDim }}>
-                {"created_at" in r ? timeAgo(r.created_at) : "2d ago"}
+                {timeAgo(r.created_at)}
               </span>
             </div>
             <p
               className="text-[12px] leading-relaxed"
               style={{ color: c.textMid }}
             >
-              {"body" in r ? r.body : r.text}
+              {r.body}
             </p>
           </div>
         ))}

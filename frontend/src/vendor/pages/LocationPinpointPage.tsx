@@ -80,38 +80,72 @@ export function LocationPinpointPage() {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.loaded()) return;
+    if (!map) return;
 
-    otherMarkersRef.current.forEach((m) => m.remove());
-    otherMarkersRef.current = [];
+    let cancelled = false;
+    const refreshOtherMarkers = () => {
+      if (cancelled) return;
 
-    stalls.forEach((s) => {
-      if (s.id === id) return;
-      if (!s.location?.latitude || !s.location?.longitude) return;
-      const dot = document.createElement("div");
-      dot.style.width = "12px";
-      dot.style.height = "12px";
-      dot.style.borderRadius = "50%";
-      dot.style.background = "#94a3b8";
-      dot.style.border = "2px solid white";
-      dot.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
-      const m = new maplibregl.Marker(dot)
-        .setLngLat([s.location.longitude, s.location.latitude])
-        .addTo(map);
-      otherMarkersRef.current.push(m);
-    });
+      otherMarkersRef.current.forEach((m) => m.remove());
+      otherMarkersRef.current = [];
+
+      stalls.forEach((s) => {
+        if (s.id === id) return;
+        if (!Number.isFinite(s.location?.latitude) || !Number.isFinite(s.location?.longitude)) return;
+        const dot = document.createElement("div");
+        dot.style.width = "12px";
+        dot.style.height = "12px";
+        dot.style.borderRadius = "50%";
+        dot.style.background = "#94a3b8";
+        dot.style.border = "2px solid white";
+        dot.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+        const m = new maplibregl.Marker(dot)
+          .setLngLat([s.location.longitude, s.location.latitude])
+          .addTo(map);
+        otherMarkersRef.current.push(m);
+      });
+    };
+
+    if (map.loaded()) {
+      refreshOtherMarkers();
+    } else {
+      map.once("load", refreshOtherMarkers);
+    }
+
+    return () => {
+      cancelled = true;
+      map.off("load", refreshOtherMarkers);
+      otherMarkersRef.current.forEach((m) => m.remove());
+      otherMarkersRef.current = [];
+    };
   }, [stalls, id]);
 
+  useEffect(() => {
+    if (isCreateMode || !stall) return;
+    const nextCoords = {
+      lat: stall.location?.latitude ?? 11.5564,
+      lng: stall.location?.longitude ?? 104.9282,
+    };
+
+    setCoords(nextCoords);
+    markerRef.current?.setLngLat([nextCoords.lng, nextCoords.lat]);
+    mapRef.current?.setCenter([nextCoords.lng, nextCoords.lat]);
+  }, [isCreateMode, stall]);
+
   async function handleConfirm() {
-    if (isCreateMode) {
-      sessionStorage.setItem("stall_create_location", JSON.stringify(coords));
-      navigate("/vendor/stalls/new");
-    } else if (id && stall) {
-      await updateStall(id, {
-        ...stall,
-        location: { ...stall.location, latitude: coords.lat, longitude: coords.lng },
-      });
-      setShowSuccess(true);
+    try {
+      if (isCreateMode) {
+        sessionStorage.setItem("stall_create_location", JSON.stringify(coords));
+        navigate("/vendor/stalls/new");
+      } else if (id && stall) {
+        await updateStall(id, {
+          ...stall,
+          location: { ...stall.location, latitude: coords.lat, longitude: coords.lng },
+        });
+        setShowSuccess(true);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not update stall location.");
     }
   }
 
@@ -124,11 +158,11 @@ export function LocationPinpointPage() {
       <div ref={mapDivRef} className="absolute inset-0" />
 
       <div
+        className="absolute left-4 right-4 bottom-4 z-10 sm:left-8 sm:right-auto sm:bottom-8 sm:w-[400px]"
         style={{
-          position: "absolute", bottom: "32px", left: "32px", width: "400px",
           background: "#f8f9ff", borderRadius: "12px",
           border: "1px solid #bccbb9", padding: "25px",
-          display: "flex", flexDirection: "column", gap: "16px", zIndex: 10,
+          display: "flex", flexDirection: "column", gap: "16px",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

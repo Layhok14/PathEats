@@ -202,6 +202,10 @@ export const getStallById = async (id) => {
 };
 
 export const editStall = async (id, payload) => {
+  if (payload.ownerId !== undefined && !payload.ownerId) {
+    throw new AppError("Vendor owner is required", 400);
+  }
+
   return adminRepository.updateStall(id, payload);
 };
 
@@ -223,8 +227,8 @@ export const getReviewsByPlaceId = async (placeId) => {
   return adminRepository.getReviewsByPlaceId(placeId);
 };
 
-export const getAllMenuItems = async () => {
-  return adminRepository.findAllMenuItems();
+export const getAllMenuItems = async (placeId = null) => {
+  return adminRepository.findAllMenuItems(placeId);
 };
 
 export const editMenuItem = async (id, payload) => {

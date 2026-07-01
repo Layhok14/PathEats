@@ -9,10 +9,8 @@ import { toast } from "sonner";
 const CATEGORIES = [
   { value: "", label: "All Categories", color: "bg-gray-100 text-gray-700" },
   { value: "viewing", label: "Viewing (Read)", color: "bg-blue-100 text-blue-700" },
-  { value: "altering", label: "Altering", color: "bg-orange-100 text-orange-700" },
-  { value: "deleting", label: "Deleting", color: "bg-red-100 text-red-700" },
-  { value: "updating", label: "Updating", color: "bg-purple-100 text-purple-700" },
-  { value: "creating", label: "Creating", color: "bg-green-100 text-green-700" },
+  { value: "altering", label: "Maintenance", color: "bg-orange-100 text-orange-700" },
+  { value: "updating", label: "Analyze", color: "bg-purple-100 text-purple-700" },
 ];
 
 function ErrorLogTab() {
@@ -81,7 +79,7 @@ function ErrorLogTab() {
 }
 
 export default function DeveloperToolsPage() {
-  const [tab, setTab] = useState<"query" | "bugs" | "errors">("query");
+  const [tab, setTab] = useState<"query" | "health" | "bugs" | "errors">("query");
   const [presets, setPresets] = useState<QueryPreset[]>([]);
   const [totalPresets, setTotalPresets] = useState(0);
   const [sql, setSql] = useState("");
@@ -185,7 +183,7 @@ export default function DeveloperToolsPage() {
     finally { setMaintenanceLoading(false); }
   };
 
-  useEffect(() => { if (tab === "query") loadMaintenance(); }, [tab]);
+  useEffect(() => { if (tab === "health") loadMaintenance(); }, [tab]);
 
   const loadBugs = useCallback(async () => {
     try { const data = await getDevErrors(); setBugData(data); } catch { setBugData(null); }
@@ -210,7 +208,7 @@ export default function DeveloperToolsPage() {
     <div className="space-y-6 p-6">
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-200 pb-3">
-        {([{ k: "query", l: "Query Editor & Maintenance" }, { k: "bugs", l: "Bug Dashboard" }, { k: "errors", l: "Error Log" }] as const).map((t) => (
+        {([{ k: "query", l: "Query Editor" }, { k: "health", l: "Table Health" }, { k: "bugs", l: "Bug Dashboard" }, { k: "errors", l: "Error Log" }] as const).map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${tab === t.k ? "bg-[#0f3460] text-white" : "text-gray-600 hover:bg-gray-100"}`}
           >{t.l}</button>
@@ -271,49 +269,6 @@ export default function DeveloperToolsPage() {
               </div>
             </div>
 
-            {/* Maintenance Info Panel (read-only, actions via presets) */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-semibold text-sm text-gray-800">Table Health</h3>
-                <button onClick={loadMaintenance}
-                  className="text-[11px] px-2.5 py-1 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
-                >{maintenanceLoading ? "Loading..." : "Refresh"}</button>
-              </div>
-              <div className="p-3 max-h-[280px] overflow-y-auto">
-                {maintenanceLoading ? (
-                  <p className="text-xs text-gray-400 text-center py-4">Loading...</p>
-                ) : maintenanceData.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-4">No data</p>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead><tr className="text-gray-500 border-b">
-                      <th className="text-left py-1.5 font-medium">Table</th>
-                      <th className="text-right py-1.5 font-medium">Dead</th>
-                      <th className="text-right py-1.5 font-medium">Size</th>
-                      <th className="text-center py-1.5 font-medium">Health</th>
-                    </tr></thead>
-                    <tbody>
-                      {maintenanceData.map((t) => (
-                        <tr key={t.name} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="py-1.5 text-gray-800 font-medium">{t.name}</td>
-                          <td className="py-1.5 text-right text-gray-600">{t.dead_tuples}</td>
-                          <td className="py-1.5 text-right text-gray-600">{t.size}</td>
-                          <td className="py-1.5 text-center">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                              t.health === "critical" ? "bg-red-100 text-red-700" :
-                              t.health === "warning" ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"
-                            }`}>{t.health}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              <div className="p-3 border-t border-gray-100">
-                <p className="text-[11px] text-gray-500">Run <strong>VACUUM</strong>, <strong>ANALYZE</strong>, or <strong>VACUUM ANALYZE</strong> from the presets above (category: Altering / Updating).</p>
-              </div>
-            </div>
           </div>
 
           {/* Right: SQL Editor + Results */}
@@ -376,6 +331,84 @@ export default function DeveloperToolsPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === "health" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Table Health</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Monitor table size, dead tuples, and maintenance status from PostgreSQL statistics.
+              </p>
+            </div>
+            <button
+              onClick={loadMaintenance}
+              disabled={maintenanceLoading}
+              className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+            >
+              {maintenanceLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            {[
+              { label: "Tables", value: maintenanceData.length, color: "border-gray-200 bg-white text-gray-900" },
+              { label: "Good", value: maintenanceData.filter((t) => t.health === "good").length, color: "border-green-200 bg-green-50 text-green-700" },
+              { label: "Warning", value: maintenanceData.filter((t) => t.health === "warning").length, color: "border-orange-200 bg-orange-50 text-orange-700" },
+              { label: "Critical", value: maintenanceData.filter((t) => t.health === "critical").length, color: "border-red-200 bg-red-50 text-red-700" },
+            ].map((item) => (
+              <div key={item.label} className={`rounded-xl border p-4 ${item.color}`}>
+                <p className="text-[11px] font-semibold uppercase tracking-widest opacity-70">{item.label}</p>
+                <p className="mt-1 text-2xl font-bold">{item.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500">
+                    <th className="text-left px-4 py-3 font-medium">Table</th>
+                    <th className="text-right px-4 py-3 font-medium">Dead Tuples</th>
+                    <th className="text-right px-4 py-3 font-medium">Size</th>
+                    <th className="text-center px-4 py-3 font-medium">Health</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {maintenanceLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-10 text-center text-gray-400">Loading table health...</td>
+                    </tr>
+                  ) : maintenanceData.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-10 text-center text-gray-400">No table health data available.</td>
+                    </tr>
+                  ) : (
+                    maintenanceData.map((t) => (
+                      <tr key={t.name} className="border-t border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{t.name}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{t.dead_tuples}</td>
+                        <td className="px-4 py-3 text-right text-gray-600">{t.size}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-[10px] px-2 py-1 rounded-full font-semibold ${
+                            t.health === "critical" ? "bg-red-100 text-red-700" :
+                            t.health === "warning" ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"
+                          }`}>{t.health}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-gray-500">
+            Maintenance actions are still run through controlled query presets in the Query Editor.
+          </p>
         </div>
       )}
 

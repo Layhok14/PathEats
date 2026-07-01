@@ -50,7 +50,11 @@ function StallInfoForm({ form, onChange }: { form: StallFormData; onChange: (f: 
       </div>
       <div>
         <label style={lbl}>Stall Photo</label>
-        <PhotoUpload value={form.photoUrl} onChange={(url) => onChange({ ...form, photoUrl: url })} label="Click or drag to upload stall photo" />
+        <PhotoUpload
+          value={form.photoUrl}
+          onChange={(url, storageImage) => onChange({ ...form, photoUrl: url, storageImage })}
+          label="Click or drag to upload stall photo"
+        />
       </div>
       <div>
         <label style={lbl}>Primary Category</label>
@@ -99,6 +103,8 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
   const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
   const initialCoords = { lat: form.location.latitude, lng: form.location.longitude };
   const [coords, setCoords] = useState(initialCoords);
+  const coordsRef = useRef(coords);
+  coordsRef.current = coords;
   const syncRef = useRef(onChange);
   syncRef.current = onChange;
   const formRef = useRef(form);
@@ -143,7 +149,7 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
       el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
 
       const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, draggable: true })
-        .setLngLat([initialCoords.lng, initialCoords.lat])
+        .setLngLat([coordsRef.current.lng, coordsRef.current.lat])
         .addTo(map);
 
       marker.on("dragend", () => {
@@ -185,6 +191,15 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
       mapRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const marker = markerRef.current;
+    const map = mapRef.current;
+    if (!marker || !map) return;
+
+    marker.setLngLat([coords.lng, coords.lat]);
+    map.setCenter([coords.lng, coords.lat]);
+  }, [coords.lat, coords.lng]);
 
   return (
     <div className="flex flex-col gap-4">

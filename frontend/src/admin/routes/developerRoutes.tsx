@@ -5,6 +5,7 @@ import BackupManagerPage from "../pages/developer/BackupManagerPage";
 import DeveloperUserManagementPage from "../pages/developer/DeveloperUserManagementPage";
 import DeveloperVendorManagementPage from "../pages/developer/DeveloperVendorManagementPage";
 import DeveloperVendorDetailPage from "../pages/developer/DeveloperVendorDetailPage";
+import DeveloperReviewsPage from "../pages/developer/DeveloperReviewsPage";
 import { AuthGuard } from "../../shared/components/AuthGuard";
 
 const developerRoutes: RouteObject = {
@@ -48,6 +49,14 @@ const developerRoutes: RouteObject = {
       element: (
         <AuthGuard requiredRole="DEVELOPER_ADMIN">
           <DeveloperVendorDetailPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "reviews",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperReviewsPage />
         </AuthGuard>
       ),
     },

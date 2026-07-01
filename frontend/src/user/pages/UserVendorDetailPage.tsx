@@ -4,14 +4,19 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
+import { useAuth } from "../../shared/hooks/useAuth";
+import { useBookmarks } from "../hooks/useBookmarks";
 import { getVendorById } from "../services/vendorService";
 import { VendorDetail } from "../components/VendorDetail";
+import type { Vendor } from "../../shared/types";
 
 export default function UserVendorDetailPage() {
   const { darkMode, tm } = useTheme();
   const { id } = useParams();
   const navigate = useNavigate();
-  const [vendor, setVendor] = useState(null);
+  const { user } = useAuth();
+  const { bookmarks, toggleBookmark } = useBookmarks();
+  const [vendor, setVendor] = useState<Vendor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -42,6 +47,15 @@ export default function UserVendorDetailPage() {
   const handleClose = () => {
     navigate("/user");
   };
+
+  function handleToggleBookmark() {
+    if (!vendor) return;
+    if (user?.role_scope !== "CONSUMER") {
+      navigate("/user/login");
+      return;
+    }
+    toggleBookmark(vendor.id);
+  }
 
   if (loading) {
     return (
@@ -74,8 +88,8 @@ export default function UserVendorDetailPage() {
       <VendorDetail
         vendor={vendor}
         onClose={handleClose}
-        isFavorite={false}
-        onToggleFavorite={() => {}}
+        isFavorite={bookmarks.has(String(vendor.id))}
+        onToggleFavorite={handleToggleBookmark}
       />
     </div>
   );

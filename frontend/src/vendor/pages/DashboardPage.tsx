@@ -1,49 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Star } from "lucide-react";
+import { CircleCheck, MessageSquare, Plus, RefreshCw, Star, Store, UtensilsCrossed } from "lucide-react";
 import api from "../../shared/services/axiosService";
-
-function SvgLineChart({ data }: { data: { day: string; views: number }[] }) {
-  const W = 860, H = 200, PAD = { top: 16, right: 20, bottom: 32, left: 10 };
-  const vals = data.map((d) => d.views);
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
-  const range = maxV - minV || 1;
-  const chartW = W - PAD.left - PAD.right;
-  const chartH = H - PAD.top - PAD.bottom;
-  const xs = data.map((_, i) => PAD.left + (i / (data.length - 1)) * chartW);
-  const ys = data.map((d) => PAD.top + chartH - ((d.views - minV) / range) * chartH);
-  const path = xs.map((x, i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
-  const area = `${path} L${xs[xs.length - 1].toFixed(1)},${(PAD.top + chartH).toFixed(1)} L${xs[0].toFixed(1)},${(PAD.top + chartH).toFixed(1)} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
-      {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-        const y = PAD.top + chartH * (1 - t);
-        return <line key={t} x1={PAD.left} x2={W - PAD.right} y1={y} y2={y} stroke="rgba(0,0,0,0.06)" strokeWidth={1} />;
-      })}
-      <path d={area} fill="#22c55e" fillOpacity={0.08} />
-      <path d={path} fill="none" stroke="#22c55e" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-      {xs.map((x, i) => (
-        <circle key={i} cx={x} cy={ys[i]} r={4} fill="#22c55e" />
-      ))}
-      {data.map((d, i) => (
-        <text key={i} x={xs[i]} y={H - 6} textAnchor="middle" fontSize={10} fill="#565e74" fontFamily="Poppins, sans-serif">
-          {d.day}
-        </text>
-      ))}
-    </svg>
-  );
-}
-
-const analyticsData = [
-  { day: "MAY 10", views: 120 },
-  { day: "MAY 11", views: 220 },
-  { day: "MAY 12", views: 180 },
-  { day: "MAY 13", views: 310 },
-  { day: "MAY 14", views: 160 },
-  { day: "MAY 15", views: 390 },
-  { day: "MAY 16", views: 420 },
-];
+import { getApiErrorMessage } from "../../shared/utils/apiError";
 
 interface DashboardStats {
   total_stalls: number;
@@ -61,14 +20,39 @@ interface DashboardReview {
   place_id: string;
 }
 
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [reviews, setReviews] = useState<DashboardReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadDashboard() {
+    setLoading(true);
+    setError("");
+    try {
+      const [statsResponse, reviewsResponse] = await Promise.all([
+        api.get("/vendor/dashboard"),
+        api.get("/vendor/reviews"),
+      ]);
+      setStats(statsResponse.data.data);
+      setReviews(reviewsResponse.data.data);
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Could not load vendor dashboard."));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    api.get("/vendor/dashboard").then(({ data }) => setStats(data.data)).catch(() => {});
-    api.get("/vendor/reviews").then(({ data }) => setReviews(data.data)).catch(() => {});
+    loadDashboard();
   }, []);
 
   const card: React.CSSProperties = {
@@ -84,6 +68,18 @@ export function DashboardPage() {
     { label: "Average Rating", value: stats ? Number(stats.avg_rating).toFixed(1) : "—", icon: "⭐", color: "#f59e0b" },
   ];
 
+  const statPresentation = [
+    { value: stats?.total_stalls ?? "-", icon: <Store size={18} />, color: "#006e2f" },
+    { value: stats?.open_stalls ?? "-", icon: <CircleCheck size={18} />, color: "#005ac2" },
+    { value: stats ? Number(stats.avg_rating).toFixed(1) : "-", icon: <Star size={18} />, color: "#b45309" },
+  ];
+
+  const quickActions = [
+    { label: "Create Stall", icon: <Plus size={16} />, onClick: () => navigate("/vendor/stalls/new"), color: "#22c55e" },
+    { label: "Manage Menu", icon: <UtensilsCrossed size={16} />, onClick: () => navigate("/vendor/menu"), color: "#3b82f6" },
+    { label: "View Reviews", icon: <MessageSquare size={16} />, onClick: () => navigate("/vendor/reviews"), color: "#f59e0b" },
+  ];
+
   return (
     <div className="p-6 flex flex-col gap-6">
       <div>
@@ -94,19 +90,30 @@ export function DashboardPage() {
 
       <div>
         <h1 style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "28px", fontWeight: 700, lineHeight: "1.2" }}>
-          Good morning!
+          {greeting()}!
         </h1>
         <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "4px" }}>
           Here's what's happening with your stall today.
         </p>
       </div>
 
+      {error && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+          <span>{error}</span>
+          <button onClick={loadDashboard} className="inline-flex items-center gap-1.5 font-semibold text-amber-900">
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
-        {statCards.map((s) => (
+        {statCards.map((s, index) => (
           <div key={s.label} style={card}>
-            <div className="text-2xl mb-3">{s.icon}</div>
+            <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg text-white" style={{ background: statPresentation[index].color }}>
+              {statPresentation[index].icon}
+            </div>
             <div style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "36px", fontWeight: 700, lineHeight: "1" }}>
-              {s.value}
+              {loading ? "-" : statPresentation[index].value}
             </div>
             <div style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "8px" }}>
               {s.label}
@@ -117,17 +124,19 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-4">
         <div style={card}>
-          <div className="flex items-center justify-between mb-4">
-            <span style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600 }}>
-              Recent Reviews
-            </span>
-          </div>
-          {reviews.length === 0 ? (
-            <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px" }}>
+          <span style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600 }}>
+            Recent Reviews
+          </span>
+          {loading && reviews.length === 0 ? (
+            <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "16px" }}>
+              Loading recent reviews...
+            </p>
+          ) : reviews.length === 0 ? (
+            <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "16px" }}>
               No reviews yet.
             </p>
           ) : (
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-5 mt-4">
               {reviews.slice(0, 3).map((r) => (
                 <div key={r.id} className="flex gap-3">
                   <div className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center"
@@ -164,38 +173,26 @@ export function DashboardPage() {
 
         <div style={card}>
           <span style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600 }}>
-            Top Selling Items
+            Quick Actions
           </span>
           <div className="flex flex-col gap-3 mt-4">
-            {[
-              { name: "Bai Sach Chrouk", price: 2.00, color: "#22c55e" },
-              { name: "Kuyteav Soup", price: 1.75, color: "#3b82f6" },
-              { name: "Fried Rice", price: 2.00, color: "#f59e0b" },
-            ].map((item) => (
-              <div key={item.name} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: "var(--brand-card-border)" }}>
-                <div className="w-12 h-12 rounded-lg shrink-0 flex items-center justify-center text-white font-bold" style={{ background: item.color }}>{item.name[0]}</div>
-                <div>
-                  <p style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600 }}>{item.name}</p>
-                  <p style={{ color: "var(--brand-green)", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 500 }}>${item.price.toFixed(2)}</p>
+            {quickActions.map((a) => (
+              <button
+                key={a.label}
+                onClick={a.onClick}
+                className="flex items-center gap-3 p-3 rounded-lg border transition-all hover:brightness-95 active:scale-[0.98] w-full text-left cursor-pointer"
+                style={{ borderColor: "var(--brand-card-border)", background: "var(--card)" }}
+              >
+                <div className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center text-white" style={{ background: a.color }}>
+                  {a.icon}
                 </div>
-              </div>
+                <span style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600 }}>
+                  {a.label}
+                </span>
+              </button>
             ))}
           </div>
-          <button
-            onClick={() => navigate("/vendor/menu")}
-            className="mt-4 w-full text-center hover:opacity-80 transition-opacity"
-            style={{ color: "var(--brand-green)", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 500, background: "none", border: "none", cursor: "pointer" }}
-          >
-            View all menu items
-          </button>
         </div>
-      </div>
-
-      <div style={card}>
-        <p style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600, marginBottom: "20px" }}>
-          Analytics <span style={{ color: "var(--brand-text-muted)", fontWeight: 400 }}>(This Week)</span>
-        </p>
-        <SvgLineChart data={analyticsData} />
       </div>
     </div>
   );

@@ -60,6 +60,7 @@ function MenuItemModal({
     description: item?.description ?? "",
     price: item?.price ?? 0,
     imageUrl: item?.imageUrl ?? "",
+    storageImage: item?.storageImage ?? null,
     category: (item?.category as MenuCategory) ?? "Rice",
     isAvailable: item?.isAvailable ?? true,
   });
@@ -68,9 +69,14 @@ function MenuItemModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    await onSave(form);
-    setSaving(false);
-    onClose();
+    try {
+      await onSave(form);
+      onClose();
+    } catch {
+      // The caller shows the concrete API error.
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -106,7 +112,7 @@ function MenuItemModal({
             <label style={lbl}>Item Photo</label>
             <PhotoUpload
               value={form.imageUrl}
-              onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+              onChange={(url, storageImage) => setForm((f) => ({ ...f, imageUrl: url, storageImage }))}
               label="Upload item photo"
               aspectRatio="square"
             />
@@ -255,6 +261,15 @@ function LocationPreviewMap({ lat, lng, onOpenFullscreen, onCoordsChange }: { la
     return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const marker = markerRef.current;
+    const map = mapRef.current;
+    if (!marker || !map) return;
+
+    marker.setLngLat([lng, lat]);
+    map.setCenter([lng, lat]);
+  }, [lat, lng]);
+
   return (
     <div style={{ position: "relative", borderRadius: "8px", overflow: "hidden" }}>
       <div ref={mapDivRef} style={{ width: "100%", height: "160px" }} />
@@ -298,7 +313,17 @@ export function StallDetailPage() {
       return;
     }
     setNotFound(false);
-    setForm({ name: stall.name, photoUrl: stall.photoUrl, category: stall.category, description: stall.description, operatingHours: stall.operatingHours, status: stall.status, location: stall.location, menuItemIds: stall.menuItemIds });
+    setForm({
+      name: stall.name,
+      photoUrl: stall.photoUrl,
+      storageImage: stall.storageImage ?? null,
+      category: stall.category,
+      description: stall.description,
+      operatingHours: stall.operatingHours,
+      status: stall.status,
+      location: stall.location,
+      menuItemIds: stall.menuItemIds,
+    });
   }, [id, getStall, loading]);
 
   useEffect(() => {
@@ -308,60 +333,88 @@ export function StallDetailPage() {
     }).catch((err) => console.error("[StallDetailPage] Failed to load menu items:", err));
   }, [id]);
 
+  useEffect(() => {
+    setForm((current) => ({
+      ...current,
+      menuItemIds: stallItems.map((item) => item.id),
+    }));
+  }, [stallItems]);
+
   function setHours(part: "weekdays" | "weekends", field: "open" | "close", val: string) {
     setForm((f) => ({ ...f, operatingHours: { ...f.operatingHours, [part]: { ...f.operatingHours[part], [field]: to12h(val) } } }));
   }
 
   async function handleUpdate() {
     if (!id) return;
-    await updateStall(id, form);
-    setSuccessMessage("Stall details updated.");
+    try {
+      await updateStall(id, form);
+      setSuccessMessage("Stall details updated.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not update stall.");
+    }
   }
 
   async function handleDelete() {
     if (!id) return;
-    await deleteStall(id);
-    toast.success("Stall deleted.");
-    navigate("/vendor/stalls");
+    try {
+      await deleteStall(id);
+      toast.success("Stall deleted.");
+      navigate("/vendor/stalls");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not delete stall.");
+    }
   }
 
   async function handleSaveItem(data: MenuItemFormData) {
     if (!id) return;
-    if (editingItem && editingItem !== "new" && editingItem.id) {
-      const { data: res } = await api.put(`/vendor/stalls/${id}/items/${editingItem.id}`, data);
-      const updated = mapItem(res.data);
-      setStallItems((prev) => prev.map((m) => m.id === editingItem.id ? updated : m));
-      setSuccessMessage("Menu item updated.");
-    } else {
-      const { data: res } = await api.post(`/vendor/stalls/${id}/items`, data);
-      const created = mapItem(res.data);
-      setStallItems((prev) => [...prev, created]);
-      setSuccessMessage("New menu item created.");
+    try {
+      if (editingItem && editingItem !== "new" && editingItem.id) {
+        const { data: res } = await api.put(`/vendor/stalls/${id}/items/${editingItem.id}`, data);
+        const updated = mapItem(res.data);
+        setStallItems((prev) => prev.map((m) => m.id === editingItem.id ? updated : m));
+        setSuccessMessage("Menu item updated.");
+      } else {
+        const { data: res } = await api.post(`/vendor/stalls/${id}/items`, data);
+        const created = mapItem(res.data);
+        setStallItems((prev) => [...prev, created]);
+        setSuccessMessage("New menu item created.");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not save menu item.");
+      throw err;
     }
   }
 
   async function handleCatalogToggle(itemId: string) {
     if (!id) return;
-    const exists = stallItems.find((m) => m.id === itemId);
-    if (exists) {
-      await api.delete(`/vendor/stalls/${id}/items/${itemId}`);
-      setStallItems((prev) => prev.filter((m) => m.id !== itemId));
-      toast.success("Item removed from stall.");
-    } else {
-      const source = catalogItems.find((m) => m.id === itemId);
-      if (!source) return;
-      const { data: res } = await api.post(`/vendor/stalls/${id}/items`, source);
-      const created = mapItem(res.data);
-      setStallItems((prev) => [...prev, created]);
-      toast.success("Item added to stall.");
+    try {
+      const exists = stallItems.find((m) => m.id === itemId);
+      if (exists) {
+        await api.delete(`/vendor/stalls/${id}/items/${itemId}`);
+        setStallItems((prev) => prev.filter((m) => m.id !== itemId));
+        toast.success("Item removed from stall.");
+      } else {
+        const source = catalogItems.find((m) => m.id === itemId);
+        if (!source) return;
+        const { data: res } = await api.post(`/vendor/stalls/${id}/items`, source);
+        const created = mapItem(res.data);
+        setStallItems((prev) => [...prev, created]);
+        toast.success("Item added to stall.");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not update stall menu.");
     }
   }
 
   async function removeItemFromStall(itemId: string) {
     if (!id) return;
-    await api.delete(`/vendor/stalls/${id}/items/${itemId}`);
-    setStallItems((prev) => prev.filter((m) => m.id !== itemId));
-    toast.success("Item removed from stall.");
+    try {
+      await api.delete(`/vendor/stalls/${id}/items/${itemId}`);
+      setStallItems((prev) => prev.filter((m) => m.id !== itemId));
+      toast.success("Item removed from stall.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Could not remove menu item.");
+    }
   }
 
   const linkedItems = stallItems;
@@ -420,7 +473,7 @@ export function StallDetailPage() {
                 <label style={lbl}>Stall Photo</label>
                 <PhotoUpload
                   value={form.photoUrl}
-                  onChange={(url) => setForm((f) => ({ ...f, photoUrl: url }))}
+                  onChange={(url, storageImage) => setForm((f) => ({ ...f, photoUrl: url, storageImage }))}
                   label="Click or drag to upload stall photo"
                 />
               </div>
@@ -595,7 +648,7 @@ export function StallDetailPage() {
       {/* Catalog picker */}
       {showCatalog && (
         <CatalogPicker
-          selectedIds={form.menuItemIds}
+          selectedIds={linkedItems.map((item) => item.id)}
           onToggle={handleCatalogToggle}
           onClose={() => setShowCatalog(false)}
         />
@@ -620,6 +673,14 @@ function mapItem(row: any): MenuItem {
     description: row.description || "",
     price: parseFloat(row.price),
     imageUrl: row.image_url || "",
+    storageImage: row.storageImage || (row.image_bucket && row.image_path
+      ? {
+          bucketName: row.image_bucket,
+          objectPath: row.image_path,
+          mimeType: row.image_mime_type || null,
+          altText: row.image_alt_text || "",
+        }
+      : null),
     category: (row.category === "main course" ? "Main Course" : row.category === "snack" ? "Snack" : row.category === "drink" ? "Drink" : row.category === "dessert" ? "Dessert" : "All") as MenuCategory,
     isAvailable: row.is_available,
   };

@@ -2,7 +2,7 @@
 
 ## Current State
 
-**Real API integration exists only for auth and vendor stall CRUD.** Everything else — consumer vendor search, reviews, menu items, dashboard stats, all admin/CS/developer pages — operates on client-side mock data with no persistence.
+**Real API integration exists only for auth and vendor stall CRUD.** Everything else — consumer vendor search, reviews, menu items, dashboard stats, all admin/developer pages — operates on client-side mock data with no persistence.
 
 ## Domain Architecture
 
@@ -14,7 +14,6 @@ App.tsx
     → /user/*  → UserSearchPage (main consumer app)
     → /vendor/* → VendorLayout + 10 pages
     → /admin/* → AdminMainLayout + 5 pages
-    → /customer-service/* → CustomerServiceLayout + 3 pages
     → /developer/* → DeveloperLayout + 4 pages
   → Toaster (sonner notifications)
 ```
@@ -25,7 +24,7 @@ App.tsx
 |--------|--------|-----------|
 | User (`/user/*`) | Theme context + inline styles | ✅ yes, via `useTheme` tokens |
 | Vendor | CSS variables (`var(--brand-)`) + hardcoded | ❌ no |
-| Admin/CS/Dev | Hardcoded hex colors | ❌ no |
+| Admin/Dev | Hardcoded hex colors | ❌ no |
 
 ---
 
@@ -333,7 +332,7 @@ function DashboardPage() {
 
 ---
 
-## Admin, Customer Service, Developer Domains
+## Admin & Developer Domains
 
 ### Current State
 
@@ -344,9 +343,7 @@ All pages render static mock data from `adminData.ts`:
 | Admin Dashboard | `MOCK_USERS` (10), `GROWTH_DATA` (7 days), `MOCK_SYSTEM_ACTIVITY` (4 items) |
 | User Management | `MOCK_USERS` (10 rows) |
 | Restaurant Management | `MOCK_PENDING_RESTAURANTS` (4), `MOCK_ACTIVE_RESTAURANTS` (8) |
-| Complaints | `MOCK_SUPPORT_TICKETS` (7) |
 | System Settings | All local state, no persistence |
-| CS Dashboard | Same `MOCK_SUPPORT_TICKETS` |
 | Dev Dashboard | Hardcoded uptime 99.97%, API response 124ms |
 | Database Management | Hardcoded table list (6 tables) |
 | Error Logs | `ALL_ERROR_LOGS` (6 entries) |
@@ -359,8 +356,7 @@ Everything needs backend endpoints. See `backend-guide.md` for the corresponding
 1. **GET /api/admin/users** — replace `MOCK_USERS` with real DB data
 2. **GET /api/admin/vendors** + **POST /api/admin/vendors/:id/approve** — replace restaurant lists
 3. **GET /api/admin/telemetry** — replace dashboard metrics
-4. **GET /api/cs/tickets** — replace support tickets
-5. **GET /api/dev/database** — replace DB stats
+4. **GET /api/dev/database** — replace DB stats
 6. **GET /api/dev/health** — add real DB check
 
 ### Example: Connecting Admin Users to API
@@ -417,7 +413,7 @@ function UserManagementPage() {
 3. **Dashboard real metrics** — backend already has the endpoint, frontend just needs to call it
 4. **Menu items API** — needs backend + frontend, core vendor feature
 5. **User profile API** — needs backend + frontend
-6. **Admin/CS/Dev API integration** — each page replaces mock data with API calls
+6. **Admin/Dev API integration** — each page replaces mock data with API calls
 7. **Reviews API** — needs backend + frontend
 
 ### File Cleanup

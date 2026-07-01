@@ -1,23 +1,97 @@
+import { randomUUID } from "crypto";
 import AppError from "../utils/AppError.js";
+
+const DEFAULT_ERROR_CODES = {
+  400: "BAD_REQUEST",
+  401: "AUTHENTICATION_REQUIRED",
+  403: "FORBIDDEN",
+  404: "NOT_FOUND",
+  409: "CONFLICT",
+  422: "VALIDATION_FAILED",
+  429: "RATE_LIMITED",
+  500: "INTERNAL_ERROR",
+};
+
+const FRIENDLY_MESSAGES = {
+  400: "Check your input and try again.",
+  401: "Your session expired. Please sign in again.",
+  403: "You do not have permission to do that.",
+  404: "We could not find what you asked for.",
+  409: "That change conflicts with existing data.",
+  422: "Some information needs to be corrected.",
+  429: "Too many requests. Please wait and try again.",
+  500: "Something went wrong. Please try again.",
+};
+
+function statusFromError(err) {
+  const status = Number(err.statusCode || err.status || 500);
+  if (status < 400 || status > 599) return 500;
+  return status;
+}
+
+function errorCode(err, statusCode) {
+  if (err.isOperational && err.code) return err.code;
+  return DEFAULT_ERROR_CODES[statusCode] || "INTERNAL_ERROR";
+}
+
+function publicMessage(err, statusCode) {
+  if (err.safeMessage) return err.safeMessage;
+  if (err.isOperational && err.expose !== false) return err.message;
+  return FRIENDLY_MESSAGES[statusCode] || FRIENDLY_MESSAGES[500];
+}
+
+function requestTraceId(req) {
+  const header = req.headers["x-request-id"];
+  return typeof header === "string" && header.trim() ? header.trim() : randomUUID();
+}
 
 /**
  * Global Express error handler.
  * Catches all errors thrown via `next(err)` or `throw` in async handlers.
  */
 export function errorHandler(err, req, res, next) {
-  // Default to 500 for unexpected errors
-  const statusCode = err.statusCode || 500;
-  const message = err.isOperational ? err.message : "Internal Server Error";
+  const statusCode = statusFromError(err);
+  const traceId = requestTraceId(req);
+  const code = errorCode(err, statusCode);
+  const message = publicMessage(err, statusCode);
+  const severity = err.severity || (statusCode >= 500 ? "error" : "warning");
 
-  console.error(`[${statusCode}] ${err.message}`);
-  if (!err.isOperational) {
-    console.error(err.stack);
-  }
+  res.setHeader("X-Trace-Id", traceId);
+
+  const logPayload = {
+    traceId,
+    severity,
+    statusCode,
+    code,
+    method: req.method,
+    path: req.originalUrl,
+    actorId: req.user?.sub ?? null,
+    actorRole: req.user?.role_scope ?? null,
+    ip: req.ip,
+    userAgent: req.get("user-agent") ?? null,
+    message: err.message,
+    safeMessage: message,
+    details: err.details ?? null,
+    cause: err.cause?.message ?? null,
+    stack: process.env.NODE_ENV === "production" ? undefined : err.stack,
+  };
+
+  const logLine = JSON.stringify(logPayload);
+  if (severity === "error") console.error(logLine);
+  else console.warn(logLine);
 
   res.status(statusCode).json({
     success: false,
+    code,
     message,
-    ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    traceId,
+    ...(err.fieldErrors && { fieldErrors: err.fieldErrors }),
+    ...(process.env.NODE_ENV === "development" && {
+      debug: {
+        message: err.message,
+        stack: err.stack,
+      },
+    }),
   });
 }
 
@@ -26,5 +100,9 @@ export function errorHandler(err, req, res, next) {
  * Must be mounted after all route registrations.
  */
 export function notFoundHandler(req, res, next) {
-  next(new AppError(`Route not found: ${req.method} ${req.originalUrl}`, 404));
+  next(new AppError(`Route not found: ${req.method} ${req.originalUrl}`, 404, {
+    code: "ROUTE_NOT_FOUND",
+    safeMessage: "We could not find that page or API route.",
+    severity: "info",
+  }));
 }

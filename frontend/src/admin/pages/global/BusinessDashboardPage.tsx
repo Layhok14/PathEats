@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Store, UserPlus, ShieldAlert, Loader, TrendingUp, ArrowRight, MapPinned, AlertCircle } from "lucide-react";
+import { Store, UserPlus, ShieldAlert, Loader, TrendingUp, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAdminAllReviews,
   getAdminAllStalls,
-  getAdminUsers,
-  type AdminReview,
+  getAdminUsersByRole,
   type AdminStallRow,
   type AdminUser,
+  type AdminReview,
 } from "../../services/adminDashboardService";
 
 export default function BusinessDashboardPage() {
@@ -20,26 +20,29 @@ export default function BusinessDashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      getAdminUsers().catch(() => [] as AdminUser[]),
+      getAdminUsersByRole("VENDOR").catch(() => [] as AdminUser[]),
       getAdminAllStalls().catch(() => [] as AdminStallRow[]),
       getAdminAllReviews().catch(() => [] as AdminReview[]),
     ]).then(([v, s, r]) => {
-      setVendors(v.filter((u) => u.role === "VENDOR"));
+      setVendors(v);
       setStalls(s);
       setReviews(r);
     }).catch(() => toast.error("Could not load business data"))
     .finally(() => setLoading(false));
   }, []);
 
-  const unassignedStalls = stalls.filter((stall) => !stall.ownerId).length;
   const flaggedCount = reviews.filter((r) => r.flagged_at && !r.deleted_at).length;
-  const removedCount = reviews.filter((r) => r.deleted_at).length;
+  const openStallCount = stalls.filter((stall) => stall.isOpen).length;
+  const stallCountByVendor = stalls.reduce<Record<string, number>>((counts, stall) => {
+    counts[stall.ownerId] = (counts[stall.ownerId] ?? 0) + 1;
+    return counts;
+  }, {});
 
   const cards = [
     {
       label: "Total Vendors",
       value: vendors.length,
-      sub: "Registered vendor accounts",
+      sub: "Vendor accounts",
       color: "#006e2f",
       icon: Store,
       link: "/admin/vendors",
@@ -47,41 +50,25 @@ export default function BusinessDashboardPage() {
     {
       label: "Total Stalls",
       value: stalls.length,
-      sub: "Stall records in database",
+      sub: "Database stall records",
       color: "#005ac2",
-      icon: MapPinned,
+      icon: Store,
       link: "/admin/stalls",
     },
     {
-      label: "Unassigned Stalls",
-      value: unassignedStalls,
-      sub: "No vendor owner connected",
+      label: "Open Stalls",
+      value: openStallCount,
+      sub: "Visible as currently open",
       color: "#f59e0b",
-      icon: AlertCircle,
+      icon: TrendingUp,
       link: "/admin/stalls",
-    },
-    {
-      label: "Vendors Onboarded",
-      value: "N/A",
-      sub: "Telegram-connected accounts",
-      color: "#7c3aed",
-      icon: UserPlus,
-      link: "/admin/vendors/onboarding",
     },
     {
       label: "Flagged Reviews",
       value: flaggedCount,
       sub: "Awaiting moderation",
-      color: "#f59e0b",
-      icon: ShieldAlert,
-      link: "/admin/vendors/moderation",
-    },
-    {
-      label: "Removed Reviews",
-      value: removedCount,
-      sub: "Soft-deleted, ratings recalculated",
       color: "#ef4444",
-      icon: TrendingUp,
+      icon: ShieldAlert,
       link: "/admin/vendors/moderation",
     },
   ];
@@ -99,10 +86,10 @@ export default function BusinessDashboardPage() {
       <div className="flex-1 p-8 flex flex-col gap-6">
         <div>
           <h1 className="text-[28px] font-bold text-[#0b1c30]">Business Assistance Dashboard</h1>
-          <p className="text-[14px] text-[#64748b] mt-1">Overview of vendor accounts, stalls, onboarding, and review moderation.</p>
+          <p className="text-[14px] text-[#64748b] mt-1">Overview of vendor activity, onboarding, and review moderation.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {cards.map((c) => {
             const Icon = c.icon;
             return (
@@ -126,10 +113,10 @@ export default function BusinessDashboardPage() {
           <div className="px-6 py-4 border-b border-[#f1f5f9] flex items-center justify-between">
             <h2 className="text-[16px] font-semibold text-[#0b1c30]">Quick Actions</h2>
           </div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="p-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "Manage Vendors", desc: "View, create, and edit vendor accounts", path: "/admin/vendors", icon: Store },
-              { label: "View All Stalls", desc: "See assigned and unassigned stalls", path: "/admin/stalls", icon: MapPinned },
+              { label: "Manage Stalls", desc: "Inspect stall records, locations, and menu data", path: "/admin/stalls", icon: Store },
               { label: "Onboarding Settings", desc: "Configure Telegram link and onboarding message", path: "/admin/vendors/onboarding", icon: UserPlus },
               { label: "Review Moderation", desc: "Flag or remove inappropriate reviews", path: "/admin/vendors/moderation", icon: ShieldAlert },
             ].map((action) => {
@@ -162,26 +149,29 @@ export default function BusinessDashboardPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-[#f8fafc]">
-                  {["Name", "Email", "Status"].map((h) => (
+                  {["Name", "Email", "Status", "Stalls"].map((h) => (
                     <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {vendors.slice(0, 10).map((v) => (
-                  <tr key={v.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
-                    <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{v.name}</td>
-                    <td className="px-5 py-3 text-[12px] text-[#64748b]">{v.email}</td>
+                {vendors.slice(0, 10).map((vendor) => (
+                  <tr key={vendor.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
+                    <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{vendor.name}</td>
+                    <td className="px-5 py-3 text-[12px] text-[#64748b]">{vendor.email}</td>
                     <td className="px-5 py-3">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${v.status === "Active" ? "bg-green-50 text-[#006e2f]" : "bg-red-50 text-[#ba1a1a]"}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${v.status === "Active" ? "bg-[#006e2f]" : "bg-[#ba1a1a]"}`} />
-                        {v.status}
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${vendor.status === "Active" ? "bg-green-50 text-[#006e2f]" : "bg-red-50 text-[#ba1a1a]"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${vendor.status === "Active" ? "bg-[#006e2f]" : "bg-[#ba1a1a]"}`} />
+                        {vendor.status}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-[12px] text-[#64748b]">
+                      {stallCountByVendor[vendor.id] ?? 0}
                     </td>
                   </tr>
                 ))}
                 {vendors.length === 0 && (
-                  <tr><td colSpan={3} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No vendors registered yet.</td></tr>
+                  <tr><td colSpan={4} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No vendors registered yet.</td></tr>
                 )}
               </tbody>
             </table>

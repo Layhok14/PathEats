@@ -1,17 +1,13 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
-import {
-  getAdminVendorManagementOverview,
-  type AdminVendorOverviewRow,
-} from "../../services/adminDashboardService";
+import type { AdminVendorOverviewRow } from "../../services/adminDashboardService";
+import { getDevVendorManagementOverview } from "../../services/developerService";
 import { DetailModal, SummaryCell } from "./devShared";
 
 const PAGE_SIZE = 8;
 
 export default function DeveloperVendorManagementPage() {
-  const navigate = useNavigate();
   const [rows, setRows] = useState<AdminVendorOverviewRow[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -21,7 +17,7 @@ export default function DeveloperVendorManagementPage() {
   const loadOverview = async (searchText = query) => {
     try {
       setLoading(true);
-      const overviewRows = await getAdminVendorManagementOverview(searchText);
+      const overviewRows = await getDevVendorManagementOverview(searchText);
       setRows(overviewRows);
     } catch (err) {
       console.error("[VendorManagementPage] Failed to load:", err);
@@ -45,8 +41,8 @@ export default function DeveloperVendorManagementPage() {
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
-          <h1 className="text-[26px] font-bold text-[#0b1c30]">Vendor Management</h1>
-          <p className="text-[13px] text-[#64748b] mt-0.5">Oversee vendor accounts, menu items, categories, hours, and reviews.</p>
+          <h1 className="text-[26px] font-bold text-[#0b1c30]">Vendor Diagnostics</h1>
+          <p className="text-[13px] text-[#64748b] mt-0.5">Inspect vendor-linked records across stalls, menus, categories, hours, and reviews.</p>
         </div>
 
         {activeDetail && <DetailModal title={activeDetail.title} details={activeDetail.details} onClose={() => setActiveDetail(null)} />}
@@ -69,7 +65,6 @@ export default function DeveloperVendorManagementPage() {
                   <th className="w-[18%] px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Categories</th>
                   <th className="w-[18%] px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Hours</th>
                   <th className="w-[18%] px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Reviews</th>
-                  <th className="w-[10%] px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -80,25 +75,10 @@ export default function DeveloperVendorManagementPage() {
                     <td className="px-6 py-3"><SummaryCell tableName="place_categories" cell={row.placeCategory} onView={() => setActiveDetail({ title: "place_categories row details", details: row.placeCategory.details })} /></td>
                     <td className="px-6 py-3"><SummaryCell tableName="place_hours" cell={row.placeHour} onView={() => setActiveDetail({ title: "place_hours row details", details: row.placeHour.details })} /></td>
                     <td className="px-6 py-3"><SummaryCell tableName="reviews" cell={row.review} onView={() => setActiveDetail({ title: "reviews row details", details: row.review.details })} /></td>
-                    <td className="px-6 py-3">
-                      <button
-                        onClick={() => {
-                          const ownerId = (row.user.details as Record<string, unknown> | null)?.id as string | undefined;
-                          if (ownerId) {
-                            navigate(`/developer/vendors/${ownerId}`);
-                          } else {
-                            toast.error("Owner ID not found for this row.");
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#005a26]"
-                      >
-                        View
-                      </button>
-                    </td>
                   </tr>
                 ))}
                 {visibleRows.length === 0 && (
-                  <tr><td colSpan={6} className="px-6 py-10 text-center text-[13px] text-[#94a3b8]">No vendor data found.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-10 text-center text-[13px] text-[#94a3b8]">No vendor data found.</td></tr>
                 )}
               </tbody>
             </table>

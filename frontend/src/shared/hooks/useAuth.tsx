@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../services/axiosService";
+import { clearAuthStorage } from "../utils/authRedirect";
+import { getApiErrorMessage } from "../utils/apiError";
 
 interface AuthUser {
   id: string;
@@ -14,25 +16,23 @@ interface AuthContextValue {
   isLoggedIn: boolean;
   isGuest: boolean;
   showAuthGate: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, expectedRoles?: string | string[]) => Promise<void>;
   signup: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
   vendorSignup: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   continueAsGuest: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const SESSION_KEY = "patheat_user";
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
-      const stored = localStorage.getItem(SESSION_KEY);
+      const stored = localStorage.getItem("auth_user");
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed?.id === "dev-vendor-id") {
-          localStorage.removeItem(SESSION_KEY);
+          localStorage.removeItem("auth_user");
           return null;
         }
         return parsed;
@@ -40,70 +40,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) { console.error("[useAuth] Failed to parse stored user:", err); }
     return null;
   });
-  const [isGuest, setIsGuest] = useState(false);
+  const [isGuest, setIsGuest] = useState(true);
 
   useEffect(() => {
-    if (user) localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    else localStorage.removeItem(SESSION_KEY);
+    if (user) setIsGuest(false);
   }, [user]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { data } = await api.post("/auth/login", { email, password });
-    const session = data.data;
-    const u: AuthUser = {
-      id: session.user.id,
-      firstName: session.user.firstName,
-      lastName: session.user.lastName,
-      email: session.user.email,
-      role_scope: session.user.role_scope,
+  useEffect(() => {
+    const handleAuthCleared = () => {
+      setUser(null);
+      setIsGuest(true);
     };
-    localStorage.setItem("auth_token", session.token);
-    localStorage.setItem("auth_user", JSON.stringify(u));
-    setUser(u);
+
+    window.addEventListener("patheats:auth-cleared", handleAuthCleared);
+    return () => window.removeEventListener("patheats:auth-cleared", handleAuthCleared);
+  }, []);
+
+  const saveSession = useCallback((session: { user: AuthUser; accessToken: string; refreshToken: string }) => {
+    localStorage.setItem("auth_token", session.accessToken);
+    localStorage.setItem("auth_refresh_token", session.refreshToken);
+    localStorage.setItem("auth_user", JSON.stringify(session.user));
+    setUser(session.user);
     setIsGuest(false);
   }, []);
+
+  const login = useCallback(async (email: string, password: string, expectedRoles?: string | string[]) => {
+    try {
+      const { data } = await api.post("/auth/login", {
+        email,
+        password,
+        expectedRoles,
+      });
+      saveSession(data.data);
+    } catch (err: any) {
+      throw new Error(getApiErrorMessage(err, "Login failed."));
+    }
+  }, [saveSession]);
 
   const signup = useCallback(async (reg: { email: string; password: string; firstName: string; lastName: string }) => {
     const { data } = await api.post("/auth/register", { ...reg, roleScope: "CONSUMER" });
-    const session = data.data;
-    const u: AuthUser = {
-      id: session.user.id,
-      firstName: session.user.firstName,
-      lastName: session.user.lastName,
-      email: session.user.email,
-      role_scope: session.user.role_scope,
-    };
-    localStorage.setItem("auth_token", session.token);
-    localStorage.setItem("auth_user", JSON.stringify(u));
-    setUser(u);
-    setIsGuest(false);
-  }, []);
+    saveSession(data.data);
+  }, [saveSession]);
 
   const vendorSignup = useCallback(async (reg: { email: string; password: string; firstName: string; lastName: string }) => {
     const { data } = await api.post("/auth/register", { ...reg, roleScope: "VENDOR" });
-    const session = data.data;
-    const u: AuthUser = {
-      id: session.user.id,
-      firstName: session.user.firstName,
-      lastName: session.user.lastName,
-      email: session.user.email,
-      role_scope: session.user.role_scope,
-    };
-    localStorage.setItem("auth_token", session.token);
-    localStorage.setItem("auth_user", JSON.stringify(u));
-    setUser(u);
-    setIsGuest(false);
-  }, []);
+    saveSession(data.data);
+  }, [saveSession]);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
-    localStorage.removeItem(SESSION_KEY);
+  const logout = useCallback(async () => {
+    const refreshToken = localStorage.getItem("auth_refresh_token");
+    try {
+      if (refreshToken) await api.post("/auth/logout", { refreshToken });
+    } catch { /* ignore */ }
+    clearAuthStorage();
     setUser(null);
-    setIsGuest(false);
+    setIsGuest(true);
   }, []);
 
   const continueAsGuest = useCallback(() => {
+    clearAuthStorage();
     setIsGuest(true);
     setUser(null);
   }, []);
