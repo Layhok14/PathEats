@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { createReadStream } from "fs";
+import { createReadStream, createWriteStream } from "fs";
 import { mkdtemp, rm, stat, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
@@ -20,7 +20,7 @@ const MAX_RECOVERY_FILE_BYTES = 100 * 1024 * 1024;
 const REQUIRED_RECOVERY_CONFIRMATION = "RECOVER";
 const POSTGRES_DUMP_CONFIRMATION = "RESTORE POSTGRES DUMP";
 const RECOVERY_TYPES = new Set(["PostgreSQL Dump", "Row Level CSV"]);
-const BACKUP_METHODS = new Set(["Entire Database", "Specific Tables"]);
+const BACKUP_METHODS = new Set(["Entire Database", "Specific Tables", "Specific Rows"]);
 const SCHEDULE_UNITS = new Set(["Hours", "Days", "Months"]);
 const SAFE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/i;
 const PREFERRED_BACKUP_TABLE_ORDER = [
@@ -324,6 +324,49 @@ async function createPostgresDumpFile(profile) {
   }
 }
 
+async function createPostgresCsvFile(profile) {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-csv-"));
+  const csvPath = path.join(tempDir, "backup.csv");
+  const parts = parseScope(profile.scope);
+  const tableName = parts.table;
+  if (!tableName) throw new AppError("No table specified for Specific Rows backup", 400);
+  validateIdentifier(tableName, "Backup table");
+
+  const condition = parts.condition || "";
+  const quotedTable = quoteIdent(tableName);
+  const selectQuery = condition
+    ? `SELECT * FROM ${quotedTable} ${condition}`
+    : `SELECT * FROM ${quotedTable}`;
+
+  try {
+    const result = await db.query(selectQuery);
+    const rows = result.rows;
+    if (rows.length === 0) {
+      await writeFile(csvPath, "");
+      return { tempDir, dumpPath: csvPath, sizeBytes: 0 };
+    }
+
+    const headers = Object.keys(rows[0]);
+    const csvLines = [headers.map(quoteCsvField).join(",")];
+    for (const row of rows) {
+      csvLines.push(headers.map((h) => quoteCsvField(String(row[h] ?? ""))).join(","));
+    }
+    await writeFile(csvPath, csvLines.join("\n"), "utf-8");
+    const fileStat = await stat(csvPath);
+    return { tempDir, dumpPath: csvPath, sizeBytes: fileStat.size };
+  } catch (err) {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
+}
+
+function quoteCsvField(value) {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
 function hasPostgresDumpSignature(buffer) {
   return buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "PGDMP";
 }
@@ -407,6 +450,7 @@ const devAdminBypass = (req, res, next) => {
 router.use(devAdminBypass);
 router.use(restrictToRoles("GLOBAL_ADMIN", "DEVELOPER_ADMIN"));
 const developerAdminOnly = restrictToRoles("DEVELOPER_ADMIN");
+const devOrGlobalAdmin = restrictToRoles("DEVELOPER_ADMIN", "GLOBAL_ADMIN");
 
 // ── Ensure tables ───────────────────────────────────────────────────────────
 
@@ -911,13 +955,13 @@ router.get("/activity-log", catchAsync(async (req, res) => {
 
 // ── Backup & Recovery (DB-backed, persists across restarts) ──────────────────
 
-router.get("/backups", developerAdminOnly, catchAsync(async (req, res) => {
+router.get("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const result = await db.query(`SELECT id, profile_name AS "profileName", method, scope, schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit", status, size, created_at AS "createdAt" FROM backup_profiles ORDER BY created_at DESC`);
   res.json({ success: true, data: result.rows });
 }));
 
-router.post("/backups", developerAdminOnly, catchAsync(async (req, res) => {
+router.post("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const { profileName, method, scope, scheduleInterval, scheduleUnit } = req.body;
   if (!profileName || !method) throw new AppError("profileName and method are required", 400);
@@ -947,7 +991,7 @@ router.post("/backups", developerAdminOnly, catchAsync(async (req, res) => {
   res.status(201).json({ success: true, data: result.rows[0] });
 }));
 
-router.get("/backups/:id/download", developerAdminOnly, catchAsync(async (req, res) => {
+router.get("/backups/:id/download", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const result = await db.query(
     `SELECT id, profile_name AS "profileName", method, scope, schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit", status, size, created_at AS "createdAt"
@@ -958,7 +1002,10 @@ router.get("/backups/:id/download", developerAdminOnly, catchAsync(async (req, r
   const profile = result.rows[0];
   if (!profile) throw new AppError("Backup not found", 404);
 
-  const { tempDir, dumpPath, sizeBytes } = await createPostgresDumpFile(profile);
+  const isCsv = profile.method === "Specific Rows";
+  const { tempDir, dumpPath, sizeBytes } = isCsv
+    ? await createPostgresCsvFile(profile)
+    : await createPostgresDumpFile(profile);
   const size = formatBytes(sizeBytes);
   await db.query(
     `UPDATE backup_profiles SET status = 'COMPLETED', size = $2 WHERE id = $1`,
@@ -966,10 +1013,11 @@ router.get("/backups/:id/download", developerAdminOnly, catchAsync(async (req, r
   );
 
   const generatedAt = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const filename = `patheats-${safeDownloadName(profile.profileName)}-${generatedAt}.dump`;
-  res.setHeader("Content-Type", "application/octet-stream");
+  const ext = isCsv ? "csv" : "dump";
+  const filename = `patheats-${safeDownloadName(profile.profileName)}-${generatedAt}.${ext}`;
+  res.setHeader("Content-Type", isCsv ? "text/csv" : "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.setHeader("X-Backup-Format", "postgres-custom");
+  res.setHeader("X-Backup-Format", isCsv ? "csv" : "postgres-custom");
 
   const stream = createReadStream(dumpPath);
   const cleanup = () => rm(tempDir, { recursive: true, force: true }).catch(() => {});
@@ -986,20 +1034,20 @@ router.get("/backups/:id/download", developerAdminOnly, catchAsync(async (req, r
   stream.pipe(res);
 }));
 
-router.delete("/backups/:id", developerAdminOnly, catchAsync(async (req, res) => {
+router.delete("/backups/:id", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const result = await db.query(`DELETE FROM backup_profiles WHERE id = $1 RETURNING id`, [req.params.id]);
   if (!result.rows.length) throw new AppError("Backup not found", 404);
   res.json({ success: true, data: { id: req.params.id } });
 }));
 
-router.get("/recovery", developerAdminOnly, catchAsync(async (req, res) => {
+router.get("/recovery", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const result = await db.query(`SELECT id, recovery_type AS type, file_name AS "fileName", status, message, created_at AS "createdAt" FROM recovery_operations ORDER BY created_at DESC`);
   res.json({ success: true, data: result.rows });
 }));
 
-router.post("/recovery", developerAdminOnly, upload.single("file"), catchAsync(async (req, res) => {
+router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const { type, confirmationText } = req.body;
   if (!type) throw new AppError("Recovery type is required", 400);

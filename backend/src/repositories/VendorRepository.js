@@ -126,15 +126,38 @@ class VendorRepository {
   async copyMenuItemsToPlace(client, placeId, ownerId, sourceItemIds = []) {
     if (!Array.isArray(sourceItemIds) || sourceItemIds.length === 0) return;
 
-    await client.query(
+    const sourceResult = await client.query(
+      `SELECT id FROM menu_items mi
+       JOIN places source_place ON source_place.id = mi.place_id
+       WHERE source_place.owner_id = $1
+         AND mi.id::text = ANY($2::text[])
+       ORDER BY mi.id`,
+      [ownerId, sourceItemIds]
+    );
+    const sourceIds = sourceResult.rows.map((r) => r.id);
+
+    const insertResult = await client.query(
       `INSERT INTO menu_items (place_id, name, description, price, category, image_url, is_available)
        SELECT $1, mi.name, mi.description, mi.price, mi.category, mi.image_url, mi.is_available
        FROM menu_items mi
        JOIN places source_place ON source_place.id = mi.place_id
        WHERE source_place.owner_id = $2
-         AND mi.id::text = ANY($3::text[])`,
+         AND mi.id::text = ANY($3::text[])
+       ORDER BY mi.id
+       RETURNING id`,
       [placeId, ownerId, sourceItemIds]
     );
+    const newIds = insertResult.rows.map((r) => r.id);
+
+    for (let i = 0; i < sourceIds.length; i++) {
+      await client.query(
+        `INSERT INTO menu_item_images (menu_item_id, bucket_name, object_path, uploaded_by, mime_type, size_bytes, alt_text, sort_order, is_primary)
+         SELECT $1, mii.bucket_name, mii.object_path, mii.uploaded_by, mii.mime_type, mii.size_bytes, mii.alt_text, mii.sort_order, mii.is_primary
+         FROM menu_item_images mii
+         WHERE mii.menu_item_id = $2`,
+        [newIds[i], sourceIds[i]]
+      );
+    }
   }
 
   async update(id, ownerId, data) {

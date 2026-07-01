@@ -146,6 +146,7 @@ function UserManagementSection() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("All");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -166,11 +167,15 @@ function UserManagementSection() {
 
   useEffect(() => { loadUsers(); }, []);
 
+  const ROLES = ["All", "GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE", "CONSUMER", "VENDOR"];
+
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
-    if (!search) return users;
-    return users.filter((u) => u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search));
-  }, [users, query]);
+    let result = users;
+    if (roleFilter !== "All") result = result.filter((u) => u.role === roleFilter);
+    if (search) result = result.filter((u) => u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search));
+    return result;
+  }, [users, query, roleFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -211,11 +216,18 @@ function UserManagementSection() {
         <button onClick={() => setShowModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] text-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#005a26] shadow-sm"><UserPlus size={14} /> Create user</button>
       </div>
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
+        <div className="flex flex-wrap items-center gap-3 px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
           <h2 className="text-[16px] font-semibold text-[#0b1c30]">Users</h2>
-          <div className="relative">
+          <div className="flex gap-1 flex-wrap">
+            {ROLES.map((r) => (
+              <button key={r} onClick={() => { setRoleFilter(r); setPage(1); }} className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-colors ${roleFilter === r ? "bg-[#006e2f] text-white" : "bg-[#f1f5f9] text-[#64748b] hover:bg-[#e2e8f0]"}`}>
+                {r === "All" ? "All" : r}
+              </button>
+            ))}
+          </div>
+          <div className="relative ml-auto">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-            <input type="text" placeholder="Search users..." value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} className="pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white w-[220px]" />
+            <input type="text" placeholder="Search users..." value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} className="pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white w-[200px]" />
           </div>
         </div>
         <table className="w-full">
@@ -231,7 +243,7 @@ function UserManagementSection() {
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingUser(u); setShowModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
                     <button onClick={() => handleToggleBan(u)} className={`p-1.5 rounded ${u.status === "Banned" ? "text-[#006e2f] hover:bg-green-50" : "text-[#b45309] hover:bg-amber-50"}`}>
-                      {u.status === "Banned" ? <Lock size={15} /> : <Lock size={15} />}
+                      {u.status === "Banned" ? <Unlock size={15} /> : <Lock size={15} />}
                     </button>
                     <button onClick={() => handleDeleteUser(u)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={15} /></button>
                   </div>
@@ -332,13 +344,10 @@ function UserFormModal({
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Role *</label>
-            <select required value={form.role} onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
-              <option value="">Select role...</option>
-              {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
-              <option value="ADMIN">ADMIN</option>
-              <option value="CONSUMER">CONSUMER</option>
-              <option value="VENDOR">VENDOR</option>
-            </select>
+              <select required value={form.role} onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
+                <option value="">Select role...</option>
+                {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+              </select>
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">{isEditing ? "New Password (leave blank to keep)" : "Password *"}</label>

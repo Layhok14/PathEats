@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getDevQueryPresets, getAllDevQueryPresets, createDevQueryPreset, updateDevQueryPreset, deleteDevQueryPreset,
-  postDevQuery, getDevMaintenanceStatus, getDevErrors, getDevActivityLog,
-  QueryPreset, QueryResult, TableMaintenanceRow, DevErrorSummary, ActivityLogEntry,
+  postDevQuery, getDevMaintenanceStatus, getDevActivityLog, getDevQueryHistory,
+  QueryPreset, QueryResult, TableMaintenanceRow, ActivityLogEntry, QueryHistoryEntry,
 } from "../../services/developerService";
 import { toast } from "sonner";
 
@@ -13,62 +13,53 @@ const CATEGORIES = [
   { value: "updating", label: "Analyze", color: "bg-purple-100 text-purple-700" },
 ];
 
+function categoryBadge(cat: string) {
+  const c = CATEGORIES.find((c) => c.value === cat);
+  return <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${c?.color || "bg-gray-100 text-gray-700"}`}>{c?.label || cat}</span>;
+}
+
+/* ───── Error Log Tab (only login_failed) ───── */
 function ErrorLogTab() {
   const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
-  const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const loadLogs = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const eventType = filter || undefined;
-      const data = await getDevActivityLog({ eventType: eventType as any, limit: 200 });
+      const data = await getDevActivityLog({ eventType: "login_failed", limit: 200 });
       setLogs(data);
     } catch { setLogs([]); }
     finally { setLoading(false); }
-  }, [filter]);
+  }, []);
 
-  useEffect(() => { loadLogs(); }, [loadLogs]);
+  useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}
-          className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]"
-        >
-          <option value="">All Events</option>
-          <option value="login_success">Login Success</option>
-          <option value="login_failed">Login Failed</option>
-          <option value="query_execution">Query Execution</option>
-        </select>
-        <span className="text-xs text-gray-500">{logs.length} entries</span>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] text-[#64748b]">Failed login attempts — {logs.length} entries</p>
+        <button onClick={load} className="text-[12px] px-3 py-1.5 rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50" disabled={loading}>Refresh</button>
       </div>
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="max-h-[500px] overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead><tr className="bg-gray-50 text-gray-500 sticky top-0">
-              <th className="text-left px-3 py-2 font-medium">Event</th>
-              <th className="text-left px-3 py-2 font-medium">Actor</th>
-              <th className="text-left px-3 py-2 font-medium">Payload</th>
-              <th className="text-left px-3 py-2 font-medium">Date</th>
-            </tr></thead>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 sticky top-0">
+                <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Actor</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Payload</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Time</th>
+              </tr>
+            </thead>
             <tbody>
               {logs.map((log) => (
                 <tr key={log.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-1.5">
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      log.event_type === "login_failed" ? "bg-red-100 text-red-700" :
-                      log.event_type === "login_success" ? "bg-green-100 text-green-700" :
-                      "bg-blue-100 text-blue-700"
-                    }`}>{log.event_type}</span>
-                  </td>
-                  <td className="px-3 py-1.5 text-gray-600 font-mono">{log.actor_email || log.actor_id || "—"}</td>
-                  <td className="px-3 py-1.5 text-gray-700 max-w-[400px] truncate">{log.payload?.slice(0, 120) || "—"}</td>
-                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{new Date(log.executed_at).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-[13px] text-[#ba1a1a] font-mono">{log.actor_email || log.actor_id || "—"}</td>
+                  <td className="px-4 py-2 text-[13px] text-[#374151] max-w-[500px] truncate">{log.payload?.slice(0, 200) || "—"}</td>
+                  <td className="px-4 py-2 text-[13px] text-[#64748b] whitespace-nowrap">{new Date(log.executed_at).toLocaleString()}</td>
                 </tr>
               ))}
               {logs.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-8 text-center text-gray-400">{loading ? "Loading..." : "No activity entries found."}</td></tr>
+                <tr><td colSpan={3} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">{loading ? "Loading..." : "No login failures found."}</td></tr>
               )}
             </tbody>
           </table>
@@ -78,8 +69,11 @@ function ErrorLogTab() {
   );
 }
 
+/* ───── Main Page ───── */
 export default function DeveloperToolsPage() {
-  const [tab, setTab] = useState<"query" | "health" | "bugs" | "errors">("query");
+  const [tab, setTab] = useState<"db" | "errors" | "health">("db");
+
+  // Database Tools state
   const [presets, setPresets] = useState<QueryPreset[]>([]);
   const [totalPresets, setTotalPresets] = useState(0);
   const [sql, setSql] = useState("");
@@ -98,10 +92,15 @@ export default function DeveloperToolsPage() {
   const [createSql, setCreateSql] = useState("");
   const [createCategory, setCreateCategory] = useState("viewing");
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+
+  // Query History
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<QueryHistoryEntry[]>([]);
+  const [historySearch, setHistorySearch] = useState("");
+
+  // Table Health state
   const [maintenanceData, setMaintenanceData] = useState<TableMaintenanceRow[]>([]);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
-  const [actionMsg, setActionMsg] = useState("");
-  const [bugData, setBugData] = useState<DevErrorSummary | null>(null);
 
   const loadPresets = useCallback(async () => {
     try {
@@ -151,7 +150,21 @@ export default function DeveloperToolsPage() {
     } catch { setAllPresets([]); }
   };
 
-  const openAllModal = () => { setShowAllModal(true); loadAllPresets(1); };
+  const loadHistory = async () => {
+    try {
+      const data = await getDevQueryHistory(100);
+      setHistory(data);
+    } catch { setHistory([]); }
+  };
+
+  const recallQuery = (entry: QueryHistoryEntry) => {
+    if (entry.payload) {
+      setSql(entry.payload);
+      setResult(null);
+      setQueryError("");
+      toast.success("Query recalled from history.");
+    }
+  };
 
   const handleCreatePreset = async () => {
     if (!createTitle.trim() || !createSql.trim()) { toast.error("Title and SQL are required"); return; }
@@ -185,171 +198,167 @@ export default function DeveloperToolsPage() {
 
   useEffect(() => { if (tab === "health") loadMaintenance(); }, [tab]);
 
-  const loadBugs = useCallback(async () => {
-    try { const data = await getDevErrors(); setBugData(data); } catch { setBugData(null); }
-  }, []);
-  useEffect(() => { if (tab === "bugs") loadBugs(); }, [tab, loadBugs]);
-
-  const severityColor = (level: string) => {
-    switch (level) {
-      case "high": return "text-red-600 bg-red-50 border-red-200";
-      case "medium": return "text-orange-600 bg-orange-50 border-orange-200";
-      case "low": return "text-yellow-600 bg-yellow-50 border-yellow-200";
-      default: return "text-gray-600 bg-gray-50 border-gray-200";
-    }
-  };
-
-  const categoryBadge = (cat: string) => {
-    const c = CATEGORIES.find((c) => c.value === cat);
-    return <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${c?.color || "bg-gray-100 text-gray-700"}`}>{c?.label || cat}</span>;
-  };
+  const filteredHistory = history.filter((h) =>
+    !historySearch || (h.payload ?? "").toLowerCase().includes(historySearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-6 p-6">
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200 pb-3">
-        {([{ k: "query", l: "Query Editor" }, { k: "health", l: "Table Health" }, { k: "bugs", l: "Bug Dashboard" }, { k: "errors", l: "Error Log" }] as const).map((t) => (
+      <div className="flex gap-2 border-b border-[#e2e8f0] pb-3">
+        {([{ k: "db", l: "Database Tools" }, { k: "errors", l: "Error Log" }, { k: "health", l: "Table Health" }] as const).map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${tab === t.k ? "bg-[#0f3460] text-white" : "text-gray-600 hover:bg-gray-100"}`}
+            className={`px-4 py-2 text-[13px] font-medium rounded-t-lg transition-colors ${tab === t.k ? "bg-[#006e2f] text-white" : "text-[#64748b] hover:bg-gray-100"}`}
           >{t.l}</button>
         ))}
       </div>
 
-      {tab === "query" && (
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-          {/* Left: Presets + Maintenance */}
-          <div className="xl:col-span-2 space-y-4">
-            {/* Presets Panel */}
+      {/* ───── Database Tools Tab ───── */}
+      {tab === "db" && (
+        <div className="space-y-4">
+          {/* Equal split: Editor + Presets */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {/* SQL Editor */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-semibold text-sm text-gray-800">Query Presets</h3>
+                <h3 className="font-semibold text-[14px] text-[#0b1c30]">SQL Editor</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowCreateModal(true)}
-                    className="text-[11px] px-2.5 py-1 bg-[#0f3460] text-white rounded-md hover:bg-[#16213e]"
-                  >+ New</button>
-                  <button onClick={openAllModal}
-                    className="text-[11px] px-2.5 py-1 bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200"
-                  >View All ({totalPresets})</button>
+                  <button onClick={() => runQuery()} disabled={queryLoading || !sql.trim()}
+                    className="px-4 py-1.5 text-[13px] font-medium bg-[#006e2f] text-white rounded-lg hover:bg-[#16213e] disabled:opacity-50"
+                  >{queryLoading ? "Running..." : "Run Query"}</button>
+                  <button onClick={() => { setSql(""); setResult(null); setQueryError(""); setSelectedPresetId(null); }}
+                    className="px-3 py-1.5 text-[13px] font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">Clear</button>
+                  {result && result.rows.length > 0 && (
+                    <button onClick={downloadCsv}
+                      className="px-3 py-1.5 text-[13px] font-medium bg-green-50 text-green-700 rounded-lg hover:bg-green-100">CSV</button>
+                  )}
                 </div>
               </div>
-              <div className="p-3 space-y-2">
+              <div className="p-4 space-y-2">
+                <div className="flex gap-2">
+                  <select value="" onChange={(e) => { const idx = parseInt(e.target.value); if (!isNaN(idx)) recallQuery(filteredHistory[idx]); e.target.value = ""; }}
+                    className="flex-1 text-[13px] px-3 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f] bg-white">
+                    <option value="">Query History</option>
+                    {filteredHistory.map((h, i) => (
+                      <option key={h.id} value={i}>{(h.payload ?? "").slice(0, 80)}{(h.payload ?? "").length > 80 ? "…" : ""} — {new Date(h.executed_at).toLocaleString()}</option>
+                    ))}
+                  </select>
+                  <input value={historySearch} onChange={(e) => { setHistorySearch(e.target.value); if (!historyOpen) { setHistoryOpen(true); loadHistory(); } }}
+                    placeholder="Search history..." className="w-48 text-[13px] px-3 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
+                </div>
+                <textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={8}
+                  className="w-full font-mono text-[14px] p-3 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f] resize-y leading-relaxed"
+                  placeholder="Enter SQL query here or select a preset..." />
+              </div>
+            </div>
+
+            {/* Query Presets */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-semibold text-[14px] text-[#0b1c30]">Query Presets</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowCreateModal(true)}
+                    className="text-[12px] px-3 py-1.5 bg-[#006e2f] text-white rounded-lg hover:bg-[#16213e]">+ New</button>
+                  <button onClick={() => { setShowAllModal(true); loadAllPresets(1); }}
+                    className="text-[12px] px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">View All ({totalPresets})</button>
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
                 <div className="flex gap-2">
                   <input value={presetSearch} onChange={(e) => setPresetSearch(e.target.value)} placeholder="Search presets..."
-                    className="flex-1 text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]" />
+                    className="flex-1 text-[13px] px-3 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
                   <select value={presetCategory} onChange={(e) => setPresetCategory(e.target.value)}
-                    className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]">
+                    className="text-[13px] px-2 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]">
                     {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
-                <div className="space-y-1 max-h-[320px] overflow-y-auto">
+                <div className="space-y-1 max-h-[360px] overflow-y-auto">
                   {presets.map((p) => (
                     <div key={p.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-xs transition-colors ${selectedPresetId === p.id ? "bg-[#e8f0fe] border border-[#0f3460]" : "hover:bg-gray-50 border border-transparent"}`}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer text-[13px] transition-colors ${selectedPresetId === p.id ? "bg-[#e8f0fe] border border-[#006e2f]" : "hover:bg-gray-50 border border-transparent"}`}
                       onClick={() => selectPreset(p)}
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-gray-800 truncate">{p.title}</div>
+                        <div className="font-medium text-[#0b1c30] truncate">{p.title}</div>
                         <div className="flex gap-1.5 mt-0.5">
                           {categoryBadge(p.category)}
-                          {p.is_system_preset ? <span className="text-[10px] text-gray-400">system</span> : <span className="text-[10px] text-blue-500">custom</span>}
+                          {p.is_system_preset ? <span className="text-[11px] text-gray-400">system</span> : <span className="text-[11px] text-blue-500">custom</span>}
                         </div>
                       </div>
                       {!p.is_system_preset && (
                         <div className="flex gap-1 shrink-0">
                           <button onClick={(e) => { e.stopPropagation(); setEditingPreset({ ...p }); }}
-                            className="text-gray-400 hover:text-blue-600 p-0.5">✎</button>
+                            className="text-gray-400 hover:text-blue-600 p-0.5 text-[14px]">✎</button>
                           <button onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id); }}
-                            className="text-gray-400 hover:text-red-600 p-0.5">✕</button>
+                            className="text-gray-400 hover:text-red-600 p-0.5 text-[14px]">✕</button>
                         </div>
                       )}
                     </div>
                   ))}
-                  {presets.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No presets found</p>}
+                  {presets.length === 0 && <p className="text-[13px] text-[#94a3b8] text-center py-4">No presets found</p>}
                 </div>
               </div>
             </div>
-
           </div>
 
-          {/* Right: SQL Editor + Results */}
-          <div className="xl:col-span-3 space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="p-4 border-b border-gray-100">
-                <h3 className="font-semibold text-sm text-gray-800">SQL Query Editor</h3>
+          {/* Full-width Results */}
+          {queryError && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+              <p className="text-[14px] text-red-700 font-medium">Error: {queryError}</p>
+            </div>
+          )}
+
+          {result && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <span className="text-[13px] text-[#64748b] font-medium">{result.rowCount} row(s) returned in {result.duration}ms</span>
               </div>
-              <div className="p-4 space-y-3">
-                <textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={8}
-                  className="w-full font-mono text-xs p-3 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460] resize-y"
-                  placeholder="Enter SQL query here or select a preset..." />
-                <div className="flex gap-2">
-                  <button onClick={() => runQuery()} disabled={queryLoading || !sql.trim()}
-                    className="px-4 py-2 text-sm font-medium bg-[#0f3460] text-white rounded-lg hover:bg-[#16213e] disabled:opacity-50"
-                  >{queryLoading ? "Running..." : "Run Query"}</button>
-                  <button onClick={() => { setSql(""); setResult(null); setQueryError(""); setSelectedPresetId(null); }}
-                    className="px-3 py-2 text-sm font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-                  >Clear</button>
-                  {result && result.rows.length > 0 && (
-                    <button onClick={downloadCsv}
-                      className="px-3 py-2 text-sm font-medium bg-green-50 text-green-700 rounded-lg hover:bg-green-100"
-                    >Download CSV</button>
-                  )}
-                </div>
+              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                {result.rows.length > 0 ? (
+                  <table className="w-full text-[13px]">
+                    <thead><tr className="bg-gray-100 text-[#64748b]">
+                      {result.fields.map((f) => <th key={f} className="text-left px-4 py-2.5 font-semibold whitespace-nowrap">{f}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {result.rows.map((row, i) => (
+                        <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
+                          {result.fields.map((f) => (
+                            <td key={f} className="px-4 py-2 text-[13px] text-[#374151] whitespace-nowrap max-w-[300px] truncate">{String(row[f] ?? "")}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-[13px] text-[#94a3b8] text-center py-8">Query executed successfully — no rows returned</p>
+                )}
               </div>
             </div>
+          )}
 
-            {queryError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-xs text-red-700 font-medium">Error: {queryError}</p>
-              </div>
-            )}
 
-            {result && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                  <span className="text-xs text-gray-600 font-medium">{result.rowCount} row(s) returned</span>
-                </div>
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-                  {result.rows.length > 0 ? (
-                    <table className="w-full text-xs">
-                      <thead><tr className="bg-gray-100 text-gray-600">
-                        {result.fields.map((f) => <th key={f} className="text-left px-3 py-2 font-medium whitespace-nowrap">{f}</th>)}
-                      </tr></thead>
-                      <tbody>
-                        {result.rows.map((row, i) => (
-                          <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
-                            {result.fields.map((f) => (
-                              <td key={f} className="px-3 py-1.5 text-gray-700 whitespace-nowrap max-w-[250px] truncate">{String(row[f] ?? "")}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="text-xs text-gray-400 text-center py-6">Query executed successfully — no rows returned</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
+      {/* ───── Error Log Tab ───── */}
+      {tab === "errors" && <ErrorLogTab />}
+
+      {/* ───── Activity Log Tab ───── */}
+      {tab === "activity" && <ActivityLogTab />}
+
+      {/* ───── Table Health Tab ───── */}
       {tab === "health" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Table Health</h2>
-              <p className="text-xs text-gray-500 mt-1">
+              <h2 className="text-[16px] font-bold text-[#0b1c30]">Table Health</h2>
+              <p className="text-[13px] text-[#64748b] mt-1">
                 Monitor table size, dead tuples, and maintenance status from PostgreSQL statistics.
               </p>
             </div>
-            <button
-              onClick={loadMaintenance}
-              disabled={maintenanceLoading}
-              className="px-3 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
-            >
-              {maintenanceLoading ? "Refreshing..." : "Refresh"}
-            </button>
+            <button onClick={loadMaintenance} disabled={maintenanceLoading}
+              className="px-4 py-1.5 text-[13px] font-medium bg-[#006e2f] text-white rounded-lg hover:bg-[#005a26] disabled:opacity-50"
+            >{maintenanceLoading ? "Refreshing..." : "Refresh"}</button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -368,32 +377,28 @@ export default function DeveloperToolsPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-500">
-                    <th className="text-left px-4 py-3 font-medium">Table</th>
-                    <th className="text-right px-4 py-3 font-medium">Dead Tuples</th>
-                    <th className="text-right px-4 py-3 font-medium">Size</th>
-                    <th className="text-center px-4 py-3 font-medium">Health</th>
+                  <tr className="bg-gray-50 text-[#64748b]">
+                    <th className="text-left px-4 py-3 font-semibold text-[11px] uppercase tracking-wider">Table</th>
+                    <th className="text-right px-4 py-3 font-semibold text-[11px] uppercase tracking-wider">Dead Tuples</th>
+                    <th className="text-right px-4 py-3 font-semibold text-[11px] uppercase tracking-wider">Size</th>
+                    <th className="text-center px-4 py-3 font-semibold text-[11px] uppercase tracking-wider">Health</th>
                   </tr>
                 </thead>
                 <tbody>
                   {maintenanceLoading ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-10 text-center text-gray-400">Loading table health...</td>
-                    </tr>
+                    <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">Loading table health...</td></tr>
                   ) : maintenanceData.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-10 text-center text-gray-400">No table health data available.</td>
-                    </tr>
+                    <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">No table health data available.</td></tr>
                   ) : (
-                    maintenanceData.map((t) => (
-                      <tr key={t.name} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{t.name}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{t.dead_tuples}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{t.size}</td>
+                    maintenanceData.map((t, i) => (
+                      <tr key={`${t.name}-${i}`} className="border-t border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-[#0b1c30]">{t.name}</td>
+                        <td className="px-4 py-3 text-right text-[#64748b]">{t.dead_tuples}</td>
+                        <td className="px-4 py-3 text-right text-[#64748b]">{t.size}</td>
                         <td className="px-4 py-3 text-center">
-                          <span className={`text-[10px] px-2 py-1 rounded-full font-semibold ${
+                          <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold ${
                             t.health === "critical" ? "bg-red-100 text-red-700" :
                             t.health === "warning" ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"
                           }`}>{t.health}</span>
@@ -405,243 +410,93 @@ export default function DeveloperToolsPage() {
               </table>
             </div>
           </div>
-
-          <p className="text-[11px] text-gray-500">
-            Maintenance actions are still run through controlled query presets in the Query Editor.
-          </p>
+          <p className="text-[12px] text-[#94a3b8]">Maintenance actions can be run through query presets in Database Tools.</p>
         </div>
       )}
 
-      {tab === "bugs" && (
-        <div className="space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[
-              { label: "Total Errors", value: bugData?.totalErrors ?? 0, color: "text-red-600 bg-red-50 border-red-200" },
-              { label: "High Severity", value: bugData?.severityBreakdown.high ?? 0, color: "text-red-700 bg-red-100 border-red-300" },
-              { label: "Medium Severity", value: bugData?.severityBreakdown.medium ?? 0, color: "text-orange-600 bg-orange-50 border-orange-200" },
-              { label: "Low Severity", value: bugData?.severityBreakdown.low ?? 0, color: "text-yellow-600 bg-yellow-50 border-yellow-200" },
-              { label: "Login Failures", value: bugData?.loginFailures ?? 0, color: "text-purple-600 bg-purple-50 border-purple-200" },
-            ].map((card) => (
-              <div key={card.label} className={`p-4 rounded-xl border ${card.color}`}>
-                <p className="text-[11px] font-medium opacity-75">{card.label}</p>
-                <p className="text-2xl font-bold mt-1">{card.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Severity Breakdown */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-            <div className="p-4 border-b border-gray-100">
-              <h3 className="font-semibold text-sm text-gray-800">Severity Breakdown</h3>
-            </div>
-            <div className="p-4">
-              {bugData ? (
-                <div className="flex gap-4">
-                  {(["high", "medium", "low"] as const).map((level) => {
-                    const count = bugData.severityBreakdown[level];
-                    const total = bugData.totalErrors || 1;
-                    const pct = Math.round((count / total) * 100);
-                    return (
-                      <div key={level} className={`flex-1 p-3 rounded-lg border ${severityColor(level)}`}>
-                        <p className="text-[11px] font-medium uppercase tracking-wider">{level}</p>
-                        <p className="text-lg font-bold mt-1">{count} <span className="text-xs font-normal opacity-60">({pct}%)</span></p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : <p className="text-xs text-gray-400">Loading...</p>}
-            </div>
-          </div>
-
-          {/* Error Sources */}
-          {bugData && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="p-4 border-b border-gray-100">
-                <h3 className="font-semibold text-sm text-gray-800">Error Origins</h3>
-              </div>
-              <div className="p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {Object.entries(bugData.sources).map(([key, val]) => (
-                    <div key={key} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                      <p className="text-[11px] font-medium text-gray-500 capitalize">{key}</p>
-                      <p className="text-xs text-gray-700 mt-1">{val}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Audit Errors */}
-          {bugData && bugData.auditErrors.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-semibold text-sm text-gray-800">Audit Errors</h3>
-                <span className="text-[11px] text-gray-500">{bugData.auditErrors.length} entries</span>
-              </div>
-              <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead><tr className="bg-gray-50 text-gray-500">
-                    <th className="text-left px-3 py-2 font-medium">Action</th>
-                    <th className="text-left px-3 py-2 font-medium">Target</th>
-                    <th className="text-left px-3 py-2 font-medium">Date</th>
-                  </tr></thead>
-                  <tbody>
-                    {bugData.auditErrors.map((e, i) => (
-                      <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-3 py-1.5 text-gray-800 font-medium">{e.action}</td>
-                        <td className="px-3 py-1.5 text-gray-600">{e.target_type || "-"}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{new Date(e.created_at).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Query Errors + Banned Users */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {bugData && bugData.queryErrors.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-                <div className="p-4 border-b border-gray-100">
-                  <h3 className="font-semibold text-sm text-gray-800">Query Execution Errors</h3>
-                </div>
-                <div className="max-h-[250px] overflow-y-auto p-3 space-y-2">
-                  {bugData.queryErrors.map((e, i) => (
-                    <div key={i} className="p-2 bg-red-50 rounded text-xs text-red-700">
-                      <p className="font-mono truncate">{e.payload?.slice(0, 200)}</p>
-                      <p className="text-[10px] text-red-500 mt-0.5">{new Date(e.executed_at).toLocaleString()}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {bugData && bugData.bannedUsers.length > 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-                <div className="p-4 border-b border-gray-100">
-                  <h3 className="font-semibold text-sm text-gray-800">Banned Users</h3>
-                </div>
-                <div className="max-h-[250px] overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead><tr className="bg-gray-50 text-gray-500">
-                      <th className="text-left px-3 py-2 font-medium">Email</th>
-                      <th className="text-left px-3 py-2 font-medium">Banned Date</th>
-                    </tr></thead>
-                    <tbody>
-                      {bugData.bannedUsers.map((u) => (
-                        <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
-                          <td className="px-3 py-1.5 text-gray-800">{u.email}</td>
-                          <td className="px-3 py-1.5 text-gray-600">{new Date(u.created_at).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "errors" && <ErrorLogTab />}
-
-      {/* Create Preset Modal */}
+      {/* ───── Modals ───── */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-          onClick={() => setShowCreateModal(false)}>
-          <div className="bg-white rounded-xl p-6 w-[500px] max-h-[80vh] overflow-y-auto shadow-xl"
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-sm text-gray-800 mb-4">Create Custom Preset</h3>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
+          <div className="bg-white rounded-xl p-6 w-[500px] max-h-[80vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-[14px] text-[#0b1c30] mb-4">Create Custom Preset</h3>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium text-gray-600">Title</label>
+                <label className="text-[13px] font-medium text-[#64748b]">Title</label>
                 <input value={createTitle} onChange={(e) => setCreateTitle(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]" />
+                  className="w-full text-[13px] px-3 py-2 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">SQL Query</label>
+                <label className="text-[13px] font-medium text-[#64748b]">SQL Query</label>
                 <textarea value={createSql} onChange={(e) => setCreateSql(e.target.value)} rows={5}
-                  className="w-full font-mono text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]" />
+                  className="w-full font-mono text-[13px] px-3 py-2 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">Category</label>
+                <label className="text-[13px] font-medium text-[#64748b]">Category</label>
                 <select value={createCategory} onChange={(e) => setCreateCategory(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]">
+                  className="w-full text-[13px] px-3 py-2 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]">
                   {CATEGORIES.filter((c) => c.value).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={handleCreatePreset}
-                  className="px-4 py-2 text-sm font-medium bg-[#0f3460] text-white rounded-lg hover:bg-[#16213e]"
-                >Create</button>
+                  className="px-4 py-2 text-[13px] font-medium bg-[#006e2f] text-white rounded-lg hover:bg-[#16213e]">Create</button>
                 <button onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-                >Cancel</button>
+                  className="px-4 py-2 text-[13px] font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">Cancel</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Preset Modal */}
       {editingPreset && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-          onClick={() => setEditingPreset(null)}>
-          <div className="bg-white rounded-xl p-6 w-[500px] max-h-[80vh] overflow-y-auto shadow-xl"
-            onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-semibold text-sm text-gray-800 mb-4">Edit Preset</h3>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setEditingPreset(null)}>
+          <div className="bg-white rounded-xl p-6 w-[500px] max-h-[80vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-[14px] text-[#0b1c30] mb-4">Edit Preset</h3>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-medium text-gray-600">Title</label>
+                <label className="text-[13px] font-medium text-[#64748b]">Title</label>
                 <input value={editingPreset.title} onChange={(e) => setEditingPreset({ ...editingPreset, title: e.target.value })}
-                  className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]" />
+                  className="w-full text-[13px] px-3 py-2 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">SQL Query</label>
+                <label className="text-[13px] font-medium text-[#64748b]">SQL Query</label>
                 <textarea value={editingPreset.query_string} onChange={(e) => setEditingPreset({ ...editingPreset, query_string: e.target.value })} rows={5}
-                  className="w-full font-mono text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]" />
+                  className="w-full font-mono text-[13px] px-3 py-2 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">Category</label>
+                <label className="text-[13px] font-medium text-[#64748b]">Category</label>
                 <select value={editingPreset.category} onChange={(e) => setEditingPreset({ ...editingPreset, category: e.target.value })}
-                  className="w-full text-xs px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-[#0f3460]">
+                  className="w-full text-[13px] px-3 py-2 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]">
                   {CATEGORIES.filter((c) => c.value).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={handleUpdatePreset}
-                  className="px-4 py-2 text-sm font-medium bg-[#0f3460] text-white rounded-lg hover:bg-[#16213e]"
-                >Save</button>
+                  className="px-4 py-2 text-[13px] font-medium bg-[#006e2f] text-white rounded-lg hover:bg-[#16213e]">Save</button>
                 <button onClick={() => setEditingPreset(null)}
-                  className="px-4 py-2 text-sm font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-                >Cancel</button>
+                  className="px-4 py-2 text-[13px] font-medium bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">Cancel</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* View All Presets Modal */}
       {showAllModal && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-          onClick={() => setShowAllModal(false)}>
-          <div className="bg-white rounded-xl p-6 w-[700px] max-h-[80vh] overflow-y-auto shadow-xl"
-            onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={() => setShowAllModal(false)}>
+          <div className="bg-white rounded-xl p-6 w-[700px] max-h-[80vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-sm text-gray-800">All Presets ({allTotal})</h3>
-              <button onClick={() => setShowAllModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h3 className="font-semibold text-[14px] text-[#0b1c30]">All Presets ({allTotal})</h3>
+              <button onClick={() => setShowAllModal(false)} className="text-gray-400 hover:text-gray-600 text-[16px]">✕</button>
             </div>
             <div className="space-y-1 max-h-[500px] overflow-y-auto">
               {allPresets.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 text-xs">
+                <div key={p.id} className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-gray-50 text-[13px]">
                   <div className="flex-1 min-w-0">
-                    <span className="font-medium text-gray-800">{p.title}</span>
+                    <span className="font-medium text-[#0b1c30]">{p.title}</span>
                     <div className="flex gap-1.5 mt-0.5">
                       {categoryBadge(p.category)}
-                      <span className="text-[10px] text-gray-400">{p.is_system_preset ? "system" : "custom"}</span>
-                      <span className="text-[10px] text-gray-400">used: {p.last_used_at ? new Date(p.last_used_at).toLocaleDateString() : "never"}</span>
+                      <span className="text-[11px] text-gray-400">{p.is_system_preset ? "system" : "custom"}</span>
+                      <span className="text-[11px] text-gray-400">used: {p.last_used_at ? new Date(p.last_used_at).toLocaleDateString() : "never"}</span>
                     </div>
                   </div>
                 </div>
@@ -650,10 +505,10 @@ export default function DeveloperToolsPage() {
             {allTotal > 20 && (
               <div className="flex justify-center gap-2 mt-4">
                 <button disabled={allPage <= 1} onClick={() => loadAllPresets(allPage - 1)}
-                  className="px-3 py-1 text-xs bg-gray-100 rounded disabled:opacity-50">Prev</button>
-                <span className="text-xs text-gray-500 py-1">Page {allPage}</span>
+                  className="px-3 py-1 text-[13px] bg-gray-100 rounded disabled:opacity-50">Prev</button>
+                <span className="text-[13px] text-[#94a3b8] py-1">Page {allPage}</span>
                 <button onClick={() => loadAllPresets(allPage + 1)}
-                  className="px-3 py-1 text-xs bg-gray-100 rounded">Next</button>
+                  className="px-3 py-1 text-[13px] bg-gray-100 rounded">Next</button>
               </div>
             )}
           </div>

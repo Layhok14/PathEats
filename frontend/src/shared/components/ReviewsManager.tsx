@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Star, Search } from "lucide-react";
+import { Star, Search, Download } from "lucide-react";
 import api from "../services/axiosService";
 
 interface Review {
@@ -33,9 +33,26 @@ interface ReviewsManagerProps {
   endpoint: string;
   title: string;
   subtitle: string;
+  enableExport?: boolean;
 }
 
-export function ReviewsManager({ endpoint, title, subtitle }: ReviewsManagerProps) {
+function exportReviewsCsv(reviews: Review[]) {
+  const headers = ["User Name", "Place", "Stars", "Review", "Date"];
+  const csvRows = reviews.map((r) => [
+    `"${(r.user_name || "Anonymous").replace(/"/g, '""')}"`,
+    `"${(r.place_name || "").replace(/"/g, '""')}"`,
+    r.stars,
+    `"${(r.body || "").replace(/"/g, '""')}"`,
+    r.created_at,
+  ]);
+  const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "reviews.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function ReviewsManager({ endpoint, title, subtitle, enableExport }: ReviewsManagerProps) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [starFilter, setStarFilter] = useState<number | null>(null);
@@ -87,9 +104,16 @@ export function ReviewsManager({ endpoint, title, subtitle }: ReviewsManagerProp
 
   return (
     <div className="flex flex-col gap-6 max-w-[800px]">
-      <div>
-        <h1 style={{ fontFamily: "Poppins, sans-serif", fontSize: "28px", fontWeight: 700, color: "var(--brand-text-dark)" }}>{title}</h1>
-        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginTop: "4px" }}>{subtitle}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 style={{ fontFamily: "Poppins, sans-serif", fontSize: "28px", fontWeight: 700, color: "var(--brand-text-dark)" }}>{title}</h1>
+          <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginTop: "4px" }}>{subtitle}</p>
+        </div>
+        {enableExport && reviews.length > 0 && (
+          <button onClick={() => exportReviewsCsv(reviews)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#bccbb9] px-3 py-1.5 text-[12px] font-semibold text-[#374151] bg-white hover:bg-gray-50 shrink-0">
+            <Download size={14} /> Export CSV
+          </button>
+        )}
       </div>
 
       {/* Summary card */}

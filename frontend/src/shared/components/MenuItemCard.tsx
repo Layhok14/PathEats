@@ -35,8 +35,12 @@ export function MenuItemCard({ item, selected, onToggle }: MenuItemCardProps) {
       )}
 
       {/* Image */}
-      <div className="h-32 w-full overflow-hidden bg-[var(--muted)]">
-        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+      <div className="h-32 w-full overflow-hidden bg-[var(--muted)] flex items-center justify-center text-3xl text-[#94a3b8]">
+        {item.imageUrl ? (
+          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+        ) : (
+          "🍽"
+        )}
       </div>
 
       {/* Info */}

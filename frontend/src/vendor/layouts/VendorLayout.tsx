@@ -38,7 +38,7 @@ export function VendorLayout() {
         </nav>
       </aside>
       <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto bg-[#f8fafc]"><Outlet /></main>
+        <main className="flex-1 overflow-y-auto bg-[#f8fafc]"><div className="mx-auto max-w-7xl w-full"><Outlet /></div></main>
       </div>
     </div>
   );

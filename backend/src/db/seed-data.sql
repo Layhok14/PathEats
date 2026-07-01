@@ -749,6 +749,18 @@ CREATE TABLE onboarding_config (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   telegram_link TEXT DEFAULT '',
   message TEXT DEFAULT 'Connect your vendor account to Telegram for real-time notifications, support, and verification.',
+  steps TEXT[] DEFAULT ARRAY[
+    'Tap the button to open Telegram',
+    'Bot guides your verification',
+    'Account linked automatically',
+    'Get real-time notifications'
+  ],
+  safety_tips TEXT[] DEFAULT ARRAY[
+    'We never ask for your password or OTP on Telegram',
+    'Always verify the account handle matches exactly',
+    'Use only the official Telegram link shown on this page'
+  ],
+  footer TEXT DEFAULT 'Questions? Vendors should use the official Telegram channel configured here.',
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 INSERT INTO onboarding_config (telegram_link, message) VALUES ('', 'Connect your vendor account to Telegram for real-time notifications, support, and verification.');

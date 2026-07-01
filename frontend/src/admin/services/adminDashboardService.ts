@@ -416,6 +416,9 @@ export interface OnboardingConfig {
   id: string;
   telegram_link: string;
   message: string;
+  steps: string[];
+  safety_tips: string[];
+  footer: string;
   updated_at: string;
 }
 
@@ -424,7 +427,7 @@ export async function getAdminOnboardingConfig(): Promise<OnboardingConfig> {
   return response.data.data;
 }
 
-export async function updateAdminOnboardingConfig(data: { telegramLink?: string; message?: string }): Promise<OnboardingConfig> {
+export async function updateAdminOnboardingConfig(data: { telegramLink?: string; message?: string; steps?: string[]; safetyTips?: string[]; footer?: string }): Promise<OnboardingConfig> {
   const response = await api.put<{ success: boolean; data: OnboardingConfig }>("/admin/onboarding", data);
   return response.data.data;
 }

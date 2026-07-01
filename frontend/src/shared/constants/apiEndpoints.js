@@ -16,7 +16,7 @@ export const ENDPOINTS = {
   ROUTING: `${API_BASE}/spatial/routing`,
 
   VENDOR_DASHBOARD: `${API_BASE}/vendor/metrics`,
-  VENDOR_MENU: `${API_BASE}/vendor/menu`,
+
   VENDOR_PROFILE: `${API_BASE}/vendor/details`,
   VENDOR_ORDERS: `${API_BASE}/vendor/orders`,
   VENDOR_REVIEWS: `${API_BASE}/vendor/feed`,

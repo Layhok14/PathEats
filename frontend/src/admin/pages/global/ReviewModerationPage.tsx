@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Flag, Trash2, AlertTriangle, Search, RotateCcw, ShieldAlert, Loader } from "lucide-react";
+import { Flag, Trash2, AlertTriangle, Search, RotateCcw, ShieldAlert, Loader, Download } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAdminAllReviews,
@@ -8,6 +8,7 @@ import {
   removeAdminReview,
   type AdminReview,
 } from "../../services/adminDashboardService";
+import { exportXlsx } from "../../../shared/utils/exportXlsx";
 
 const PAGE_SIZE = 15;
 
@@ -82,6 +83,38 @@ export default function ReviewModerationPage() {
     }
   };
 
+  function exportReviews() {
+    const active = reviews.filter((r) => !r.deleted_at);
+    const removed = reviews.filter((r) => r.deleted_at);
+    exportXlsx([
+      {
+        name: "All Reviews",
+        headers: ["User", "Stall", "Rating", "Review", "Date", "Status"],
+        rows: reviews.map((r) => [
+          r.user_name, r.place_name, r.stars, r.body || "",
+          new Date(r.created_at).toLocaleDateString(),
+          r.deleted_at ? "Removed" : r.flagged_at ? "Flagged" : "Active",
+        ]),
+      },
+      {
+        name: "Active",
+        headers: ["User", "Stall", "Rating", "Review", "Date"],
+        rows: active.map((r) => [
+          r.user_name, r.place_name, r.stars, r.body || "",
+          new Date(r.created_at).toLocaleDateString(),
+        ]),
+      },
+      {
+        name: "Removed",
+        headers: ["User", "Stall", "Rating", "Review", "Date"],
+        rows: removed.map((r) => [
+          r.user_name, r.place_name, r.stars, r.body || "",
+          new Date(r.created_at).toLocaleDateString(),
+        ]),
+      },
+    ], "reviews.xlsx");
+  }
+
   const flaggedCount = reviews.filter((r) => r.flagged_at && !r.deleted_at).length;
   const removedCount = reviews.filter((r) => r.deleted_at).length;
 
@@ -95,6 +128,9 @@ export default function ReviewModerationPage() {
               Flag inappropriate reviews, clear flags, or remove reviews. Removing a review recalculates the stall's rating.
             </p>
           </div>
+          <button onClick={exportReviews} className="inline-flex items-center gap-1.5 rounded-lg border border-[#bccbb9] px-3 py-1.5 text-[12px] font-semibold text-[#374151] bg-white hover:bg-gray-50 shrink-0">
+            <Download size={14} /> Export
+          </button>
         </div>
 
         <div className="grid grid-cols-3 gap-4">

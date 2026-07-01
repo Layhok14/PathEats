@@ -1,34 +1,67 @@
 import { useEffect, useState } from "react";
-import { Search, Plus, Pencil, Trash2, X, Ban, CheckCircle } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, X, Ban, CheckCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
-  getAdminUsersByRole,
+  getAdminUserManagementOverview,
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
   updateAdminUserStatus,
-  type AdminUser,
+  type AdminUserOverviewRow,
 } from "../../services/adminDashboardService";
+import { DetailModal } from "../developer/devShared";
+import { exportXlsx } from "../../../shared/utils/exportXlsx";
 
 const PAGE_SIZE = 10;
 
+function consumerName(r: AdminUserOverviewRow): string {
+  const d = r.user.details;
+  if (d) {
+    const first = d.firstName ? String(d.firstName).trim() : "";
+    const last = d.lastName ? String(d.lastName).trim() : "";
+    const parts = [first, last].filter(Boolean);
+    if (parts.length > 0) return parts.join(" ");
+  }
+  return r.user.label || "—";
+}
+
+function exportConsumers(rows: AdminUserOverviewRow[]) {
+  exportXlsx([
+    {
+      name: "Consumers",
+      headers: ["Name", "Email", "Status", "Theme", "Search Radius"],
+      rows: rows.map((r) => {
+        const prefs = r.preference?.details ?? null;
+        const theme = prefs ? String(prefs.theme ?? "") : "";
+        const radius = prefs ? String(prefs.search_radius ?? "") : "";
+        return [consumerName(r), r.user.subLabel || "", r.status, theme, radius];
+      }),
+    },
+  ], "consumers.xlsx");
+}
+
 export default function ConsumerManagementPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [rows, setRows] = useState<AdminUserOverviewRow[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   const [showCreate, setShowCreate] = useState(false);
-  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [successState, setSuccessState] = useState<{ message: string } | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
 
-  const loadUsers = async () => {
+  const [detailRow, setDetailRow] = useState<AdminUserOverviewRow | null>(null);
+  const [detailTable, setDetailTable] = useState<"user" | "preferences" | "search">("user");
+
+  const loadRows = async () => {
     try {
       setLoading(true);
-      const all = await getAdminUsersByRole("CONSUMER");
-      setUsers(all);
+      const all = await getAdminUserManagementOverview();
+      setRows(all.filter((r) => r.user.details?.role_scope === "CONSUMER"));
     } catch (err) {
       toast.error("Could not load consumers.");
     } finally {
@@ -36,11 +69,11 @@ export default function ConsumerManagementPage() {
     }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadRows(); }, []);
 
-  const filtered = users.filter((u) =>
-    u.name.toLowerCase().includes(query.toLowerCase()) ||
-    u.email.toLowerCase().includes(query.toLowerCase())
+  const filtered = rows.filter((r) =>
+    consumerName(r).toLowerCase().includes(query.toLowerCase()) ||
+    (r.user.subLabel ?? "").toLowerCase().includes(query.toLowerCase())
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -54,7 +87,7 @@ export default function ConsumerManagementPage() {
       await createAdminUser({ name: form.name, email: form.email, password: form.password, role: "CONSUMER" });
       setShowCreate(false);
       setForm({ name: "", email: "", password: "" });
-      await loadUsers();
+      await loadRows();
       setSuccessState({ message: "Consumer created." });
     } catch (err) {
       toast.error("Could not create consumer.");
@@ -62,38 +95,44 @@ export default function ConsumerManagementPage() {
   };
 
   const handleUpdate = async () => {
-    if (!editUser) return;
+    if (!editId) return;
     try {
-      await updateAdminUser(editUser.id, { firstName: editUser.name });
-      setEditUser(null);
-      await loadUsers();
+      await updateAdminUser(editId, { firstName: editName });
+      setEditId(null);
+      await loadRows();
       setSuccessState({ message: "Consumer updated." });
     } catch (err) {
       toast.error("Could not update consumer.");
     }
   };
 
-  const handleDelete = async (u: AdminUser) => {
-    if (!confirm(`Delete consumer "${u.name}"?`)) return;
+  const handleDelete = async (row: AdminUserOverviewRow) => {
+    if (!confirm(`Delete consumer "${consumerName(row)}"?`)) return;
     try {
-      await deleteAdminUser(u.id);
-      toast.success(`"${u.name}" deleted.`);
-      await loadUsers();
+      await deleteAdminUser(row.id);
+      toast.success(`"${consumerName(row)}" deleted.`);
+      await loadRows();
     } catch (err) {
       toast.error("Could not delete consumer.");
     }
   };
 
-  const handleStatus = async (u: AdminUser) => {
-    const next = u.status === "Suspended" ? "Active" : "Suspended";
+  const handleStatus = async (row: AdminUserOverviewRow) => {
+    const current = row.status;
+    const next = current === "Suspended" ? "Active" : "Suspended";
     try {
-      await updateAdminUserStatus(u.id, next);
+      await updateAdminUserStatus(row.id, next);
       toast.success(next === "Active" ? "Consumer unbanned." : "Consumer banned.");
-      await loadUsers();
+      await loadRows();
     } catch (err) {
       toast.error("Could not update status.");
     }
   };
+
+  function openDetail(row: AdminUserOverviewRow, table: "user" | "preferences" | "search") {
+    setDetailRow(row);
+    setDetailTable(table);
+  }
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
@@ -101,11 +140,16 @@ export default function ConsumerManagementPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-[22px] font-bold text-[#0b1c30]">Consumer Management</h1>
-            <p className="text-[13px] text-[#64748b] mt-1">Manage consumer accounts with full CRUD.</p>
+            <p className="text-[13px] text-[#64748b] mt-1">Manage consumer accounts with personal info and preferences.</p>
           </div>
-          <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
-            <Plus size={14} /> Add Consumer
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => exportConsumers(rows)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#bccbb9] px-3 py-1.5 text-[12px] font-semibold text-[#374151] bg-white hover:bg-gray-50">
+              <Download size={14} /> Export
+            </button>
+            <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
+              <Plus size={14} /> Add Consumer
+            </button>
+          </div>
         </div>
 
         <div className="relative max-w-xs">
@@ -121,39 +165,57 @@ export default function ConsumerManagementPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px]">
+               <div className="overflow-x-auto">
+                <table className="w-full">
                   <thead>
                     <tr className="bg-[#f8fafc]">
-                      {["Name", "Email", "Status", "Actions"].map((h) => (
-                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
-                      ))}
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Name</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Personal Info</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Preferences</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Edit</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Ban</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Delete</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((u) => (
-                      <tr key={u.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
-                        <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{u.name}</td>
-                        <td className="px-5 py-3 text-[12px] text-[#64748b]">{u.email}</td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${u.status === "Active" ? "bg-green-50 text-[#006e2f]" : "bg-red-50 text-[#ba1a1a]"}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${u.status === "Active" ? "bg-[#006e2f]" : "bg-[#ba1a1a]"}`} />
-                            {u.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setEditUser(u)} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={14} /></button>
-                            <button onClick={() => handleStatus(u)} className={`p-1.5 rounded ${u.status === "Suspended" ? "text-[#006e2f] hover:bg-green-50" : "text-[#ba1a1a] hover:bg-red-50"}`}>
-                              {u.status === "Suspended" ? <CheckCircle size={14} /> : <Ban size={14} />}
+                    {visible.map((r) => {
+                      const prefs = r.preference?.details ?? null;
+                      return (
+                        <tr key={r.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
+                          <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{consumerName(r)}</td>
+                          <td className="px-5 py-3">
+                            <button onClick={() => openDetail(r, "user")} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#005a26]">
+                              View
                             </button>
-                            <button onClick={() => handleDelete(u)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={14} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-5 py-3">
+                            {prefs ? (
+                              <button onClick={() => openDetail(r, "preferences")} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#005a26]">
+                                View
+                              </button>
+                            ) : null}
+                          </td>
+                          <td className="px-5 py-3">
+                            <button onClick={() => { setEditId(r.id); setEditName(consumerName(r)); setEditEmail(r.user.subLabel ?? ""); }} className="inline-flex items-center gap-1 rounded text-[#005ac2] hover:text-[#1d4ed8] text-[12px] font-semibold">
+                              <Pencil size={14} /> Edit
+                            </button>
+                          </td>
+                          <td className="px-5 py-3">
+                            <button onClick={() => handleStatus(r)} className={`inline-flex items-center gap-1 rounded text-[12px] font-semibold ${r.status === "Suspended" ? "text-[#006e2f] hover:text-[#005a26]" : "text-[#ba1a1a] hover:text-[#991111]"}`}>
+                              {r.status === "Suspended" ? <CheckCircle size={14} /> : <Ban size={14} />}
+                              {r.status === "Suspended" ? "Unban" : "Ban"}
+                            </button>
+                          </td>
+                          <td className="px-5 py-3">
+                            <button onClick={() => handleDelete(r)} className="inline-flex items-center gap-1 rounded text-[#ef4444] hover:text-[#dc2626] text-[12px] font-semibold">
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {visible.length === 0 && (
-                      <tr><td colSpan={4} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No consumers found.</td></tr>
+                      <tr><td colSpan={6} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No consumers found.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -201,26 +263,25 @@ export default function ConsumerManagementPage() {
       )}
 
       {/* Edit Modal */}
-      {editUser && (
+      {editId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
               <h2 className="text-[16px] font-bold text-[#0b1c30]">Edit Consumer</h2>
-              <button onClick={() => setEditUser(null)} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
+              <button onClick={() => setEditId(null)} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
             </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Name</label>
-                <input value={editUser.name} onChange={(e) => setEditUser({ ...editUser, name: e.target.value })} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Email</label>
-                <input value={editUser.email} disabled className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none bg-gray-50 text-[#94a3b8]" />
+                <input value={editEmail} disabled className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none bg-gray-50 text-[#94a3b8]" />
               </div>
-              <p className="text-[11px] text-[#94a3b8]">Current role: <strong>{editUser.role}</strong></p>
             </div>
             <div className="flex justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
-              <button onClick={() => setEditUser(null)} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setEditId(null)} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
               <button onClick={handleUpdate} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26]">Save</button>
             </div>
           </div>
@@ -229,6 +290,15 @@ export default function ConsumerManagementPage() {
 
       {successState && (
         <SuccessModal message={successState.message} onContinue={() => setSuccessState(null)} onGoBack={() => setSuccessState(null)} />
+      )}
+
+      {/* Detail Modal */}
+      {detailRow && (
+        <DetailModal
+          title={`${detailTable === "user" ? "User" : detailTable === "preferences" ? "Preferences" : "Search History"} — ${consumerName(detailRow)}`}
+          details={Object.assign({ Status: detailRow.status }, detailRow[detailTable]?.details ?? {})}
+          onClose={() => setDetailRow(null)}
+        />
       )}
     </div>
   );

@@ -46,7 +46,7 @@ export const createUser = async (userData, adminId = null) => {
     email: userData.email,
     password_hash,
     first_name: userData.first_name ?? userData.firstName ?? firstName,
-    last_name: userData.last_name ?? userData.lastName ?? (lastName || "User"),
+    last_name: userData.last_name ?? userData.lastName ?? lastName,
     phone: userData.phone,
     role_scope: userData.role_scope ?? userData.role ?? "CONSUMER",
   });

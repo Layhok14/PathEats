@@ -1,35 +1,64 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Search, Store, Plus, Pencil, Trash2, X } from "lucide-react";
+import { Search, Store, Plus, Pencil, Trash2, X, Ban, CheckCircle, Download } from "lucide-react";
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
-  getAdminUsersByRole,
+  getAdminVendorManagementOverview,
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
-  type AdminUser,
+  updateAdminUserStatus,
+  type AdminUserOverviewRow,
 } from "../../services/adminDashboardService";
+import { DetailModal } from "../developer/devShared";
+import { exportXlsx } from "../../../shared/utils/exportXlsx";
 
 const PAGE_SIZE = 10;
 
+function vendorName(r: AdminUserOverviewRow): string {
+  const d = r.user.details;
+  if (d) {
+    const first = d.firstName ? String(d.firstName).trim() : "";
+    const last = d.lastName ? String(d.lastName).trim() : "";
+    const parts = [first, last].filter(Boolean);
+    if (parts.length > 0) return parts.join(" ");
+  }
+  return r.user.label || "—";
+}
+
+function exportVendors(rows: AdminUserOverviewRow[]) {
+  exportXlsx([
+    {
+      name: "Vendors",
+      headers: ["Name", "Email", "Status"],
+      rows: rows.map((r) => [vendorName(r), r.user.subLabel || "", r.status]),
+    },
+  ], "vendors.xlsx");
+}
+
 export default function VendorListPage() {
   const navigate = useNavigate();
-  const [vendors, setVendors] = useState<AdminUser[]>([]);
+  const [rows, setRows] = useState<AdminUserOverviewRow[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   const [showCreate, setShowCreate] = useState(false);
-  const [editVendor, setEditVendor] = useState<AdminUser | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [successState, setSuccessState] = useState<{ message: string } | null>(null);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
 
-  const loadVendors = async () => {
+  const [detailRow, setDetailRow] = useState<AdminUserOverviewRow | null>(null);
+  const [detailTable, setDetailTable] = useState<"user" | "search">("user");
+
+  const loadRows = async () => {
     try {
       setLoading(true);
-      const all = await getAdminUsersByRole("VENDOR");
-      setVendors(all);
+      const all = await getAdminVendorManagementOverview();
+      setRows(all.filter((r) => r.user.details?.role_scope === "VENDOR"));
     } catch (err) {
       toast.error("Could not load vendors.");
     } finally {
@@ -37,11 +66,11 @@ export default function VendorListPage() {
     }
   };
 
-  useEffect(() => { loadVendors(); }, []);
+  useEffect(() => { loadRows(); }, []);
 
-  const filtered = vendors.filter((v) =>
-    v.name.toLowerCase().includes(query.toLowerCase()) ||
-    v.email.toLowerCase().includes(query.toLowerCase())
+  const filtered = rows.filter((r) =>
+    vendorName(r).toLowerCase().includes(query.toLowerCase()) ||
+    (r.user.subLabel ?? "").toLowerCase().includes(query.toLowerCase())
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -55,7 +84,7 @@ export default function VendorListPage() {
       await createAdminUser({ name: form.name, email: form.email, password: form.password, role: "VENDOR" });
       setShowCreate(false);
       setForm({ name: "", email: "", password: "" });
-      await loadVendors();
+      await loadRows();
       setSuccessState({ message: "Vendor created." });
     } catch (err) {
       toast.error("Could not create vendor.");
@@ -63,27 +92,44 @@ export default function VendorListPage() {
   };
 
   const handleUpdate = async () => {
-    if (!editVendor) return;
+    if (!editId) return;
     try {
-      await updateAdminUser(editVendor.id, { firstName: editVendor.name, lastName: "" });
-      setEditVendor(null);
-      await loadVendors();
+      await updateAdminUser(editId, { firstName: editName });
+      setEditId(null);
+      await loadRows();
       setSuccessState({ message: "Vendor updated." });
     } catch (err) {
       toast.error("Could not update vendor.");
     }
   };
 
-  const handleDelete = async (v: AdminUser) => {
-    if (!confirm(`Delete vendor "${v.name}"?`)) return;
+  const handleDelete = async (row: AdminUserOverviewRow) => {
+    if (!confirm(`Delete vendor "${vendorName(row)}"?`)) return;
     try {
-      await deleteAdminUser(v.id);
-      toast.success(`"${v.name}" deleted.`);
-      await loadVendors();
+      await deleteAdminUser(row.id);
+      toast.success(`"${vendorName(row)}" deleted.`);
+      await loadRows();
     } catch (err) {
       toast.error("Could not delete vendor.");
     }
   };
+
+  const handleStatus = async (row: AdminUserOverviewRow) => {
+    const current = row.status;
+    const next = current === "Suspended" ? "Active" : "Suspended";
+    try {
+      await updateAdminUserStatus(row.id, next);
+      toast.success(next === "Active" ? "Vendor unbanned." : "Vendor banned.");
+      await loadRows();
+    } catch (err) {
+      toast.error("Could not update status.");
+    }
+  };
+
+  function openDetail(row: AdminUserOverviewRow, table: "user" | "search") {
+    setDetailRow(row);
+    setDetailTable(table);
+  }
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
@@ -91,11 +137,16 @@ export default function VendorListPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-[22px] font-bold text-[#0b1c30]">Vendor Management</h1>
-            <p className="text-[13px] text-[#64748b] mt-1">View all vendors. Click "Manage Stall" to manage a vendor's stalls.</p>
+            <p className="text-[13px] text-[#64748b] mt-1">Manage vendor accounts with personal info, stalls, and reviews.</p>
           </div>
-          <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
-            <Plus size={14} /> Add Vendor
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => exportVendors(rows)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#bccbb9] px-3 py-1.5 text-[12px] font-semibold text-[#374151] bg-white hover:bg-gray-50">
+              <Download size={14} /> Export
+            </button>
+            <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
+              <Plus size={14} /> Add Vendor
+            </button>
+          </div>
         </div>
 
         <div className="relative max-w-xs">
@@ -111,42 +162,52 @@ export default function VendorListPage() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px]">
+               <div className="overflow-x-auto">
+                <table className="w-full">
                   <thead>
                     <tr className="bg-[#f8fafc]">
-                      {["Name", "Email", "Status", "Actions"].map((h) => (
-                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
-                      ))}
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Name</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Personal Info</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Stall</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Edit</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Ban</th>
+                      <th className="w-1/6 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Delete</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((v) => (
-                      <tr key={v.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
-                        <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{v.name}</td>
-                        <td className="px-5 py-3 text-[12px] text-[#64748b]">{v.email}</td>
+                    {visible.map((r) => (
+                      <tr key={r.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
+                        <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{vendorName(r)}</td>
                         <td className="px-5 py-3">
-                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${v.status === "Active" ? "bg-green-50 text-[#006e2f]" : "bg-red-50 text-[#ba1a1a]"}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${v.status === "Active" ? "bg-[#006e2f]" : "bg-[#ba1a1a]"}`} />
-                            {v.status}
-                          </span>
+                          <button onClick={() => openDetail(r, "user")} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#005a26]">
+                            View
+                          </button>
                         </td>
                         <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => navigate(`/admin/vendors/${v.id}`)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]"
-                            >
-                              <Store size={14} /> Manage Stall
-                            </button>
-                            <button onClick={() => setEditVendor(v)} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={14} /></button>
-                            <button onClick={() => handleDelete(v)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={14} /></button>
-                          </div>
+                          <button onClick={() => navigate(`/admin/vendors/${r.id}`)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
+                            <Store size={14} /> Manage Stall
+                          </button>
+                        </td>
+                        <td className="px-5 py-3">
+                          <button onClick={() => { setEditId(r.id); setEditName(vendorName(r)); setEditEmail(r.user.subLabel ?? ""); }} className="inline-flex items-center gap-1 rounded text-[#005ac2] hover:text-[#1d4ed8] text-[12px] font-semibold">
+                            <Pencil size={14} /> Edit
+                          </button>
+                        </td>
+                        <td className="px-5 py-3">
+                          <button onClick={() => handleStatus(r)} className={`inline-flex items-center gap-1 rounded text-[12px] font-semibold ${r.status === "Suspended" ? "text-[#006e2f] hover:text-[#005a26]" : "text-[#ba1a1a] hover:text-[#991111]"}`}>
+                            {r.status === "Suspended" ? <CheckCircle size={14} /> : <Ban size={14} />}
+                            {r.status === "Suspended" ? "Unban" : "Ban"}
+                          </button>
+                        </td>
+                        <td className="px-5 py-3">
+                          <button onClick={() => handleDelete(r)} className="inline-flex items-center gap-1 rounded text-[#ef4444] hover:text-[#dc2626] text-[12px] font-semibold">
+                            <Trash2 size={14} /> Delete
+                          </button>
                         </td>
                       </tr>
                     ))}
                     {visible.length === 0 && (
-                      <tr><td colSpan={4} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No vendors found.</td></tr>
+                      <tr><td colSpan={6} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No vendors found.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -194,25 +255,25 @@ export default function VendorListPage() {
       )}
 
       {/* Edit Modal */}
-      {editVendor && (
+      {editId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
               <h2 className="text-[16px] font-bold text-[#0b1c30]">Edit Vendor</h2>
-              <button onClick={() => setEditVendor(null)} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
+              <button onClick={() => setEditId(null)} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
             </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Name</label>
-                <input value={editVendor.name} onChange={(e) => setEditVendor({ ...editVendor, name: e.target.value })} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Email</label>
-                <input value={editVendor.email} disabled className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none bg-gray-50 text-[#94a3b8]" />
+                <input value={editEmail} disabled className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none bg-gray-50 text-[#94a3b8]" />
               </div>
             </div>
             <div className="flex justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
-              <button onClick={() => setEditVendor(null)} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setEditId(null)} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
               <button onClick={handleUpdate} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26]">Save</button>
             </div>
           </div>
@@ -221,6 +282,15 @@ export default function VendorListPage() {
 
       {successState && (
         <SuccessModal message={successState.message} onContinue={() => setSuccessState(null)} onGoBack={() => setSuccessState(null)} />
+      )}
+
+      {/* Detail Modal */}
+      {detailRow && (
+        <DetailModal
+          title={`${detailTable === "user" ? "User" : "Search History"} — ${vendorName(detailRow)}`}
+          details={Object.assign({ Status: detailRow.status }, detailRow[detailTable]?.details ?? {})}
+          onClose={() => setDetailRow(null)}
+        />
       )}
     </div>
   );

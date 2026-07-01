@@ -15,7 +15,7 @@ import {
 } from "../../services/developerService";
 import { DetailModal } from "./devShared";
 
-const BACKUP_METHODS = ["Entire Database", "Specific Tables"];
+const BACKUP_METHODS = ["Entire Database", "Specific Tables", "Specific Rows"];
 const RECOVERY_TYPES = ["PostgreSQL Dump", "Row Level CSV"];
 const SCHEDULE_UNITS = ["Hours", "Days", "Months"];
 const DB_SCHEMAS = ["public"];
@@ -28,20 +28,30 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
   const [method, setMethod] = useState("");
   const [selectedSchema, setSelectedSchema] = useState("");
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
+  const [selectedTable, setSelectedTable] = useState("");
+  const [rowCondition, setRowCondition] = useState("");
   const [scheduleInterval, setScheduleInterval] = useState("");
   const [scheduleUnit, setScheduleUnit] = useState("Hours");
 
   const hasBackupTarget =
     method === "Entire Database" ||
-    (method === "Specific Tables" && selectedTables.length > 0);
+    (method === "Specific Tables" && selectedTables.length > 0) ||
+    (method === "Specific Rows" && selectedTable);
   const canProceed = profileName.trim() && method && hasBackupTarget;
 
   const handleCreate = async () => {
     try {
-      const scope =
-        method === "Entire Database"
-          ? `schema:${selectedSchema || DB_SCHEMAS[0]}`
-          : `tables:${selectedTables.join(",") || "all"}`;
+      let scope = "";
+      if (method === "Entire Database") {
+        scope = `schema:${selectedSchema || DB_SCHEMAS[0]}`;
+      } else if (method === "Specific Tables") {
+        scope = `tables:${selectedTables.join(",") || "all"}`;
+      } else if (method === "Specific Rows") {
+        scope = `table:${selectedTable}`;
+        if (rowCondition.trim()) {
+          scope += `;condition=${rowCondition.trim()}`;
+        }
+      }
 
       await createDevBackup({
         profileName: profileName.trim(),
@@ -108,6 +118,29 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
             </div>
           )}
 
+          {method === "Specific Rows" && (
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Select Table</label>
+                <select value={selectedTable} onChange={(e) => setSelectedTable(e.target.value)} className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
+                  <option value="">— Select —</option>
+                  {tables.map((t) => (<option key={t} value={t}>{t}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">WHERE Condition (optional)</label>
+                <input
+                  type="text"
+                  value={rowCondition}
+                  onChange={(e) => setRowCondition(e.target.value)}
+                  placeholder='e.g. WHERE created_at > NOW() - INTERVAL &apos;30 days&apos;'
+                  className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] font-mono"
+                />
+                <p className="text-[11px] text-[#64748b] mt-1">Generates a CSV file containing only rows matching this condition.</p>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Schedule (optional)</label>
             <div className="flex gap-2">
@@ -165,19 +198,6 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   const handleFileDrop = (droppedFile: File) => {
     setError("");
     setSuccess("");
-    setFile(droppedFile);
-
-    if (!recoveryType) {
-      setError("Select a recovery type before choosing a file.");
-      setFile(null);
-      return;
-    }
-
-    if (!allowedExtensions.some((extension) => droppedFile.name.toLowerCase().endsWith(extension))) {
-      setError(`${recoveryType} requires a ${expectedExtensionLabel} file.`);
-      setFile(null);
-      return;
-    }
 
     if (droppedFile.size > MAX_RECOVERY_FILE_BYTES) {
       setError("File exceeds 100 MB limit.");
@@ -185,6 +205,18 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
       return;
     }
 
+    const lowerName = droppedFile.name.toLowerCase();
+    if (lowerName.endsWith(".csv")) {
+      setRecoveryType("Row Level CSV");
+    } else if (lowerName.endsWith(".dump") || lowerName.endsWith(".backup") || lowerName.endsWith(".pgdump")) {
+      setRecoveryType("PostgreSQL Dump");
+    } else {
+      setError("Unsupported file type. Use .dump, .backup, .pgdump, or .csv files.");
+      setFile(null);
+      return;
+    }
+
+    setFile(droppedFile);
   };
 
   const handleReview = () => {

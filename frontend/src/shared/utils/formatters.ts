@@ -1,6 +1,7 @@
 // Pure formatting helpers — no side effects, safe to import anywhere.
 
-export function formatPrice(amount) {
+export function formatPrice(amount: number | null | undefined) {
+  if (amount == null || Number.isNaN(amount)) return "—";
   return amount % 1 === 0 ? `$${amount}` : `$${amount.toFixed(2)}`;
 }
 

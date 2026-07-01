@@ -8,6 +8,7 @@ export default function DeveloperReviewsPage() {
           endpoint="/dev/reviews"
           title="All Reviews"
           subtitle="System-wide customer feedback for developer analysis."
+          enableExport
         />
       </div>
     </div>

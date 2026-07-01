@@ -1594,9 +1594,9 @@ export const getDatabaseTables = async () => {
 
 export const getOnboardingConfig = async () => {
   const { rows } = await pool.query(
-    "SELECT id, telegram_link, message, updated_at FROM onboarding_config LIMIT 1"
+    "SELECT id, telegram_link, message, steps, safety_tips, footer, updated_at FROM onboarding_config LIMIT 1"
   );
-  return rows[0] ?? { telegram_link: "", message: "" };
+  return rows[0] ?? { telegram_link: "", message: "", steps: [], safety_tips: [], footer: "" };
 };
 
 export const updateOnboardingConfig = async (data) => {
@@ -1608,18 +1608,21 @@ export const updateOnboardingConfig = async (data) => {
        UPDATE onboarding_config
        SET telegram_link = COALESCE($1, telegram_link),
            message = COALESCE($2, message),
+           steps = COALESCE($3, steps),
+           safety_tips = COALESCE($4, safety_tips),
+           footer = COALESCE($5, footer),
            updated_at = NOW()
        WHERE id = (SELECT id FROM existing)
-       RETURNING id, telegram_link, message, updated_at
+       RETURNING id, telegram_link, message, steps, safety_tips, footer, updated_at
      ),
      inserted AS (
-       INSERT INTO onboarding_config (telegram_link, message, updated_at)
-       SELECT COALESCE($1, ''), COALESCE($2, ''), NOW()
+       INSERT INTO onboarding_config (telegram_link, message, steps, safety_tips, footer, updated_at)
+       SELECT COALESCE($1, ''), COALESCE($2, ''), COALESCE($3, '{}'), COALESCE($4, '{}'), COALESCE($5, ''), NOW()
        WHERE NOT EXISTS (SELECT 1 FROM existing)
-       RETURNING id, telegram_link, message, updated_at
+       RETURNING id, telegram_link, message, steps, safety_tips, footer, updated_at
      )
      SELECT * FROM updated UNION ALL SELECT * FROM inserted`,
-    [data.telegramLink ?? null, data.message ?? null]
+    [data.telegramLink ?? null, data.message ?? null, data.steps ?? null, data.safetyTips ?? null, data.footer ?? null]
   );
   return rows[0];
 };

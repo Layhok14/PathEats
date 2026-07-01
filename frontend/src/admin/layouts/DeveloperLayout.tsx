@@ -35,7 +35,7 @@ export default function DeveloperLayout() {
           </div>
         </div>
       </aside>
-      <main className="flex-1 overflow-auto relative"><Outlet /></main>
+      <main className="flex-1 overflow-auto relative"><div className="mx-auto max-w-7xl w-full"><Outlet /></div></main>
     </div>
   );
 }

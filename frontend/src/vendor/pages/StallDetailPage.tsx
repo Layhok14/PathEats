@@ -61,13 +61,15 @@ function MenuItemModal({
     price: item?.price ?? 0,
     imageUrl: item?.imageUrl ?? "",
     storageImage: item?.storageImage ?? null,
-    category: (item?.category as MenuCategory) ?? "Rice",
+    category: (item?.category as MenuCategory) ?? "Snack",
     isAvailable: item?.isAvailable ?? true,
   });
   const [saving, setSaving] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.name.trim()) { toast.error("Item name is required."); return; }
+    if (!form.price || form.price <= 0) { toast.error("Price must be greater than 0."); return; }
     setSaving(true);
     try {
       await onSave(form);

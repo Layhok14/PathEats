@@ -17,9 +17,7 @@ const AdminAuditPage = lazy(() => import("../pages/global/AdminAuditPage"));
 const DeveloperDashboard = lazy(() => import("../pages/developer/DeveloperDashboard"));
 const BackupManagerPage = lazy(() => import("../pages/developer/BackupManagerPage"));
 const DeveloperToolsPage = lazy(() => import("../pages/developer/DeveloperToolsPage"));
-const DeveloperUserManagementPage = lazy(() => import("../pages/developer/DeveloperUserManagementPage"));
-const DeveloperVendorManagementPage = lazy(() => import("../pages/developer/DeveloperVendorManagementPage"));
-const DeveloperReviewsPage = lazy(() => import("../pages/developer/DeveloperReviewsPage"));
+
 
 const ADMIN_ROLES = ["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE"];
 
@@ -68,12 +66,11 @@ const adminRoutes: RouteObject = {
     { path: "vendors/:vendorId", element: businessOrGlobal(<AdminStallManagePage />) },
     { path: "vendors/:vendorId/stall/:stallId", element: businessOrGlobal(<AdminStallDetailPage />) },
     { path: "dashboard", element: globalAdmin(<Navigate to="/admin/audit" replace />) },
-    { path: "backups", element: developerAdmin(<BackupManagerPage />) },
+    { path: "backups", element: devOrGlobal(<BackupManagerPage />) },
     { path: "developer/dashboard", element: devOrGlobal(<DeveloperDashboard />) },
-    { path: "developer/users", element: devOrGlobal(<DeveloperUserManagementPage />) },
-    { path: "developer/vendors", element: devOrGlobal(<DeveloperVendorManagementPage />) },
-    { path: "developer/vendors/:vendorId", element: devOrGlobal(<Navigate to="/admin/developer/vendors" replace />) },
-    { path: "developer/reviews", element: devOrGlobal(<DeveloperReviewsPage />) },
+    { path: "developer/users", element: devOrGlobal(<Navigate to="/admin/users" replace />) },
+    { path: "developer/vendors", element: devOrGlobal(<Navigate to="/admin/vendors" replace />) },
+    { path: "developer/vendors/:vendorId", element: devOrGlobal(<Navigate to="/admin/vendors" replace />) },
     { path: "developer/tools", element: devOrGlobal(<DeveloperToolsPage />) },
     { path: "audit", element: globalAdmin(<AdminAuditPage />) },
   ],

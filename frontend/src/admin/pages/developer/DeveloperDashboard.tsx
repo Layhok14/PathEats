@@ -64,19 +64,19 @@ export default function DeveloperDashboard() {
             label="DB Latency"
             value={health ? `${health.dbLatency}ms` : "N/A"}
             sub={`Uptime: ${uptimeDisplay}`}
-            subVariant="blue"
-            topBorderColor="#005ac2"
+            subVariant="green"
+            topBorderColor="#006e2f"
             icon={<Server size={18} />}
-            accent="#005ac2"
+            accent="#006e2f"
           />
           <MetricCard
             label="Database Tables"
             value={String(metrics?.totalTables ?? "—")}
             sub={`Avg latency: ${metrics?.avgLatency ?? "—"}`}
-            subVariant="amber"
-            topBorderColor="#f59e0b"
+            subVariant="green"
+            topBorderColor="#006e2f"
             icon={<Database size={18} />}
-            accent="#f59e0b"
+            accent="#006e2f"
           />
         </div>
 
