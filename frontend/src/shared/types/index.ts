@@ -50,8 +50,11 @@ export interface Vendor {
   hours: string;
   address: string;
   menu: MenuItem[];
+  /** Distance from vendor to route (metres) — computed server-side via PostGIS */
   dist_m?: number;
+  /** Composite PathEats value score — computed server-side */
   final_score?: number;
+  /** Search match metadata — populated server-side when search is active */
   _searchMatch?: {
     matchedByName: boolean;
     matchedMenuItems: string[];
@@ -115,6 +118,7 @@ export interface Stall {
   description: string;
   operatingHours: OperatingSchedule;
   status: StallStatus;
+  adminManaged?: boolean;
   location: StallLocation;
   rating: number;
   reviewCount: number;

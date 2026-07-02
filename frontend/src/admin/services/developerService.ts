@@ -82,9 +82,7 @@ export async function initiateDevRecovery(payload: {
   form.append("file", payload.file);
   form.append("confirmationText", payload.confirmationText);
   if (payload.targetTable) form.append("targetTable", payload.targetTable);
-  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", form);
   return r.data.data;
 }
 

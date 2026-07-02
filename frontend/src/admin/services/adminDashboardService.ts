@@ -265,6 +265,7 @@ export interface AdminStallRow {
   address: string | null;
   priceRange: string | null;
   photoUrl: string | null;
+  isAdminManaged: boolean;
   isOpen: boolean;
   status: string;
   isApproved: boolean;

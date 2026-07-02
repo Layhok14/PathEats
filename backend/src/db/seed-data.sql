@@ -138,8 +138,8 @@ CREATE TABLE places (
   rating_avg NUMERIC(3,2) DEFAULT 0,
   rating_count INTEGER DEFAULT 0,
   is_open BOOLEAN DEFAULT TRUE,
-  status TEXT NOT NULL DEFAULT 'APPROVED'
-    CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED')),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'closed')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -659,7 +659,7 @@ BEGIN
     INSERT INTO places (owner_id, is_admin_managed, category_id, name, description, location, address, photo_url, price_range, is_open, status)
     VALUES (owner_for_place[i], FALSE, cat_ids[cat_idx], place_name, 'Fresh and delicious ' || place_name || ' food.',
       ST_GeographyFromText('SRID=4326;POINT(' || lng || ' ' || lat || ')'),
-      place_addr, photo_url, price, is_open, 'APPROVED')
+      place_addr, photo_url, price, is_open, CASE WHEN is_open THEN 'active' ELSE 'closed' END)
     RETURNING id INTO p_id;
 
     -- Place hours: open daily

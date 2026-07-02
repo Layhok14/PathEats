@@ -29,6 +29,56 @@ class PlaceService {
     this.placeRepo = new PlaceRepository();
   }
 
+  async search({ routePoints, range, cuisine, maxPrice, openNow, search, limit, offset }) {
+    if (!routePoints || routePoints.length < 2) {
+      return { vendors: [], total: 0, searchMeta: { total: 0, byName: 0, byMenu: 0 } };
+    }
+
+    const result = await this.placeRepo.search({
+      routePoints,
+      range: range || 800,
+      cuisine: cuisine && cuisine !== "All" ? cuisine : null,
+      maxPrice: maxPrice !== undefined ? maxPrice : null,
+      openNow: openNow !== undefined ? openNow : null,
+      search: search || null,
+      limit: limit || 50,
+      offset: offset || 0,
+    });
+
+    const placeIds = result.rows.map((r) => r.id);
+    const menuMap = placeIds.length > 0
+      ? await this.placeRepo.getMenuItemsForPlaces(placeIds)
+      : {};
+
+    const vendors = result.rows.map((row) => {
+      const v = this.toVendor(row, menuMap[row.id] || []);
+      const dist_m = parseFloat(row.dist_m) || 0;
+      v.dist_m = dist_m;
+
+      // Compute composite score (same formula as frontend: 35% affordability, 30% proximity, 20% rating, -15% wait)
+      const priceRange = v.price_range || 1;
+      const rating = v.rating || 0;
+      v.final_score = Math.max(0, Math.min(0.85,
+        0.35 * (1 - (Math.max(1, Math.min(4, priceRange)) - 1) / 3) +
+        0.30 * (1 - Math.min(dist_m, 300) / 300) +
+        0.20 * (rating / 5) -
+        0.15 * (0 / 15) // wait_time_est always 0 currently
+      ));
+
+      // Attach search match info if search was active
+      if (row.match_by_name !== undefined) {
+        v._searchMatch = {
+          matchedByName: row.match_by_name === 1,
+          matchedMenuItems: Array.isArray(row.matched_menu_items) ? row.matched_menu_items : [],
+        };
+        v._searchActive = true;
+      }
+      return v;
+    });
+
+    return { vendors, total: result.total, searchMeta: result.searchMeta };
+  }
+
   async getAll() {
     const rows = await this.placeRepo.findAllApproved();
     if (rows.length === 0) return [];

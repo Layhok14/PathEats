@@ -2,6 +2,7 @@ import VendorRepository from "../repositories/VendorRepository.js";
 import VendorModel from "../models/vendorModel.js";
 import AppError from "../utils/AppError.js";
 import { sanitizeText } from "../utils/sanitize.js";
+import { isPlaceActive, PLACE_STATUS } from "../utils/placeStatus.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,6 +72,18 @@ class VendorService {
   async updateStall(ownerId, stallId, data) {
     const stall = await this.vendorRepo.findOwnedById(stallId, ownerId);
     if (!stall) throw new AppError("Stall not found", 404);
+    const wantsOpen =
+      data.status === "open" ||
+      data.status === PLACE_STATUS.ACTIVE ||
+      data.is_open === true;
+
+    if (stall.is_admin_managed && !isPlaceActive(stall) && wantsOpen) {
+      throw new AppError("This stall was closed by an admin and cannot be reopened by the vendor.", 403, {
+        code: "STALL_ADMIN_CLOSED",
+        safeMessage: "This stall was closed by an admin. Contact support through Telegram to reopen it.",
+      });
+    }
+
     const sanitized = {
       ...data,
       name: data.name ? sanitizeText(data.name) : data.name,

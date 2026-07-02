@@ -247,8 +247,13 @@ export default function AdminStallDetailPage() {
   const handleToggleOpen = async () => {
     if (!stallId || !stall) return;
     try {
-      await api.patch(`/admin/stalls/${stallId}/toggle`);
-      setStall({ ...stall, isOpen: !stall.isOpen });
+      const { data } = await api.patch(`/admin/stalls/${stallId}/toggle`);
+      setStall({
+        ...stall,
+        isOpen: data.data.is_open,
+        status: data.data.status,
+        isAdminManaged: data.data.is_admin_managed,
+      });
       toast.success(`Stall is now ${stall.isOpen ? "closed" : "open"}.`);
     } catch (err) {
       toast.error("Could not toggle status.");

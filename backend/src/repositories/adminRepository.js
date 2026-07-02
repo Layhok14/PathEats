@@ -6,6 +6,7 @@ import {
   upsertPrimaryMenuItemImage,
   upsertPrimaryPlaceImage,
 } from "../utils/storageImageMetadata.js";
+import { normalizePlaceStatus, PLACE_STATUS } from "../utils/placeStatus.js";
 
 const quoteIdent = (value) => `"${String(value).replace(/"/g, '""')}"`;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -218,7 +219,7 @@ export const logAuditAction = async (adminId, action, targetType, targetId, deta
 };
 
 const toStatus = (isBanned) => (isBanned ? "Suspended" : "Active");
-const toBanned = (status) => String(status).toLowerCase() === "suspended";
+const toBanned = (status) => ["suspended", "banned"].includes(String(status).toLowerCase());
 
 export const checkDatabaseConnection = async () => {
   const rows = await optionalRows("SELECT NOW() AS now", [], []);
@@ -232,7 +233,7 @@ export const getDashboardTelemetry = async () => {
   const [totalUsers, activePlaces, totalReviews, totalRoutes, growthRows, activityRows] =
     await Promise.all([
       countRows("users"),
-      countRows("places", "WHERE status = 'APPROVED'"),
+      countRows("places", "WHERE status = 'active' AND is_open = TRUE"),
       countRows("reviews"),
       countRows("routes"),
       optionalRows(
@@ -386,17 +387,35 @@ export const updateRole = async (id, role) => {
 };
 
 export const updateStatus = async (id, status) => {
-  const result = await pool.query(
-    `
-    UPDATE users
-    SET is_banned = $1
-    WHERE id = $2
-    RETURNING id::text, email, first_name, last_name, role_scope, is_banned, created_at
-    `,
-    [toBanned(status), id]
-  );
+  const banned = toBanned(status);
 
-  return result.rows[0];
+  return withTransaction(async (client) => {
+    const result = await client.query(
+      `
+      UPDATE users
+      SET is_banned = $1,
+          updated_at = NOW()
+      WHERE id::text = $2
+      RETURNING id::text, email, first_name, last_name, role_scope, is_banned, created_at
+      `,
+      [banned, id]
+    );
+
+    const user = result.rows[0];
+    if (user?.role_scope === "VENDOR" && banned) {
+      await client.query(
+        `UPDATE places
+         SET status = 'closed',
+             is_open = FALSE,
+             is_admin_managed = TRUE,
+             updated_at = NOW()
+         WHERE owner_id::text = $1`,
+        [id]
+      );
+    }
+
+    return user;
+  });
 };
 
 export const countUsers = async () => countRows("users");
@@ -619,8 +638,8 @@ export const findAllVendors = async (page = 1, limit = 50) => {
     available.has("address") ? "p.address" : "'No address' AS address",
     available.has("category_id") ? "p.category_id::text" : "NULL AS category_id",
     available.has("rating_avg") ? "p.rating_avg" : "NULL AS rating",
-    "CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved",
-    available.has("status") ? "p.status" : "'PENDING' AS status",
+    "CASE WHEN p.status = 'active' AND p.is_open = TRUE THEN true ELSE false END AS is_approved",
+    available.has("status") ? "p.status" : "'closed' AS status",
     available.has("created_at") ? "p.created_at" : "NOW() AS created_at",
     available.has("category_id") ? "pc.name AS category" : "'Place' AS category",
     available.has("owner_id") ? "u.email AS email" : "'' AS email",
@@ -648,7 +667,7 @@ export const findAllVendors = async (page = 1, limit = 50) => {
     location: vendor.address,
     email: vendor.email,
     category: vendor.category,
-    status: vendor.is_approved ? "Active" : "Pending",
+    status: vendor.is_approved ? "Active" : "Closed",
     rating: vendor.rating === null || vendor.rating === undefined ? null : Number(vendor.rating),
     submittedAt: vendor.created_at,
   }));
@@ -679,9 +698,12 @@ export const approveVendor = async (id, approved) => {
   const result = await pool.query(
     `
     UPDATE places
-    SET status = CASE WHEN $1 THEN 'APPROVED' ELSE 'REJECTED' END
+    SET status = CASE WHEN $1 THEN 'active' ELSE 'closed' END,
+        is_open = $1,
+        is_admin_managed = CASE WHEN $1 THEN FALSE ELSE TRUE END,
+        updated_at = NOW()
     WHERE id = $2
-    RETURNING id::text, name, status
+    RETURNING id::text, name, status, is_open, is_admin_managed
     `,
     [approved, id]
   );
@@ -757,8 +779,8 @@ export const createStall = async (payload) => {
 
     if (allowed.has("location")) {
       const result = await client.query(
-        `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, location)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'APPROVED', ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
+        `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, is_admin_managed, location)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'active', FALSE, ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
          RETURNING id::text`,
         [
           owner.id,
@@ -785,7 +807,8 @@ export const createStall = async (payload) => {
           price_range: priceRange || null,
           photo_url: displayPhotoUrl ?? null,
           is_open: true,
-          status: "APPROVED",
+          status: PLACE_STATUS.ACTIVE,
+          is_admin_managed: false,
         },
         client
       );
@@ -1074,7 +1097,7 @@ export const findAllStalls = async (page = 1, limit = 50) => {
       p.is_admin_managed,
       p.is_open,
       p.status,
-      CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
+      CASE WHEN p.status = 'active' AND p.is_open = TRUE THEN true ELSE false END AS is_approved,
       p.rating_avg,
       p.rating_count,
       p.owner_id::text,
@@ -1136,7 +1159,7 @@ export const findStallsByOwner = async (ownerId, limit = 50) => {
       p.is_admin_managed,
       p.is_open,
       p.status,
-      CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
+      CASE WHEN p.status = 'active' AND p.is_open = TRUE THEN true ELSE false END AS is_approved,
       p.rating_avg,
       p.rating_count,
       p.owner_id::text,
@@ -1197,7 +1220,7 @@ export const findStallById = async (id) => {
       p.is_admin_managed,
       p.is_open,
       p.status,
-      CASE WHEN p.status = 'APPROVED' THEN true ELSE false END AS is_approved,
+      CASE WHEN p.status = 'active' AND p.is_open = TRUE THEN true ELSE false END AS is_approved,
       p.rating_avg,
       p.rating_count,
       p.owner_id::text,
@@ -1260,20 +1283,48 @@ export const updateStall = async (id, payload) => {
     description: "description",
     address: "address",
     priceRange: "price_range",
-    isOpen: "is_open",
-    status: "status",
-    isApproved: "is_approved",
   };
 
   let hasLocation = false;
   let locationLat = null;
   let locationLng = null;
+  let lifecycleStatus = null;
 
   for (const [key, col] of Object.entries(fieldMap)) {
     if (payload[key] !== undefined && allowed.has(col)) {
       sets.push(`${quoteIdent(col)} = $${idx++}`);
       params.push(payload[key]);
     }
+  }
+
+  if (payload.status !== undefined && allowed.has("status")) {
+    const status = normalizePlaceStatus(payload.status);
+    lifecycleStatus = status;
+    sets.push(`${quoteIdent("status")} = $${idx++}`);
+    params.push(status);
+
+    if (allowed.has("is_open")) {
+      sets.push(`${quoteIdent("is_open")} = $${idx++}`);
+      params.push(status === PLACE_STATUS.ACTIVE);
+    }
+  } else if (payload.isOpen !== undefined && allowed.has("is_open")) {
+    const isOpen = Boolean(payload.isOpen);
+    lifecycleStatus = isOpen ? PLACE_STATUS.ACTIVE : PLACE_STATUS.CLOSED;
+    sets.push(`${quoteIdent("is_open")} = $${idx++}`);
+    params.push(isOpen);
+
+    if (allowed.has("status")) {
+      sets.push(`${quoteIdent("status")} = $${idx++}`);
+      params.push(isOpen ? PLACE_STATUS.ACTIVE : PLACE_STATUS.CLOSED);
+    }
+  }
+
+  if (payload.isAdminManaged !== undefined && allowed.has("is_admin_managed")) {
+    sets.push(`${quoteIdent("is_admin_managed")} = $${idx++}`);
+    params.push(Boolean(payload.isAdminManaged));
+  } else if (lifecycleStatus && allowed.has("is_admin_managed")) {
+    sets.push(`${quoteIdent("is_admin_managed")} = $${idx++}`);
+    params.push(lifecycleStatus === PLACE_STATUS.CLOSED);
   }
 
   if (payload.ownerId !== undefined && allowed.has("owner_id")) {
@@ -1301,6 +1352,10 @@ export const updateStall = async (id, payload) => {
   if (hasLocation) {
     sets.push(`location = ST_SetSRID(ST_MakePoint($${idx++}, $${idx++}), 4326)::geography`);
     params.push(locationLng, locationLat);
+  }
+
+  if (allowed.has("updated_at")) {
+    sets.push("updated_at = NOW()");
   }
 
   const updatedStall = await withTransaction(async (client) => {
@@ -1333,7 +1388,13 @@ export const updateStall = async (id, payload) => {
 
 export const updateStallStatus = async (id, isOpen) => {
   const result = await pool.query(
-    `UPDATE places SET is_open = $1 WHERE id::text = $2 RETURNING id::text, is_open`,
+    `UPDATE places
+     SET is_open = $1,
+         status = CASE WHEN $1 THEN 'active' ELSE 'closed' END,
+         is_admin_managed = CASE WHEN $1 THEN FALSE ELSE TRUE END,
+         updated_at = NOW()
+     WHERE id::text = $2
+     RETURNING id::text, is_open, status, is_admin_managed`,
     [isOpen, id]
   );
   return result.rows[0] ?? null;

@@ -1,1 +1,0 @@
-function o(r){return r==null||Number.isNaN(r)?"—":r%1===0?`$${r}`:`$${r.toFixed(2)}`}function i(r){const e=Math.floor((Date.now()-new Date(r).getTime())/6e4);if(e<60)return`${e}m ago`;const t=Math.floor(e/60);return t<24?`${t}h ago`:`${Math.floor(t/24)}d ago`}export{o as f,i as t};

@@ -45,9 +45,7 @@ export function PhotoUpload({ value, onChange, label = "Upload Photo", aspectRat
       const response = await api.post<{
         success: boolean;
         data: { url: string; storageImage: UploadedImageMetadata };
-      }>("/vendor/uploads/images", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      }>("/vendor/uploads/images", form);
 
       onChange(response.data.data.url, response.data.data.storageImage);
     } catch (err: any) {

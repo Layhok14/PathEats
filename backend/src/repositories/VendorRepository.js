@@ -5,6 +5,7 @@ import {
   upsertPrimaryMenuItemImage,
   upsertPrimaryPlaceImage,
 } from "../utils/storageImageMetadata.js";
+import { normalizePlaceStatus, PLACE_STATUS, statusFromOpenFlag } from "../utils/placeStatus.js";
 
 const menuItemCategory = (cat) => {
   const norm = {
@@ -31,6 +32,7 @@ class VendorRepository {
     const { rows } = await db.query(
       `SELECT p.id, p.name, p.description, p.address, p.photo_url,
               p.price_range, p.rating_avg, p.rating_count, p.is_open,
+              p.is_admin_managed,
               p.status, p.created_at, p.updated_at,
               ST_Y(p.location::geometry) AS lat,
               ST_X(p.location::geometry) AS lng,
@@ -60,6 +62,7 @@ class VendorRepository {
     const { rows } = await db.query(
       `SELECT p.id, p.name, p.description, p.address, p.photo_url,
               p.price_range, p.rating_avg, p.rating_count, p.is_open,
+              p.is_admin_managed,
               p.status, p.created_at, p.updated_at,
               ST_Y(p.location::geometry) AS lat,
               ST_X(p.location::geometry) AS lng,
@@ -95,10 +98,12 @@ class VendorRepository {
 
   async create(data) {
     const photoUrl = imageDisplayUrlFromStorageInput(data, ["photo_url", "photoUrl"]);
+    const status = normalizePlaceStatus(data.status, statusFromOpenFlag(data.is_open !== false));
+    const isOpen = status === PLACE_STATUS.ACTIVE;
     const place = await db.transaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO places (owner_id, category_id, name, description, address, photo_url, price_range, location, status, is_open)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography, $10, $11)
+        `INSERT INTO places (owner_id, category_id, name, description, address, photo_url, price_range, location, status, is_open, is_admin_managed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography, $10, $11, FALSE)
          RETURNING id`,
         [
           data.owner_id,
@@ -110,8 +115,8 @@ class VendorRepository {
           data.price_range || null,
           data.longitude || 104.9282,
           data.latitude || 11.5564,
-          "APPROVED",
-          data.is_open !== false,
+          status,
+          isOpen,
         ]
       );
 
@@ -174,8 +179,14 @@ class VendorRepository {
       description: data.description,
       address: data.address,
       price_range: data.price_range,
-      is_open: data.status !== undefined ? data.status === "open" : data.is_open,
     };
+
+    if (data.status !== undefined || data.is_open !== undefined) {
+      const status = normalizePlaceStatus(data.status, statusFromOpenFlag(data.is_open !== false));
+      fields.status = status;
+      fields.is_open = status === PLACE_STATUS.ACTIVE;
+      fields.is_admin_managed = false;
+    }
     if (photoUrl !== undefined) fields.photo_url = photoUrl;
 
     for (const [key, value] of Object.entries(fields)) {
@@ -232,9 +243,17 @@ class VendorRepository {
   }
 
   async updateStatus(id, status) {
+    const normalizedStatus = normalizePlaceStatus(status);
+    const isOpen = normalizedStatus === PLACE_STATUS.ACTIVE;
     const { rows } = await db.query(
-      `UPDATE places SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
-      [status, id]
+      `UPDATE places
+       SET status = $1,
+           is_open = $2,
+           is_admin_managed = FALSE,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [normalizedStatus, isOpen, id]
     );
     return rows[0] || null;
   }
@@ -243,7 +262,7 @@ class VendorRepository {
     const { rows } = await db.query(
       `SELECT
          COUNT(*)::int AS total_stalls,
-         COUNT(*) FILTER (WHERE status = 'APPROVED' AND is_open = TRUE)::int AS open_stalls,
+         COUNT(*) FILTER (WHERE status = 'active' AND is_open = TRUE)::int AS open_stalls,
          COALESCE(AVG(rating_avg), 0)::float AS avg_rating
        FROM places
        WHERE owner_id = $1`,

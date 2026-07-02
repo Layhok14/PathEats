@@ -1,4 +1,4 @@
-import { sanitizeText } from "../utils/sanitize.js";
+import { isPlaceActive } from "../utils/placeStatus.js";
 
 const toStorageImage = (row) => {
   if (!row.image_bucket || !row.image_path) return null;
@@ -37,6 +37,8 @@ class VendorModel {
   }
 
   static toResponse(row) {
+    const isOpen = isPlaceActive(row);
+
     return {
       id: row.id,
       name: row.name,
@@ -48,7 +50,8 @@ class VendorModel {
       price_range: row.price_range || 1,
       rating: parseFloat(row.rating_avg) || 0,
       reviewCount: parseInt(row.rating_count) || 0,
-      status: row.is_open ? "open" : "closed",
+      status: isOpen ? "open" : "closed",
+      adminManaged: Boolean(row.is_admin_managed),
       location: {
         landmark: row.address || "",
         latitude: parseFloat(row.lat) || 0,

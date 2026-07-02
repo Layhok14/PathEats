@@ -448,6 +448,8 @@ export function StallDetailPage() {
   }
 
   const linkedItems = stallItems;
+  const currentStall = id ? getStall(id) : null;
+  const isAdminManaged = Boolean(currentStall?.adminManaged);
 
   if (notFound) return (
     <div className="p-6 flex flex-col items-center justify-center h-64 gap-4">
@@ -578,10 +580,21 @@ export function StallDetailPage() {
                   <CheckSquare size={18} style={{ color: "var(--brand-green)" }} />
                   <div>
                     <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600, color: "var(--brand-text-dark)", margin: 0 }}>Currently {form.status === "open" ? "Open" : "Closed"}</p>
-                    <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", margin: 0 }}>{form.status === "open" ? "Visible to customers" : "Hidden from customers"}</p>
+                    <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", margin: 0 }}>
+                      {isAdminManaged
+                        ? "Closed by admin. Contact Telegram support to reopen."
+                        : form.status === "open"
+                          ? "Visible to customers"
+                          : "Hidden from customers"}
+                    </p>
                   </div>
                 </div>
-                <button type="button" onClick={() => setForm((f) => ({ ...f, status: f.status === "open" ? "closed" : "open" }))} style={{ width: "48px", height: "26px", borderRadius: "9999px", border: "none", background: form.status === "open" ? "var(--brand-green)" : "#cbced4", cursor: "pointer", position: "relative", transition: "background 0.2s" }}>
+                <button
+                  type="button"
+                  disabled={isAdminManaged}
+                  onClick={() => setForm((f) => ({ ...f, status: f.status === "open" ? "closed" : "open" }))}
+                  style={{ width: "48px", height: "26px", borderRadius: "9999px", border: "none", background: form.status === "open" ? "var(--brand-green)" : "#cbced4", cursor: isAdminManaged ? "not-allowed" : "pointer", position: "relative", transition: "background 0.2s", opacity: isAdminManaged ? 0.65 : 1 }}
+                >
                   <div style={{ position: "absolute", top: "3px", left: form.status === "open" ? "25px" : "3px", width: "20px", height: "20px", borderRadius: "9999px", background: "white", transition: "left 0.2s" }} />
                 </button>
               </div>

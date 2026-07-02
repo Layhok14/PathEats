@@ -204,7 +204,7 @@ function UserManagementSection() {
   };
 
   const handleToggleBan = async (user: AdminUser) => {
-    const newStatus = user.status === "Banned" ? "Active" : "Banned";
+    const newStatus = user.status === "Suspended" ? "Active" : "Suspended";
     try {
       await updateAdminUserStatus(user.id, newStatus);
       toast.success(`User "${user.name}" is now ${newStatus}.`);
@@ -257,8 +257,8 @@ function UserManagementSection() {
                 <td className="px-6 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingUser(u); setShowModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
-                    <button onClick={() => handleToggleBan(u)} className={`p-1.5 rounded ${u.status === "Banned" ? "text-[#006e2f] hover:bg-green-50" : "text-[#b45309] hover:bg-amber-50"}`}>
-                      {u.status === "Banned" ? <Unlock size={15} /> : <Lock size={15} />}
+                    <button onClick={() => handleToggleBan(u)} className={`p-1.5 rounded ${u.status === "Suspended" ? "text-[#006e2f] hover:bg-green-50" : "text-[#b45309] hover:bg-amber-50"}`}>
+                      {u.status === "Suspended" ? <Unlock size={15} /> : <Lock size={15} />}
                     </button>
                     <button onClick={() => handleDeleteUser(u)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={15} /></button>
                   </div>

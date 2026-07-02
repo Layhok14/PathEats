@@ -1,6 +1,5 @@
-// Spatial maths that mirror the PostGIS query logic for instant client-side feedback.
-
-export function haversineM(lat1, lng1, lat2, lng2) {
+/** Haversine distance in metres — used for geolocation-to-preset matching only. */
+export function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
   const φ1 = (lat1 * Math.PI) / 180, φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -9,65 +8,20 @@ export function haversineM(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function distToSegmentM(lat, lng, lat1, lng1, lat2, lng2) {
-  const dx = lat2 - lat1, dy = lng2 - lng1;
-  if (dx === 0 && dy === 0) return haversineM(lat, lng, lat1, lng1);
-  const t = Math.max(0, Math.min(1, ((lat - lat1) * dx + (lng - lng1) * dy) / (dx * dx + dy * dy)));
-  return haversineM(lat, lng, lat1 + t * dx, lng1 + t * dy);
-}
-
-export function distToRouteM(lat, lng, pts) {
-  let min = Infinity;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const d = distToSegmentM(lat, lng, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]);
-    if (d < min) min = d;
-  }
-  return min;
-}
-
-/**
- * Composite ranking score (0–1).
- * Weights: affordability 35%, proximity 30%, rating 20%, wait −15%
- */
-export function calcScore(priceRange, distM, rating, waitMin) {
-  return (
-    0.35 * (1 - (priceRange - 1) / 3) +
-    0.30 * (1 - Math.min(distM, 300) / 300) +
-    0.20 * (rating / 5) -
-    0.15 * (waitMin / 15)
-  );
-}
-
 /**
  * Returns individual metric scores (0–100) for display breakdown.
+ * These are pure display helpers derived from server-computed values.
  */
-export function calcMetricScores(priceRange, distM, rating, waitMin) {
-  const affordability = Math.round((1 - (priceRange - 1) / 3) * 100);
-  const proximity = Math.round((1 - Math.min(distM, 300) / 300) * 100);
-  const ratingScore = Math.round((rating / 5) * 100);
-  const waitScore = Math.round(Math.max(0, 100 - (waitMin / 15) * 100));
+export function calcMetricScores(priceRange: number, distM: number, rating: number, waitMin: number): { affordability: number; proximity: number; ratingScore: number; waitScore: number } {
+  const affordability = Math.round((1 - (Math.max(1, Math.min(4, priceRange || 1)) - 1) / 3) * 100);
+  const proximity = Math.round((1 - Math.min(distM || 0, 300) / 300) * 100);
+  const ratingScore = Math.round(((rating || 0) / 5) * 100);
+  const waitScore = Math.round(Math.max(0, 100 - ((waitMin || 0) / 15) * 100));
   return { affordability, proximity, ratingScore, waitScore };
 }
 
-export function scoreColor(score) {
+export function scoreColor(score: number): string {
   if (score >= 0.68) return "#10b981";
   if (score >= 0.50) return "#22c55e";
   return "#f97316";
-}
-
-/** Linear interpolation with a subtle sine bow to suggest a real road path */
-export function interpolateRoute(from, to) {
-  // Guard against NaN inputs
-  if (!from || !to || !isFinite(from.lat) || !isFinite(from.lng) || !isFinite(to.lat) || !isFinite(to.lng)) {
-    console.warn("[geoUtils] interpolateRoute received invalid coords, using fallback");
-    const pp = { lat: 11.5564, lng: 104.9282 };
-    from = pp;
-    to = pp;
-  }
-  const steps = 10;
-  return Array.from({ length: steps + 1 }, (_, i) => {
-    const t = i / steps;
-    const jitter = Math.sin(t * Math.PI) * 0.001;
-    return [from.lat + (to.lat - from.lat) * t + jitter, from.lng + (to.lng - from.lng) * t];
-  });
 }

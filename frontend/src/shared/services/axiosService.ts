@@ -20,6 +20,25 @@ const AUTH_PATHS_KEEP_LOCAL = new Set([
   "/auth/reset-password",
 ]);
 
+function isFormDataPayload(data: unknown) {
+  return typeof FormData !== "undefined" && data instanceof FormData;
+}
+
+function removeContentTypeHeader(headers: unknown) {
+  if (!headers || typeof headers !== "object") return;
+
+  const maybeAxiosHeaders = headers as { delete?: (name: string) => void };
+  if (typeof maybeAxiosHeaders.delete === "function") {
+    maybeAxiosHeaders.delete("Content-Type");
+    maybeAxiosHeaders.delete("content-type");
+    return;
+  }
+
+  const plainHeaders = headers as Record<string, unknown>;
+  delete plainHeaders["Content-Type"];
+  delete plainHeaders["content-type"];
+}
+
 function shouldShowAuthErrorOnCurrentPage(url?: string) {
   if (!url) return false;
   return AUTH_PATHS_KEEP_LOCAL.has(url);
@@ -34,6 +53,10 @@ function processQueue(error: unknown, token: string | null = null) {
 }
 
 api.interceptors.request.use((config) => {
+  if (isFormDataPayload(config.data)) {
+    removeContentTypeHeader(config.headers);
+  }
+
   const token = localStorage.getItem("auth_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
