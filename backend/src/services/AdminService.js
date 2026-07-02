@@ -77,8 +77,8 @@ export const updateStatus = async (id, status, adminId = null) => {
   return result;
 };
 
-export const getVendors = async () => {
-  return adminRepository.findAllVendors();
+export const getVendors = async (page = 1, limit = 50) => {
+  return adminRepository.findAllVendors(page, limit);
 };
 
 export const getPlaceCategories = async () => {
@@ -189,8 +189,8 @@ export const deleteRoleRecord = async (id, adminId = null) => {
   return role;
 };
 
-export const getAllStalls = async () => {
-  return adminRepository.findAllStalls();
+export const getAllStalls = async (page = 1, limit = 50) => {
+  return adminRepository.findAllStalls(page, limit);
 };
 
 export const getStallsByOwner = async (ownerId) => {
@@ -219,8 +219,8 @@ export const getAuditActivity = async () => {
   return adminRepository.getAuditActivity();
 };
 
-export const getAllReviews = async () => {
-  return adminRepository.getAllReviews();
+export const getAllReviews = async (limit = 100, offset = 0) => {
+  return adminRepository.getAllReviews(limit, offset);
 };
 
 export const getReviewsByPlaceId = async (placeId) => {

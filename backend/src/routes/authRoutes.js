@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { catchAsync } from "../utils/catchAsync.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
+import { otpLimiter, loginLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import AuthService from "../services/AuthService.js";
 
 const authService = new AuthService();
@@ -98,12 +99,18 @@ const requestContext = (req) => ({
  *       409:
  *         description: Email already registered
  */
-router.post("/register", catchAsync(async (req, res) => {
+router.post("/register", registerLimiter, catchAsync(async (req, res) => {
   const { email, password, firstName, lastName, phone, roleScope } = req.body;
   if (!email || !password || !firstName || !lastName) {
     return res.status(400).json({
       success: false,
       message: "Missing required fields: email, password, firstName, lastName",
+    });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must be at least 8 characters",
     });
   }
   const result = await authService.register(
@@ -135,7 +142,7 @@ router.post("/register", catchAsync(async (req, res) => {
  *       401:
  *         description: Invalid email or password
  */
-router.post("/login", catchAsync(async (req, res) => {
+router.post("/login", loginLimiter, catchAsync(async (req, res) => {
   const { email, password, expectedRole, expectedRoles } = req.body;
   if (!email || !password) {
     return res.status(400).json({
@@ -171,7 +178,7 @@ router.post("/login", catchAsync(async (req, res) => {
  *       401:
  *         description: Invalid or expired refresh token
  */
-router.post("/refresh", catchAsync(async (req, res) => {
+router.post("/refresh", loginLimiter, catchAsync(async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
     return res.status(400).json({ success: false, message: "Refresh token is required" });
@@ -230,7 +237,7 @@ router.post("/logout-all", authMiddleware, catchAsync(async (req, res) => {
  *       404:
  *         description: No account found with that email
  */
-router.post("/forgot-password", catchAsync(async (req, res) => {
+router.post("/forgot-password", otpLimiter, catchAsync(async (req, res) => {
   const { email } = req.body;
   if (!email) {
     return res.status(400).json({
@@ -260,7 +267,7 @@ router.post("/forgot-password", catchAsync(async (req, res) => {
  *       400:
  *         description: Invalid or expired OTP
  */
-router.post("/verify-otp", catchAsync(async (req, res) => {
+router.post("/verify-otp", otpLimiter, catchAsync(async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) {
     return res.status(400).json({
@@ -290,7 +297,7 @@ router.post("/verify-otp", catchAsync(async (req, res) => {
  *       400:
  *         description: Invalid or expired OTP
  */
-router.post("/reset-password", catchAsync(async (req, res) => {
+router.post("/reset-password", otpLimiter, catchAsync(async (req, res) => {
   const { email, otp, newPassword } = req.body;
   if (!email || !otp || !newPassword) {
     return res.status(400).json({
@@ -298,10 +305,11 @@ router.post("/reset-password", catchAsync(async (req, res) => {
       message: "Email, OTP, and newPassword are required",
     });
   }
-  if (newPassword.length < 6) {
+  // Server-side validation will enforce minimum length; basic client check
+  if (newPassword.length < 8) {
     return res.status(400).json({
       success: false,
-      message: "Password must be at least 6 characters",
+      message: "Password must be at least 8 characters",
     });
   }
   const result = await authService.resetPassword(email, otp, newPassword);

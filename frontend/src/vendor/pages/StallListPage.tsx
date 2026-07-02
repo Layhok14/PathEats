@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { Search, Star, MapPin, Plus, List, Map } from "lucide-react";
 import { useStalls } from "../../shared/hooks/useStalls";
 import { StallMapView } from "../components/StallMapView";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { STALL_CATEGORIES } from "../../shared/constants/categories";
 import type { StallCategory } from "../../shared/types";
 
@@ -10,7 +11,7 @@ type ViewMode = "list" | "map";
 
 export function StallListPage() {
   const navigate = useNavigate();
-  const { stalls, loading } = useStalls();
+  const { stalls, loading, error } = useStalls();
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<StallCategory | "All">("All");
@@ -117,13 +118,19 @@ export function StallListPage() {
       {/* Loading state for both views */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-20 rounded-xl border" style={{ borderColor: "var(--brand-card-border)", background: "var(--card)" }}>
-          <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
-          <p className="mt-3 text-sm" style={{ color: "var(--brand-text-muted)" }}>Loading stalls from database...</p>
+          <LoadingSpinner message="Loading stalls from database..." />
+        </div>
+      )}
+
+      {/* Error state */}
+      {!loading && error && (
+        <div className="flex flex-col items-center justify-center py-20 rounded-xl border" style={{ borderColor: "var(--brand-card-border)", background: "var(--card)" }}>
+          <p className="text-sm" style={{ color: "#ef4444" }}>{error}</p>
         </div>
       )}
 
       {/* Map view */}
-      {!loading && viewMode === "map" && (
+      {!loading && !error && viewMode === "map" && (
         <StallMapView stalls={filtered} loading={false} onPinClick={(id) => navigate(`/vendor/stalls/${id}`)} />
       )}
 
@@ -143,7 +150,7 @@ export function StallListPage() {
                   }}
                 >
                   <div className="relative h-44 overflow-hidden" style={{ background: "var(--muted)" }}>
-                    <img src={stall.photoUrl} alt={stall.name} className="w-full h-full object-cover" />
+                    <img src={stall.photoUrl} alt={stall.name} loading="lazy" className="w-full h-full object-cover" />
                     <span style={{
                       position: "absolute", top: "12px", left: "12px",
                       padding: "3px 10px", borderRadius: "9999px",

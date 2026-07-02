@@ -14,14 +14,20 @@ export function getAllMenuItems(): MenuItem[] {
 
 export function useMenuItems(filterCategory?: MenuCategory) {
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const { data } = await api.get("/vendor/items");
       setItems(data.data.map(mapItem));
-    } catch (err) {
-      console.error("[useMenuItems] Failed to fetch items:", err);
+    } catch {
+      setError("Failed to load menu items.");
       setItems([]);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -59,7 +65,7 @@ export function useMenuItems(filterCategory?: MenuCategory) {
     setItems((prev) => prev.filter((m) => m.id !== id));
   };
 
-  return { items: filtered, allItems, refresh, createItem, forkItem, updateItem, deleteItem };
+  return { items: filtered, allItems, loading, error, refresh, createItem, forkItem, updateItem, deleteItem };
 }
 
 function mapItem(row: any): MenuItem {

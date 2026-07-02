@@ -1,7 +1,7 @@
 // Theme context — light/dark mode.
 // Dark mode only applies to /user/* routes. Admin/vendor/CS/dev stay light.
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { useLocation } from "react-router";
 
 export const DARK_THEME = {
@@ -50,8 +50,10 @@ export function ThemeProvider({ children }) {
   const effectiveDark = isUserRoute ? darkMode : false;
   const tm = effectiveDark ? DARK_THEME : LIGHT_THEME;
 
+  const ctxValue = useMemo(() => ({ darkMode: effectiveDark, setDarkMode, tm, isUserRoute }), [effectiveDark, setDarkMode, tm, isUserRoute]);
+
   return (
-    <ThemeContext.Provider value={{ darkMode: effectiveDark, setDarkMode, tm, isUserRoute }}>
+    <ThemeContext.Provider value={ctxValue}>
       {children}
     </ThemeContext.Provider>
   );

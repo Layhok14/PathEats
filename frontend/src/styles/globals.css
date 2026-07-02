@@ -43,3 +43,16 @@
   --brand-score-mid:    #22c55e;
   --brand-score-low:    #f97316;
 }
+
+/* ── Global focus-visible ring for all interactive elements ────────────── */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  ring: 2px solid var(--brand-green);
+  ring-offset: 2px;
+}
+
+/* ── Hover tooltip via title attribute is built-in; no extra CSS needed ── */

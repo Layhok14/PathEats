@@ -62,7 +62,7 @@ export function useSearchHistory() {
         if (cancelled) return;
         setHistory((data?.data ?? []).map(parseHistoryRow));
       })
-      .catch(() => {})
+      .catch(() => {/* fetch best-effort */})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [isLoggedIn]);
@@ -96,7 +96,7 @@ export function useSearchHistory() {
         setHistory((prev) =>
           prev.map((h) => h.id === tempId ? parseHistoryRow(data.data) : h)
         );
-      } catch {}
+      } catch {/* add best-effort */}
     }
   }, [isLoggedIn]);
 
@@ -107,6 +107,7 @@ export function useSearchHistory() {
     try {
       await api.delete(`/user/history/${id}`);
     } catch {
+      console.warn("[useSearchHistory] delete failed, restoring optimistically");
       setHistory((prev) => [entry, ...prev]);
     }
   }, [isLoggedIn]);
@@ -114,7 +115,7 @@ export function useSearchHistory() {
   const clearHistory = useCallback(() => {
     setHistory([]);
     if (isLoggedIn) {
-      api.delete("/user/history").catch(() => {});
+      api.delete("/user/history").catch(() => {/* clear best-effort */});
     }
   }, [isLoggedIn]);
 

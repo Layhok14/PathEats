@@ -6,9 +6,9 @@ import {
   Navigation2,
   Clock,
   ChevronRight,
-  Loader2,
 } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import {
   PLACES,
   VENDOR_RANGE_MIN,
@@ -156,7 +156,7 @@ export function RouteInputPanel({
           onFocus={() => setOriginFocus(true)}
           onBlur={() => setTimeout(() => setOriginFocus(false), 150)}
           placeholder="From — start point"
-          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none"
+          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
           style={{
             ...inp,
             border: originUsesCurrentLocation ? "1px solid #f97316" : inp.border,
@@ -219,7 +219,7 @@ export function RouteInputPanel({
           onFocus={() => setDestFocus(true)}
           onBlur={() => setTimeout(() => setDestFocus(false), 150)}
           placeholder="To — destination"
-          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none"
+          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
           style={inp}
         />
         {destFocus && destText && filteredDest.length > 0 && (
@@ -253,7 +253,7 @@ export function RouteInputPanel({
         className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ background: tm.primary, color: tm.primaryText }}
       >
-        {loadingRoute ? <Loader2 size={14} className="animate-spin" /> : <Navigation2 size={14} />}
+        {loadingRoute ? <LoadingSpinner inline size="sm" message="" /> : <Navigation2 size={14} />}
         {loadingRoute ? "Routing..." : "Find Route"}
       </button>
 

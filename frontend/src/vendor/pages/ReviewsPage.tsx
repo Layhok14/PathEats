@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Star, ChevronLeft, Search } from "lucide-react";
+import { Star, ChevronLeft, MessageSquare, Search } from "lucide-react";
+import { formatDate } from "../../shared/utils/formatters";
 import api from "../../shared/services/axiosService";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 
 interface Review {
   id: string;
@@ -34,13 +36,16 @@ export function ReviewsPage() {
   const navigate = useNavigate();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [starFilter, setStarFilter] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     api.get("/vendor/reviews").then(({ data }) => {
       setReviews(data.data || []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => {
+      setFetchError("Failed to load reviews.");
+    }).finally(() => setLoading(false));
   }, []);
 
   const filtered = reviews.filter((r) => {
@@ -62,10 +67,6 @@ export function ReviewsPage() {
     background: "var(--card)", border: "1px solid var(--brand-card-border)",
     borderRadius: "10px", padding: "20px",
   };
-
-  function formatDate(d: string) {
-    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  }
 
   const inpStyle: React.CSSProperties = {
     width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "6px",
@@ -90,7 +91,9 @@ export function ReviewsPage() {
       </div>
 
       {loading ? (
-        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)" }}>Loading reviews...</p>
+        <LoadingSpinner message="Loading reviews..." />
+      ) : fetchError ? (
+        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "#ef4444" }}>{fetchError}</p>
       ) : reviews.length === 0 ? (
         <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)" }}>No reviews yet.</p>
       ) : (
@@ -189,7 +192,7 @@ export function ReviewsPage() {
                     </div>
                   </div>
                   <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", whiteSpace: "nowrap" }}>
-                    {formatDate(review.created_at)}
+                    {formatDate(review.created_at, true)}
                   </span>
                 </div>
                 <StarRow rating={review.stars} />

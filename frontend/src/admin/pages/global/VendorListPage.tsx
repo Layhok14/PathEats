@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search, Store, Plus, Pencil, Trash2, X, Ban, CheckCircle, Download } from "lucide-react";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
+import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
-  getAdminVendorManagementOverview,
+  getAdminUserManagementOverview,
   createAdminUser,
   updateAdminUser,
   deleteAdminUser,
@@ -17,14 +19,25 @@ import { exportXlsx } from "../../../shared/utils/exportXlsx";
 const PAGE_SIZE = 10;
 
 function vendorName(r: AdminUserOverviewRow): string {
-  const d = r.user.details;
+  const d = r.user.details as Record<string, unknown> | null;
   if (d) {
-    const first = d.firstName ? String(d.firstName).trim() : "";
-    const last = d.lastName ? String(d.lastName).trim() : "";
+    const first = d.firstName ? String(d.firstName).trim() : d.first_name ? String(d.first_name).trim() : "";
+    const last = d.lastName ? String(d.lastName).trim() : d.last_name ? String(d.last_name).trim() : "";
     const parts = [first, last].filter(Boolean);
     if (parts.length > 0) return parts.join(" ");
   }
   return r.user.label || "—";
+}
+
+function vendorStatus(r: AdminUserOverviewRow): string {
+  const d = r.user.details as Record<string, unknown> | null;
+  if (d) {
+    const s = d.status as string | undefined;
+    if (s) return s;
+    const banned = d.is_banned as boolean | undefined;
+    if (banned) return "Suspended";
+  }
+  return r.status || "Active";
 }
 
 function exportVendors(rows: AdminUserOverviewRow[]) {
@@ -32,7 +45,7 @@ function exportVendors(rows: AdminUserOverviewRow[]) {
     {
       name: "Vendors",
       headers: ["Name", "Email", "Status"],
-      rows: rows.map((r) => [vendorName(r), r.user.subLabel || "", r.status]),
+      rows: rows.map((r) => [vendorName(r), r.user.subLabel || "", vendorStatus(r)]),
     },
   ], "vendors.xlsx");
 }
@@ -53,12 +66,16 @@ export default function VendorListPage() {
 
   const [detailRow, setDetailRow] = useState<AdminUserOverviewRow | null>(null);
   const [detailTable, setDetailTable] = useState<"user" | "search">("user");
+  const [confirmTarget, setConfirmTarget] = useState<AdminUserOverviewRow | null>(null);
 
   const loadRows = async () => {
     try {
       setLoading(true);
-      const all = await getAdminVendorManagementOverview();
-      setRows(all.filter((r) => r.user.details?.role_scope === "VENDOR"));
+      const all = await getAdminUserManagementOverview();
+      setRows(all.filter((r) => {
+        const details = r.user.details as Record<string, unknown> | null;
+        return details?.role_scope === "VENDOR";
+      }));
     } catch (err) {
       toast.error("Could not load vendors.");
     } finally {
@@ -104,18 +121,11 @@ export default function VendorListPage() {
   };
 
   const handleDelete = async (row: AdminUserOverviewRow) => {
-    if (!confirm(`Delete vendor "${vendorName(row)}"?`)) return;
-    try {
-      await deleteAdminUser(row.id);
-      toast.success(`"${vendorName(row)}" deleted.`);
-      await loadRows();
-    } catch (err) {
-      toast.error("Could not delete vendor.");
-    }
+    setConfirmTarget(row);
   };
 
   const handleStatus = async (row: AdminUserOverviewRow) => {
-    const current = row.status;
+    const current = vendorStatus(row);
     const next = current === "Suspended" ? "Active" : "Suspended";
     try {
       await updateAdminUserStatus(row.id, next);
@@ -156,9 +166,8 @@ export default function VendorListPage() {
 
         <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-[13px] text-[#94a3b8]">
-              <div className="w-5 h-5 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              Loading vendors...
+            <div className="p-8 text-center">
+              <LoadingSpinner message="Loading vendors..." />
             </div>
           ) : (
             <>
@@ -175,7 +184,9 @@ export default function VendorListPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visible.map((r) => (
+                    {visible.map((r) => {
+                      const status = vendorStatus(r);
+                      return (
                       <tr key={r.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
                         <td className="px-5 py-3 text-[13px] font-medium text-[#0b1c30]">{vendorName(r)}</td>
                         <td className="px-5 py-3">
@@ -194,18 +205,19 @@ export default function VendorListPage() {
                           </button>
                         </td>
                         <td className="px-5 py-3">
-                          <button onClick={() => handleStatus(r)} className={`inline-flex items-center gap-1 rounded text-[12px] font-semibold ${r.status === "Suspended" ? "text-[#006e2f] hover:text-[#005a26]" : "text-[#ba1a1a] hover:text-[#991111]"}`}>
-                            {r.status === "Suspended" ? <CheckCircle size={14} /> : <Ban size={14} />}
-                            {r.status === "Suspended" ? "Unban" : "Ban"}
+                          <button onClick={() => handleStatus(r)} className={`inline-flex items-center gap-1 rounded text-[12px] font-semibold ${status === "Suspended" ? "text-[#006e2f] hover:text-[#005a26]" : "text-[#ba1a1a] hover:text-[#991111]"}`}>
+                            {status === "Suspended" ? <CheckCircle size={14} /> : <Ban size={14} />}
+                            {status === "Suspended" ? "Unban" : "Ban"}
                           </button>
                         </td>
                         <td className="px-5 py-3">
-                          <button onClick={() => handleDelete(r)} className="inline-flex items-center gap-1 rounded text-[#ef4444] hover:text-[#dc2626] text-[12px] font-semibold">
+                          <button onClick={() => handleDelete(r)} className="inline-flex items-center gap-1 rounded text-[#ef4444] hover-[#dc2626] text-[12px] font-semibold">
                             <Trash2 size={14} /> Delete
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                     {visible.length === 0 && (
                       <tr><td colSpan={6} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No vendors found.</td></tr>
                     )}
@@ -292,6 +304,27 @@ export default function VendorListPage() {
           onClose={() => setDetailRow(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="Delete Vendor"
+        description="Are you sure you want to delete this vendor?"
+        itemName={confirmTarget ? vendorName(confirmTarget) : undefined}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={async () => {
+          if (!confirmTarget) return;
+          try {
+            await deleteAdminUser(confirmTarget.id);
+            toast.success(`"${vendorName(confirmTarget)}" deleted.`);
+            await loadRows();
+          } catch (err) {
+            toast.error("Could not delete vendor.");
+          }
+          setConfirmTarget(null);
+        }}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 }

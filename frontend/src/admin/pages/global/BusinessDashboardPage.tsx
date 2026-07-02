@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Store, UserPlus, ShieldAlert, Loader, TrendingUp, ArrowRight } from "lucide-react";
+import { Store, UserPlus, ShieldAlert, TrendingUp, ArrowRight } from "lucide-react";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { toast } from "sonner";
 import {
   getAdminAllReviews,
@@ -74,11 +75,7 @@ export default function BusinessDashboardPage() {
   ];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[80vh]">
-        <Loader className="animate-spin text-[#006e2f]" size={24} />
-      </div>
-    );
+    return <LoadingSpinner message="Loading dashboard..." />;
   }
 
   return (

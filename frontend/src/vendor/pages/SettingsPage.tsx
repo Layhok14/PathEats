@@ -5,6 +5,7 @@ import { useAuth } from "../../shared/hooks/useAuth";
 import api from "../../shared/services/axiosService";
 import { getApiErrorMessage } from "../../shared/utils/apiError";
 import { Camera, Save, Lock, LogOut } from "lucide-react";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 
 interface VendorProfile {
   id: string;
@@ -31,6 +32,17 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [pwFieldErrors, setPwFieldErrors] = useState<Record<string, string>>({});
+
+  function clearFieldError(field: string, isPw = false) {
+    const setter = isPw ? setPwFieldErrors : setFieldErrors;
+    setter((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +68,10 @@ export function SettingsPage() {
   }
 
   async function handleSaveProfile() {
+    const errs: Record<string, string> = {};
+    if (!firstName.trim()) errs.firstName = "First name is required";
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setSaving(true);
     try {
       const { data } = await api.put("/vendor/profile", { firstName, lastName, phone: phone || undefined });
@@ -69,14 +85,14 @@ export function SettingsPage() {
   }
 
   async function handleChangePassword() {
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match.");
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters.");
-      return;
-    }
+    const errs: Record<string, string> = {};
+    if (!currentPassword) errs.currentPassword = "Current password is required";
+    if (!newPassword) errs.newPassword = "New password is required";
+    else if (newPassword.length < 8) errs.newPassword = "At least 8 characters";
+    if (!confirmPassword) errs.confirmPassword = "Please confirm your password";
+    else if (newPassword !== confirmPassword) errs.confirmPassword = "Passwords do not match";
+    setPwFieldErrors(errs);
+    if (Object.keys(errs).length > 0) return;
     setChangingPassword(true);
     try {
       await api.post("/vendor/change-password", { currentPassword, newPassword });
@@ -112,16 +128,12 @@ export function SettingsPage() {
   };
   const sectionTitle: React.CSSProperties = {
     fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600,
-    color: "var(--brand-text-dark)", display: "flex", alignItems: "center",
+    color: "var(--brand-sidebar)", display: "flex", alignItems: "center",
     gap: "8px", marginBottom: "20px",
   };
 
   if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center min-h-[50vh]">
-        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)" }}>Loading settings...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Loading settings..." />;
   }
 
   return (
@@ -158,8 +170,9 @@ export function SettingsPage() {
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label style={lbl}>First Name</label>
-            <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={inp} />
+            <label style={lbl}>First Name *</label>
+            <input type="text" value={firstName} onChange={(e) => { setFirstName(e.target.value); clearFieldError("firstName"); }} style={inp} />
+            {fieldErrors.firstName && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{fieldErrors.firstName}</p>}
           </div>
           <div>
             <label style={lbl}>Last Name</label>
@@ -198,16 +211,19 @@ export function SettingsPage() {
         <p style={sectionTitle}><Lock size={18} /> Change Password</p>
         <div className="flex flex-col gap-4">
           <div>
-            <label style={lbl}>Current Password</label>
-            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="••••••••" style={inp} />
+            <label style={lbl}>Current Password *</label>
+            <input type="password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); clearFieldError("currentPassword", true); }} placeholder="••••••••" style={inp} />
+            {pwFieldErrors.currentPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.currentPassword}</p>}
           </div>
           <div>
-            <label style={lbl}>New Password</label>
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min. 8 characters" style={inp} />
+            <label style={lbl}>New Password *</label>
+            <input type="password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearFieldError("newPassword", true); }} placeholder="Min. 8 characters" style={inp} />
+            {pwFieldErrors.newPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.newPassword}</p>}
           </div>
           <div>
-            <label style={lbl}>Confirm New Password</label>
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={inp} />
+            <label style={lbl}>Confirm New Password *</label>
+            <input type="password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword", true); }} style={inp} />
+            {pwFieldErrors.confirmPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.confirmPassword}</p>}
           </div>
           <button
             onClick={handleChangePassword}

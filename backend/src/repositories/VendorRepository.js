@@ -149,13 +149,16 @@ class VendorRepository {
     );
     const newIds = insertResult.rows.map((r) => r.id);
 
-    for (let i = 0; i < sourceIds.length; i++) {
+    if (sourceIds.length > 0 && newIds.length > 0) {
       await client.query(
-        `INSERT INTO menu_item_images (menu_item_id, bucket_name, object_path, uploaded_by, mime_type, size_bytes, alt_text, sort_order, is_primary)
-         SELECT $1, mii.bucket_name, mii.object_path, mii.uploaded_by, mii.mime_type, mii.size_bytes, mii.alt_text, mii.sort_order, mii.is_primary
-         FROM menu_item_images mii
-         WHERE mii.menu_item_id = $2`,
-        [newIds[i], sourceIds[i]]
+        `WITH pairs AS (
+           SELECT unnest($1::uuid[]) AS new_id, unnest($2::uuid[]) AS source_id
+         )
+         INSERT INTO menu_item_images (menu_item_id, bucket_name, object_path, uploaded_by, mime_type, size_bytes, alt_text, sort_order, is_primary)
+         SELECT pairs.new_id, mii.bucket_name, mii.object_path, mii.uploaded_by, mii.mime_type, mii.size_bytes, mii.alt_text, mii.sort_order, mii.is_primary
+         FROM pairs
+         JOIN menu_item_images mii ON mii.menu_item_id = pairs.source_id`,
+        [newIds, sourceIds]
       );
     }
   }
@@ -249,7 +252,7 @@ class VendorRepository {
     return rows[0];
   }
 
-  async getReviews(ownerId) {
+  async getReviews(ownerId, limit = 100) {
     const { rows } = await db.query(
       `SELECT r.id, r.rating AS stars, r.body, r.created_at,
               u.first_name || ' ' || u.last_name AS user_name,
@@ -258,13 +261,14 @@ class VendorRepository {
        JOIN places p ON p.id = r.place_id
        JOIN users u ON u.id = r.user_id
        WHERE p.owner_id = $1
-       ORDER BY r.created_at DESC`,
-      [ownerId]
+       ORDER BY r.created_at DESC
+       LIMIT $2`,
+      [ownerId, limit]
     );
     return rows;
   }
 
-  async getAllMenuItems(ownerId) {
+  async getAllMenuItems(ownerId, limit = 200) {
     const { rows } = await db.query(
       `SELECT mi.*,
               mii.bucket_name AS image_bucket,
@@ -281,8 +285,9 @@ class VendorRepository {
          LIMIT 1
        ) mii ON TRUE
        WHERE p.owner_id = $1
-       ORDER BY mi.created_at DESC`,
-      [ownerId]
+       ORDER BY mi.created_at DESC
+       LIMIT $2`,
+      [ownerId, limit]
     );
     return rows;
   }

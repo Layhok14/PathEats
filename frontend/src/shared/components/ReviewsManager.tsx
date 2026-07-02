@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
+import { formatDate } from "../utils/formatters";
 import { Star, Search, Download } from "lucide-react";
 import api from "../services/axiosService";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 interface Review {
   id: string;
@@ -55,13 +57,18 @@ function exportReviewsCsv(reviews: Review[]) {
 export function ReviewsManager({ endpoint, title, subtitle, enableExport }: ReviewsManagerProps) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [starFilter, setStarFilter] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
+    setLoading(true);
+    setFetchError(null);
     api.get(endpoint).then(({ data }) => {
       setReviews(data.data || []);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => {
+      setFetchError("Failed to load reviews.");
+    }).finally(() => setLoading(false));
   }, [endpoint]);
 
   const filtered = reviews.filter((r) => {
@@ -84,10 +91,6 @@ export function ReviewsManager({ endpoint, title, subtitle, enableExport }: Revi
     borderRadius: "10px", padding: "20px",
   };
 
-  function formatDate(d: string) {
-    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  }
-
   const inpStyle: React.CSSProperties = {
     width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "6px",
     padding: "9px 12px 9px 34px", fontSize: "13px", fontFamily: "Poppins, sans-serif",
@@ -95,7 +98,11 @@ export function ReviewsManager({ endpoint, title, subtitle, enableExport }: Revi
   };
 
   if (loading) {
-    return <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)" }}>Loading reviews...</p>;
+    return <LoadingSpinner message="Loading reviews..." />;
+  }
+
+  if (fetchError) {
+    return <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "#ef4444" }}>{fetchError}</p>;
   }
 
   if (reviews.length === 0) {
@@ -210,7 +217,7 @@ export function ReviewsManager({ endpoint, title, subtitle, enableExport }: Revi
                 </div>
               </div>
               <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", whiteSpace: "nowrap" }}>
-                {formatDate(review.created_at)}
+                {formatDate(review.created_at, true)}
               </span>
             </div>
             <StarRow rating={review.stars} />

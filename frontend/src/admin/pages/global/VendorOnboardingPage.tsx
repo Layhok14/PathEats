@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-  ExternalLink, Save, Loader, MessageCircle, Link2, Check, X, Eye,
+  ExternalLink, Save, MessageCircle, Link2, Check, X, Eye,
   ArrowRight, Smartphone, Bell, UserCheck, ShieldCheck, Plus, Trash2
 } from "lucide-react";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { toast } from "sonner";
 import {
   getAdminOnboardingConfig,
@@ -81,11 +82,7 @@ export default function VendorOnboardingPage() {
   const hasTelegram = telegramLink || config?.telegram_link;
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[80vh]">
-        <Loader className="animate-spin text-[#006e2f]" size={24} />
-      </div>
-    );
+    return <LoadingSpinner message="Loading onboarding..." />;
   }
 
   return (

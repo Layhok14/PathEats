@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, Server, Database } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Activity, AlertTriangle, Server, Database, ExternalLink } from "lucide-react";
 import { MetricCard } from "../../components/MetricCard";
-import { getDevHealth, getDevLogs, getDevApiMetrics, type DevHealth, type DevLogEntry } from "../../services/developerService";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
+import { getDevHealth, getDevActivityLog, getDevApiMetrics, type DevHealth, type ActivityLogEntry } from "../../services/developerService";
 
 export default function DeveloperDashboard() {
+  const navigate = useNavigate();
   const [health, setHealth] = useState<DevHealth | null>(null);
-  const [logs, setLogs] = useState<DevLogEntry[]>([]);
+  const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
   const [metrics, setMetrics] = useState<{ totalTables: number; avgLatency: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -14,11 +17,11 @@ export default function DeveloperDashboard() {
       try {
         const [healthData, logsData, metricsData] = await Promise.all([
           getDevHealth(),
-          getDevLogs({ limit: 5 }),
+          getDevActivityLog({ limit: 10 }),
           getDevApiMetrics(),
         ]);
         setHealth(healthData);
-        setLogs(logsData.logs);
+        setLogs(logsData);
         setMetrics(metricsData);
       } catch (err) {
         console.error("[DeveloperDashboard] Failed to load data:", err);
@@ -29,8 +32,9 @@ export default function DeveloperDashboard() {
   }, []);
 
   const healthColor = health?.status === "healthy" ? "green" : "amber";
+  const errorLogs = logs.filter((l) => (l.payload ?? "").toUpperCase().includes("ERROR") || l.event_type === "login_failed");
+  const warningCount = errorLogs.length;
   const totalLogs = logs.length;
-  const warningCount = logs.filter((l) => l.level === "WARNING" || l.level === "CRITICAL").length;
 
   const uptimeDisplay = health
     ? `${Math.floor(health.uptime / 86400)}d ${Math.floor((health.uptime % 86400) / 3600)}h`
@@ -45,70 +49,81 @@ export default function DeveloperDashboard() {
           <MetricCard
             label="System Status"
             value={health?.status === "healthy" ? "Healthy" : "Degraded"}
-            sub={health ? `DB: ${health.dbConnected ? "Connected" : "Disconnected"}` : "Loading..."}
+            sub={health ? `DB: ${health.dbConnected ? "Connected" : "Disconnected"}` : "Loading data..."}
             subVariant={healthColor as "green" | "amber"}
-            topBorderColor={health?.status === "healthy" ? "#006e2f" : "#f59e0b"}
+            topBorderColor={health?.status === "healthy" ? "#22c55e" : "#f59e0b"}
             icon={<Activity size={18} />}
-            accent={health?.status === "healthy" ? "#006e2f" : "#f59e0b"}
+            accent={health?.status === "healthy" ? "#22c55e" : "#f59e0b"}
           />
           <MetricCard
             label="Issues (24h)"
             value={String(warningCount)}
             sub={health?.dbConnected ? "System operational" : "DB disconnected"}
             subVariant={health?.dbConnected ? "green" : "red"}
-            topBorderColor={health?.dbConnected ? "#006e2f" : "#ef4444"}
+            topBorderColor={health?.dbConnected ? "#22c55e" : "#ef4444"}
             icon={<AlertTriangle size={18} />}
-            accent={health?.dbConnected ? "#006e2f" : "#ef4444"}
+            accent={health?.dbConnected ? "#22c55e" : "#ef4444"}
           />
           <MetricCard
             label="DB Latency"
             value={health ? `${health.dbLatency}ms` : "N/A"}
             sub={`Uptime: ${uptimeDisplay}`}
             subVariant="green"
-            topBorderColor="#006e2f"
+            topBorderColor="#22c55e"
             icon={<Server size={18} />}
-            accent="#006e2f"
+            accent="#22c55e"
           />
           <MetricCard
             label="Database Tables"
             value={String(metrics?.totalTables ?? "—")}
             sub={`Avg latency: ${metrics?.avgLatency ?? "—"}`}
             subVariant="green"
-            topBorderColor="#006e2f"
+            topBorderColor="#22c55e"
             icon={<Database size={18} />}
-            accent="#006e2f"
+            accent="#22c55e"
           />
         </div>
 
         <div className="grid grid-cols-[1fr_280px] gap-4">
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
-            <h2 className="text-[16px] font-semibold text-[#0b1c30] mb-4">Recent Error Logs</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[16px] font-semibold text-[#0b1c30]">Recent System Events</h2>
+              <button onClick={() => navigate("/admin/audit")} className="inline-flex items-center gap-1 text-[12px] font-medium text-[#006e2f] hover:text-[#005a26]">
+                View All <ExternalLink size={12} />
+              </button>
+            </div>
             {loading ? (
-              <p className="text-[13px] text-[#94a3b8]">Loading logs...</p>
+              <LoadingSpinner message="Loading events..." />
             ) : logs.length === 0 ? (
-              <p className="text-[13px] text-[#94a3b8]">No recent log entries.</p>
+              <p className="text-[13px] text-[#94a3b8]">No recent events.</p>
             ) : (
               <table className="w-full">
                 <thead>
                   <tr className="bg-[#f8fafc]">
-                    {["LEVEL", "STATUS", "ENDPOINT", "MESSAGE"].map((h) => (
+                    {["TYPE", "ACTOR", "DETAILS"].map((h) => (
                       <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map((log, i) => (
+                  {logs.map((log, i) => {
+                    const isError = (log.payload ?? "").toUpperCase().includes("ERROR") || log.event_type === "login_failed";
+                    return (
                     <tr key={log.id || i} className="border-t border-[#f1f5f9]">
                       <td className="px-5 py-3">
-                        <span className={`text-[11px] font-bold px-2 py-1 rounded ${log.level === "CRITICAL" ? "bg-red-100 text-red-700" : log.level === "WARNING" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
-                          {log.level}
+                        <span className={`text-[11px] font-bold px-2 py-1 rounded ${
+                          isError ? "bg-red-100 text-red-700" :
+                          log.event_type === "login_success" ? "bg-green-100 text-green-700" :
+                          "bg-blue-100 text-blue-700"
+                        }`}>
+                          {log.event_type}
                         </span>
                       </td>
-                      <td className="px-5 py-3"><span className="text-[11px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-700">{log.status}</span></td>
-                      <td className="px-5 py-3 font-mono text-[12px] text-[#006e2f] max-w-[180px] truncate">{log.endpoint}</td>
-                      <td className="px-5 py-3 text-[12px] text-[#374151] max-w-[200px] truncate">{log.message}</td>
+                      <td className="px-5 py-3 text-[12px] text-[#64748b]">{log.actor_email || log.actor_id || "—"}</td>
+                      <td className="px-5 py-3 text-[12px] text-[#374151] max-w-[300px] truncate">{log.payload || "—"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}

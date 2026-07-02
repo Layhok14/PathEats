@@ -3,6 +3,8 @@ import { useNavigate } from "react-router";
 import { CircleCheck, MessageSquare, Plus, RefreshCw, Star, Store, UtensilsCrossed } from "lucide-react";
 import api from "../../shared/services/axiosService";
 import { getApiErrorMessage } from "../../shared/utils/apiError";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
+import { timeAgo } from "../../shared/utils/formatters";
 
 interface DashboardStats {
   total_stalls: number;
@@ -80,6 +82,29 @@ export function DashboardPage() {
     { label: "View Reviews", icon: <MessageSquare size={16} />, onClick: () => navigate("/vendor/reviews"), color: "#f59e0b" },
   ];
 
+  if (loading) {
+    return (
+      <div className="min-h-full p-6 flex flex-col">
+        <div>
+          <p style={{ color: "var(--brand-green-dark)", fontFamily: "Poppins, sans-serif", fontSize: "24px", fontWeight: 700 }}>
+            Dashboard
+          </p>
+        </div>
+        <div className="mt-2">
+          <h1 style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "28px", fontWeight: 700, lineHeight: "1.2" }}>
+            {greeting()}!
+          </h1>
+          <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "4px" }}>
+            Here's what's happening with your stall today.
+          </p>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <LoadingSpinner message="Loading dashboard..." />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 flex flex-col gap-6">
       <div>
@@ -113,7 +138,7 @@ export function DashboardPage() {
               {statPresentation[index].icon}
             </div>
             <div style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "36px", fontWeight: 700, lineHeight: "1" }}>
-              {loading ? "-" : statPresentation[index].value}
+              {statPresentation[index].value}
             </div>
             <div style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "8px" }}>
               {s.label}
@@ -127,11 +152,7 @@ export function DashboardPage() {
           <span style={{ color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "16px", fontWeight: 600 }}>
             Recent Reviews
           </span>
-          {loading && reviews.length === 0 ? (
-            <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "16px" }}>
-              Loading recent reviews...
-            </p>
-          ) : reviews.length === 0 ? (
+          {reviews.length === 0 ? (
             <p style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px", marginTop: "16px" }}>
               No reviews yet.
             </p>
@@ -198,14 +219,4 @@ export function DashboardPage() {
   );
 }
 
-function timeAgo(iso: string): string {
-  const time = new Date(iso).getTime();
-  if (isNaN(time)) return "—";
-  const diff = Date.now() - time;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
+

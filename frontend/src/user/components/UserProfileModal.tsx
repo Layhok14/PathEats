@@ -27,12 +27,21 @@ export function UserProfileModal({ onClose }) {
     email: user?.email ?? "user@patheat.app",
     phone: user?.phone ?? "",
   });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notifs, setNotifs] = useState({
     orders: true,
     reviews: true,
     summary: false,
   });
   const [saved, setSaved] = useState(false);
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   const panelBg = darkMode ? "#111828" : "#ffffff";
   const inp = {
@@ -82,6 +91,7 @@ export function UserProfileModal({ onClose }) {
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-black/5"
             style={{ background: tm.surface2 }}
           >
@@ -149,16 +159,18 @@ export function UserProfileModal({ onClose }) {
                     className="text-[10px] uppercase tracking-wider mb-1 block"
                     style={{ color: tm.text4 }}
                   >
-                    First Name
+                    First Name *
                   </label>
                   <input
                     value={form.firstName}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, firstName: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 rounded-xl text-[13px] focus:outline-none"
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, firstName: e.target.value }));
+                      clearFieldError("firstName");
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
+                  {fieldErrors.firstName && <p className="text-xs text-red-500 mt-1">{fieldErrors.firstName}</p>}
                 </div>
                 <div className="flex-1">
                   <label
@@ -172,7 +184,7 @@ export function UserProfileModal({ onClose }) {
                     onChange={(e) =>
                       setForm((f) => ({ ...f, lastName: e.target.value }))
                     }
-                    className="w-full px-3 py-2 rounded-xl text-[13px] focus:outline-none"
+                    className="w-full px-3 py-2 rounded-xl text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                 </div>
@@ -203,7 +215,7 @@ export function UserProfileModal({ onClose }) {
                   className="text-[10px] uppercase tracking-wider mb-1 block"
                   style={{ color: tm.text4 }}
                 >
-                  Phone Number
+                  Phone Number *
                 </label>
                 <div className="flex gap-2">
                   <div
@@ -214,17 +226,24 @@ export function UserProfileModal({ onClose }) {
                   </div>
                   <input
                     value={form.phone}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, phone: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      setForm((f) => ({ ...f, phone: e.target.value }));
+                      clearFieldError("phone");
+                    }}
                     placeholder="012 345 678"
-                    className="flex-1 px-3 py-2 rounded-xl text-[13px] focus:outline-none"
+                    className="flex-1 px-3 py-2 rounded-xl text-[13px] focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                 </div>
+                {fieldErrors.phone && <p className="text-xs text-red-500 mt-1">{fieldErrors.phone}</p>}
               </div>
               <button
                 onClick={() => {
+                  const errs: Record<string, string> = {};
+                  if (!form.firstName.trim()) errs.firstName = "First name is required";
+                  if (!form.phone.trim()) errs.phone = "Phone number is required";
+                  setFieldErrors(errs);
+                  if (Object.keys(errs).length > 0) return;
                   setSaved(true);
                   setTimeout(() => setSaved(false), 2000);
                 }}

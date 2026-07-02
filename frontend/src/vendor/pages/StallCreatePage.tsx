@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, Check, MapPin } from "lucide-react";
 import { PhotoUpload } from "../components/PhotoUpload";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { SuccessModal } from "../../shared/components/SuccessModal";
 import { toast } from "sonner";
 import { MenuItemSelector } from "../components/MenuItemSelector";
@@ -13,6 +14,11 @@ import { STALL_CATEGORIES } from "../../shared/constants/categories";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+  removeMarkersSafely,
+} from "../../shared/utils/maplibreLifecycle";
 import type { StallFormData, StallCategory } from "../../shared/types";
 
 const STEPS = [{ label: "Stall Info" }, { label: "Menu Items" }, { label: "Location" }, { label: "Review" }];
@@ -38,15 +44,22 @@ function to24h(t: string) {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
-function StallInfoForm({ form, onChange }: { form: StallFormData; onChange: (f: StallFormData) => void }) {
+function StallInfoForm({ form, onChange, fieldErrors, clearFieldError }: {
+  form: StallFormData;
+  onChange: (f: StallFormData) => void;
+  fieldErrors: Record<string, string>;
+  clearFieldError: (field: string) => void;
+}) {
   const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "4px", padding: "10px 14px", fontSize: "14px", fontFamily: "Poppins, sans-serif", color: "var(--brand-text-dark)", background: "var(--card)", outline: "none" };
   const lbl: React.CSSProperties = { fontFamily: "Poppins, sans-serif", fontSize: "13px", fontWeight: 500, color: "var(--brand-text-dark)", display: "block", marginBottom: "6px" };
+  const errStyle: React.CSSProperties = { color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" };
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <label style={lbl}>Stall Name *</label>
-        <input type="text" required placeholder="e.g. Spice & Wok Haven" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} style={inp} />
+        <input type="text" placeholder="e.g. Spice & Wok Haven" value={form.name} onChange={(e) => { onChange({ ...form, name: e.target.value }); clearFieldError("name"); }} style={inp} />
+        {fieldErrors.name && <p style={errStyle}>{fieldErrors.name}</p>}
       </div>
       <div>
         <label style={lbl}>Stall Photo</label>
@@ -101,8 +114,10 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const detachRecoveryRef = useRef<(() => void) | null>(null);
   const initialCoords = { lat: form.location.latitude, lng: form.location.longitude };
   const [coords, setCoords] = useState(initialCoords);
+  const [mapRecovering, setMapRecovering] = useState(false);
   const coordsRef = useRef(coords);
   coordsRef.current = coords;
   const syncRef = useRef(onChange);
@@ -126,7 +141,7 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
         const { lat, lng } = JSON.parse(saved);
         setCoords({ lat, lng });
         syncCoords(lat, lng);
-      } catch {}
+      } catch {/* no saved coords */} // eslint-disable-line no-empty
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -142,7 +157,14 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
 
+    detachRecoveryRef.current = attachMapContextRecovery(map, {
+      onLost: () => setMapRecovering(true),
+      onRestored: () => setMapRecovering(false),
+    });
+
     map.on("load", () => {
+      setMapRecovering(false);
+      map.resize();
       const el = document.createElement("div");
       el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
       el.style.cursor = "grab";
@@ -185,10 +207,11 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
     });
 
     return () => {
-      otherMarkersRef.current.forEach((m) => m.remove());
-      otherMarkersRef.current = [];
-      map.remove();
-      mapRef.current = null;
+      detachRecoveryRef.current?.();
+      detachRecoveryRef.current = null;
+      removeMarkersSafely(otherMarkersRef);
+      removeMapSafely(mapRef);
+      markerRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -204,6 +227,11 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
   return (
     <div className="flex flex-col gap-4">
       <div style={{ position: "relative" }}>
+        {mapRecovering && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+            <LoadingSpinner message="Recovering map view..." />
+          </div>
+        )}
         <div ref={mapDivRef} style={{ height: "400px", borderRadius: "8px", border: "1px solid var(--brand-card-border)", overflow: "hidden" }} />
         <button
           type="button"
@@ -252,7 +280,25 @@ export function StallCreatePage() {
   const { allItems } = useMenuItems();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<StallFormData>(EMPTY);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validateStep(stepIndex: number): boolean {
+    const errs: Record<string, string> = {};
+    if (stepIndex === 0) {
+      if (!form.name.trim()) errs.name = "Stall name is required";
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
   function toggleItem(id: string) {
     setForm((f) => ({ ...f, menuItemIds: f.menuItemIds.includes(id) ? f.menuItemIds.filter((x) => x !== id) : [...f.menuItemIds, id] }));
@@ -266,6 +312,10 @@ export function StallCreatePage() {
       console.error("[StallCreatePage] Failed to register stall:", err);
       toast.error("Failed to register stall. Check your connection and try again.");
     }
+  }
+
+  function goNext() {
+    if (validateStep(step)) setStep(step + 1);
   }
 
   const selectedItems = allItems.filter((i) => form.menuItemIds.includes(i.id));
@@ -290,7 +340,7 @@ export function StallCreatePage() {
         {step === 0 && (
           <>
             <h2 style={{ fontFamily: "Poppins, sans-serif", fontSize: "17px", fontWeight: 600, color: "var(--brand-text-dark)", marginBottom: "20px" }}>Stall Information</h2>
-            <StallInfoForm form={form} onChange={setForm} />
+            <StallInfoForm form={form} onChange={setForm} fieldErrors={fieldErrors} clearFieldError={clearFieldError} />
           </>
         )}
 
@@ -347,13 +397,8 @@ export function StallCreatePage() {
         </button>
         {step < 3 ? (
           <button
-            style={{
-              ...btnPrimary,
-              opacity: step === 0 && !form.name.trim() ? 0.5 : 1,
-              cursor: step === 0 && !form.name.trim() ? "not-allowed" : "pointer",
-            }}
-            onClick={() => setStep(step + 1)}
-            disabled={step === 0 && !form.name.trim()}
+            style={btnPrimary}
+            onClick={goNext}
           >
             {step === 0 ? "Next: Menu Items" : step === 1 ? "Next: Set Location" : "Review & Confirm"}
           </button>

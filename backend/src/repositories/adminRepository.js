@@ -609,7 +609,8 @@ export const getVendorManagementOverview = async (search = "") => {
   });
 };
 
-export const findAllVendors = async () => {
+export const findAllVendors = async (page = 1, limit = 50) => {
+  const offset = (page - 1) * limit;
   const columns = await getColumns("places");
   const available = new Set(columns);
   const select = [
@@ -636,8 +637,9 @@ export const findAllVendors = async () => {
     FROM places p
     ${joins.join("\n")}
     ${orderBy}
-    LIMIT 5000
-    `
+    LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
 
   return rows.map((vendor) => ({
@@ -799,19 +801,21 @@ export const createStall = async (payload) => {
 };
 
 export const deleteStall = async (id) => {
-  await pool.query(
-    `DELETE FROM menu_item_images mii
-     USING menu_items mi
-     WHERE mii.menu_item_id::text = mi.id::text
-       AND mi.place_id::text = $1`,
-    [id]
-  );
-  await pool.query("DELETE FROM menu_items WHERE place_id::text = $1", [id]);
-  await pool.query("DELETE FROM place_hours WHERE place_id::text = $1", [id]);
-  await pool.query("DELETE FROM reviews WHERE place_id::text = $1", [id]);
-  await pool.query("DELETE FROM place_images WHERE place_id::text = $1", [id]);
-  const result = await pool.query("DELETE FROM places WHERE id::text = $1 RETURNING id::text", [id]);
-  return result.rows[0] ?? null;
+  return withTransaction(async (client) => {
+    await client.query(
+      `DELETE FROM menu_item_images mii
+       USING menu_items mi
+       WHERE mii.menu_item_id::text = mi.id::text
+         AND mi.place_id::text = $1`,
+      [id]
+    );
+    await client.query("DELETE FROM menu_items WHERE place_id::text = $1", [id]);
+    await client.query("DELETE FROM place_hours WHERE place_id::text = $1", [id]);
+    await client.query("DELETE FROM reviews WHERE place_id::text = $1", [id]);
+    await client.query("DELETE FROM place_images WHERE place_id::text = $1", [id]);
+    const result = await client.query("DELETE FROM places WHERE id::text = $1 RETURNING id::text", [id]);
+    return result.rows[0] ?? null;
+  });
 };
 
 export const createStallMenuItem = async (placeId, payload) => {
@@ -895,7 +899,7 @@ export const deleteStallReview = async (id) => {
   return result.rows[0] ?? null;
 };
 
-export const getAllReviews = async () => {
+export const getAllReviews = async (limit = 100, offset = 0) => {
   const { rows } = await pool.query(
     `SELECT r.id, r.rating AS stars, r.body, r.created_at,
             u.first_name || ' ' || u.last_name AS user_name,
@@ -904,12 +908,14 @@ export const getAllReviews = async () => {
      FROM reviews r
      JOIN places p ON p.id = r.place_id
      JOIN users u ON u.id = r.user_id
-     ORDER BY r.created_at DESC`
+     ORDER BY r.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
   );
   return rows;
 };
 
-export const getReviewsByPlaceId = async (placeId) => {
+export const getReviewsByPlaceId = async (placeId, limit = 100) => {
   const { rows } = await pool.query(
     `SELECT r.id, r.rating AS stars, r.body, r.created_at,
             u.first_name || ' ' || u.last_name AS user_name,
@@ -918,8 +924,9 @@ export const getReviewsByPlaceId = async (placeId) => {
      JOIN places p ON p.id = r.place_id
      JOIN users u ON u.id = r.user_id
      WHERE r.place_id::text = $1
-     ORDER BY r.created_at DESC`,
-    [placeId]
+     ORDER BY r.created_at DESC
+     LIMIT $2`,
+    [placeId, limit]
   );
   return rows;
 };
@@ -1053,7 +1060,8 @@ export const deleteRoleRecord = async (id) => {
   return result.rows[0] ?? null;
 };
 
-export const findAllStalls = async () => {
+export const findAllStalls = async (page = 1, limit = 50) => {
+  const offset = (page - 1) * limit;
   const rows = await optionalRows(
     `
     SELECT
@@ -1085,8 +1093,9 @@ export const findAllStalls = async () => {
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
     ${primaryPlaceImageJoin}
     ORDER BY p.created_at DESC NULLS LAST
-    LIMIT 5000
-    `
+    LIMIT $1 OFFSET $2
+    `,
+    [limit, offset]
   );
 
   return rows.map((row) => {
@@ -1114,7 +1123,7 @@ export const findAllStalls = async () => {
   });
 };
 
-export const findStallsByOwner = async (ownerId) => {
+export const findStallsByOwner = async (ownerId, limit = 50) => {
   const rows = await optionalRows(
     `
     SELECT
@@ -1147,8 +1156,9 @@ export const findStallsByOwner = async (ownerId) => {
     ${primaryPlaceImageJoin}
     WHERE p.owner_id::text = $1
     ORDER BY p.created_at DESC NULLS LAST
+    LIMIT $2
     `,
-    [ownerId]
+    [ownerId, limit]
   );
 
   return rows.map((row) => ({

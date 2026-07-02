@@ -63,8 +63,8 @@ export function AuthModal({ onClose, prompt }: Props) {
     setLoading(true);
     try {
       await signup({ email, password, firstName, lastName });
-      setStep("otp");
-      setSuccessMsg("Account created! Verify your email.");
+      setStep("success");
+      setSuccessMsg("Account created successfully! You can now explore PathEats.");
     } catch (err: any) {
       setError(err.response?.data?.message ?? err.message ?? "Registration failed.");
     } finally {
@@ -93,12 +93,7 @@ export function AuthModal({ onClose, prompt }: Props) {
     setLoading(true);
     try {
       await api.post("/auth/verify-otp", { email, otp });
-      if (step === "signup") {
-        setStep("success");
-        setSuccessMsg("Email verified successfully!");
-      } else {
-        setStep("reset");
-      }
+      setStep("reset");
     } catch (err: any) {
       setError(err.response?.data?.message ?? err.message ?? "Invalid OTP.");
     } finally {
@@ -108,7 +103,7 @@ export function AuthModal({ onClose, prompt }: Props) {
 
   async function handleResetPassword(e: React.FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
     setError("");
     setLoading(true);
     try {
@@ -186,6 +181,7 @@ export function AuthModal({ onClose, prompt }: Props) {
             </div>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-black/10"
               style={{ background: tm.surface2 }}
             >
@@ -227,7 +223,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="sophea@patheat.app"
                     required
-                    className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                    className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                 </div>
@@ -243,7 +239,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Password"
                     required
-                    className="w-full pl-8 pr-9 py-2.5 rounded-xl text-xs focus:outline-none"
+                    className="w-full pl-8 pr-9 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                   <button
@@ -328,7 +324,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                       onChange={(e) => setFirstName(e.target.value)}
                       placeholder="First name"
                       required
-                      className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                      className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                       style={inp}
                     />
                   </div>
@@ -336,7 +332,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Last name"
-                    className="flex-1 px-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                    className="flex-1 px-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                 </div>
@@ -352,7 +348,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com"
                     required
-                    className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                    className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                 </div>
@@ -366,10 +362,10 @@ export function AuthModal({ onClose, prompt }: Props) {
                     type={showPw ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Password (min 6 chars)"
+                    placeholder="Password (min 8 chars)"
                     required
-                    minLength={6}
-                    className="w-full pl-8 pr-9 py-2.5 rounded-xl text-xs focus:outline-none"
+                    minLength={8}
+                    className="w-full pl-8 pr-9 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                     style={inp}
                   />
                   <button
@@ -411,7 +407,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="your@email.com"
                   required
-                  className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                  className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                   style={inp}
                 />
               </div>
@@ -446,7 +442,7 @@ export function AuthModal({ onClose, prompt }: Props) {
                   placeholder="000000"
                   required
                   maxLength={6}
-                  className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none tracking-widest text-center"
+                  className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30 tracking-widest text-center"
                   style={inp}
                 />
               </div>
@@ -478,10 +474,10 @@ export function AuthModal({ onClose, prompt }: Props) {
                   type={showPw ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="New password (min 6 chars)"
+                  placeholder="New password (min 8 chars)"
                   required
-                  minLength={6}
-                  className="w-full pl-8 pr-9 py-2.5 rounded-xl text-xs focus:outline-none"
+                  minLength={8}
+                  className="w-full pl-8 pr-9 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
                   style={inp}
                 />
                 <button

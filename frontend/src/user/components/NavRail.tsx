@@ -71,6 +71,7 @@ export function NavRail({
       {/* Logo */}
       <button
         onClick={onHomeReset}
+        title="Go to home"
         className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3 shrink-0 transition-all hover:brightness-110 active:scale-95"
         style={{ background: "#22c55e" }}
       >
@@ -83,6 +84,7 @@ export function NavRail({
           <button
             key={id}
             onClick={() => handleTabClick(id)}
+            title={id === "route" ? "Find route" : id === "favorite" ? "Saved places" : id === "savedRoutes" ? "Saved routes" : "Search history"}
             className="flex flex-col items-center justify-center gap-1 w-[56px] py-2.5 rounded-xl transition-all"
             style={
               active

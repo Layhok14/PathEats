@@ -5,10 +5,11 @@ import { loginPathForArea, authAreaFromPath } from "../utils/authRedirect";
 interface Props {
   children: React.ReactNode;
   requiredRole?: string | string[];
+  allowGuest?: boolean;
 }
 
-export function AuthGuard({ children, requiredRole }: Props) {
-  const { user } = useAuth();
+export function AuthGuard({ children, requiredRole, allowGuest }: Props) {
+  const { user, isGuest } = useAuth();
   const location = useLocation();
 
   const requiredRoles = requiredRole
@@ -18,6 +19,9 @@ export function AuthGuard({ children, requiredRole }: Props) {
   const loginPath = loginPathForArea(authAreaFromPath(location.pathname));
 
   if (!user) {
+    if (allowGuest && isGuest) {
+      return <>{children}</>;
+    }
     return <Navigate to={loginPath} replace />;
   }
 

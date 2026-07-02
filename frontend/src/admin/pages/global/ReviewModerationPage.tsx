@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Flag, Trash2, AlertTriangle, Search, RotateCcw, ShieldAlert, Loader, Download } from "lucide-react";
+import { Flag, Trash2, AlertTriangle, Search, RotateCcw, ShieldAlert, Download } from "lucide-react";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
+import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
 import { toast } from "sonner";
 import {
   getAdminAllReviews,
@@ -18,6 +20,7 @@ export default function ReviewModerationPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "flagged" | "active" | "removed">("all");
   const [page, setPage] = useState(1);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; placeName: string } | null>(null);
 
   const loadReviews = async () => {
     try {
@@ -73,14 +76,7 @@ export default function ReviewModerationPage() {
   };
 
   const handleRemove = async (id: string, placeName: string) => {
-    if (!confirm(`Remove this review for "${placeName}"? It will be soft-deleted and excluded from ratings.`)) return;
-    try {
-      await removeAdminReview(id);
-      toast.success("Review removed. Ratings recalculated.");
-      await loadReviews();
-    } catch {
-      toast.error("Could not remove review.");
-    }
+    setConfirmTarget({ id, placeName });
   };
 
   function exportReviews() {
@@ -176,8 +172,7 @@ export default function ReviewModerationPage() {
 
           {loading ? (
             <div className="p-10 text-center">
-              <Loader className="animate-spin mx-auto text-[#006e2f]" size={20} />
-              <p className="text-[13px] text-[#94a3b8] mt-2">Loading reviews...</p>
+              <LoadingSpinner message="Loading reviews..." />
             </div>
           ) : (
             <div className="overflow-x-auto">

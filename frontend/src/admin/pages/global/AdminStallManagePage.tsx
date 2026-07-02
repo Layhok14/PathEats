@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Plus, Search, List, Map, Info, X } from "lucide-react";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
@@ -14,6 +15,11 @@ import {
   type StallManagementOptions,
 } from "../../services/adminDashboardService";
 import { LIGHT_VECTOR_STYLE } from "../../../shared/constants/appConfig";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+  removeMarkersSafely,
+} from "../../../shared/utils/maplibreLifecycle";
 
 type ViewMode = "list" | "map";
 
@@ -31,6 +37,8 @@ function StallMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const detachRecoveryRef = useRef<(() => void) | null>(null);
+  const [mapRecovering, setMapRecovering] = useState(false);
   const mappableStalls = useMemo(() => stalls.filter((stall) => {
     const coordinates = stall.location?.coordinates;
     return (
@@ -56,6 +64,15 @@ function StallMap({
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       mapRef.current = map;
+
+      detachRecoveryRef.current = attachMapContextRecovery(map, {
+        onLost: () => setMapRecovering(true),
+        onRestored: () => setMapRecovering(false),
+      });
+      map.on("load", () => {
+        setMapRecovering(false);
+        map.resize();
+      });
     }
 
     const map = mapRef.current;
@@ -104,34 +121,33 @@ function StallMap({
     return () => {
       cancelled = true;
       map.off("load", refreshMarkers);
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
+      removeMarkersSafely(markersRef);
     };
   }, [mappableStalls, onPinClick]);
 
   useEffect(() => {
     return () => {
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-      mapRef.current?.remove();
-      mapRef.current = null;
+      detachRecoveryRef.current?.();
+      detachRecoveryRef.current = null;
+      removeMarkersSafely(markersRef);
+      removeMapSafely(mapRef);
     };
   }, []);
 
   useEffect(() => {
     if (mappableStalls.length > 0) return;
 
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
-    mapRef.current?.remove();
-    mapRef.current = null;
+    detachRecoveryRef.current?.();
+    detachRecoveryRef.current = null;
+    removeMarkersSafely(markersRef);
+    removeMapSafely(mapRef);
+    setMapRecovering(false);
   }, [mappableStalls.length]);
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-80 rounded-xl border border-[#e2e8f0] bg-white">
-        <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
-        <p className="mt-3 text-[13px] text-[#94a3b8]">Loading stalls from database...</p>
+        <LoadingSpinner message="Loading stalls from database..." />
       </div>
     );
   }
@@ -144,7 +160,16 @@ function StallMap({
     return <div className="flex items-center justify-center h-80 text-[13px] text-[#94a3b8]">No pinned stall locations match this view.</div>;
   }
 
-  return <div ref={containerRef} className="w-full rounded-lg overflow-hidden min-h-[420px]" />;
+  return (
+    <div className="relative w-full rounded-lg overflow-hidden min-h-[420px]">
+      {mapRecovering && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/80">
+          <LoadingSpinner message="Recovering map view..." />
+        </div>
+      )}
+      <div ref={containerRef} className="w-full min-h-[420px]" />
+    </div>
+  );
 }
 
 export default function AdminStallManagePage() {
@@ -261,9 +286,8 @@ export default function AdminStallManagePage() {
         {viewMode === "list" && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             {loadingStalls ? (
-              <div className="p-8 text-center text-[13px] text-[#94a3b8]">
-                <div className="w-5 h-5 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                Loading stalls...
+              <div className="p-8 text-center">
+                <LoadingSpinner message="Loading stalls..." />
               </div>
             ) : (
               <>

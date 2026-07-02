@@ -12,17 +12,17 @@ const api = axios.create({
 let isRefreshing = false;
 let pendingQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = [];
 
-const AUTH_REQUESTS_WITH_LOCAL_ERRORS = [
+const AUTH_PATHS_KEEP_LOCAL = new Set([
   "/auth/login",
   "/auth/register",
   "/auth/forgot-password",
   "/auth/verify-otp",
   "/auth/reset-password",
-];
+]);
 
 function shouldShowAuthErrorOnCurrentPage(url?: string) {
   if (!url) return false;
-  return AUTH_REQUESTS_WITH_LOCAL_ERRORS.some((path) => url.includes(path));
+  return AUTH_PATHS_KEEP_LOCAL.has(url);
 }
 
 function processQueue(error: unknown, token: string | null = null) {

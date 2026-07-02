@@ -2,18 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { ShieldCheck, Users, Plus, Pencil, Trash2, Search, KeyRound, Unlock, Table2, UserPlus, Lock, X, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { MetricCard } from "../../components/MetricCard";
-import CreateRoleModal from "../../components/Add-role";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
+import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
+import { formatDate } from "../../../shared/utils/formatters";
+import CreateRoleModal from "../../components/AddRole";
 import {
   getAdminRoles, getAdminUsers, createAdminUser, updateAdminUser, updateAdminUserStatus, deleteAdminRole, deleteAdminUser,
   getAdminDatabaseTables, type AdminRole, type AdminUser,
 } from "../../services/adminDashboardService";
 
 const PAGE_SIZE = 6;
-
-function formatDate(value: string) {
-  if (!value) return "N/A";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
-}
 
 export default function AdminManagementPage() {
   const [activeTab, setActiveTab] = useState<"role" | "user">("role");
@@ -46,6 +44,7 @@ function RoleManagementSection() {
   const [loading, setLoading] = useState(true);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<AdminRole | null>(null);
 
   const loadRoles = async () => {
     try {
@@ -70,28 +69,25 @@ function RoleManagementSection() {
   const grantable = roles.filter((r) => r.grantOption).length;
 
   const handleDeleteRole = async (role: AdminRole) => {
-    if (!confirm(`Delete role "${role.name}"? This cannot be undone.`)) return;
-    try {
-      await deleteAdminRole(role.id);
-      toast.success(`Role "${role.name}" deleted.`);
-      await loadRoles();
-    } catch (err) {
-      toast.error("Could not delete role.");
-    }
+    setConfirmTarget(role);
   };
 
   return (
     <>
       <CreateRoleModal isOpen={showRoleModal} role={editingRole} onClose={() => { setShowRoleModal(false); setEditingRole(null); }} onCreated={loadRoles} />
       <div className="flex items-start justify-between mb-5">
-        <p className="text-[14px] text-[#64748b]">{loading ? "Loading..." : "Create, edit, and delete database roles."}</p>
+        <p className="text-[14px] text-[#64748b]">Create, edit, and delete database roles.</p>
         <button onClick={() => setShowRoleModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] text-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#005a26] shadow-sm"><Plus size={14} /> Create role</button>
       </div>
+      {loading ? (
+        <LoadingSpinner message="Loading roles..." />
+      ) : (
+      <>
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <MetricCard label="Total Roles" value={String(roles.length)} sub="Live from role table" subVariant="green" topBorderColor="#006e2f" icon={<ShieldCheck size={18} />} accent="#006e2f" />
-        <MetricCard label="Tables Covered" value={String(allTables.size)} sub="Database access scope" subVariant="amber" topBorderColor="#f59e0b" icon={<Table2 size={18} />} accent="#f59e0b" />
-        <MetricCard label="Grant Option" value={String(grantable)} sub="Can grant permissions" subVariant="neutral" topBorderColor="#64748b" icon={<Unlock size={18} />} accent="#64748b" />
-        <MetricCard label="Total Privileges" value={String(roles.reduce((s, r) => s + Object.values(r.tablePrivileges).flat().length, 0))} sub="Assigned permissions" subVariant="blue" topBorderColor="#005ac2" icon={<KeyRound size={18} />} accent="#005ac2" />
+        <MetricCard label="Total Roles" value={String(roles.length)} sub="Live from role table" subVariant="green" topBorderColor="#22c55e" icon={<ShieldCheck size={18} />} accent="#22c55e" />
+        <MetricCard label="Tables Covered" value={String(allTables.size)} sub="Database access scope" subVariant="green" topBorderColor="#22c55e" icon={<Table2 size={18} />} accent="#22c55e" />
+        <MetricCard label="Grant Option" value={String(grantable)} sub="Can grant permissions" subVariant="green" topBorderColor="#22c55e" icon={<Unlock size={18} />} accent="#22c55e" />
+        <MetricCard label="Total Privileges" value={String(roles.reduce((s, r) => s + Object.values(r.tablePrivileges).flat().length, 0))} sub="Assigned permissions" subVariant="green" topBorderColor="#22c55e" icon={<KeyRound size={18} />} accent="#22c55e" />
       </div>
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
@@ -118,7 +114,7 @@ function RoleManagementSection() {
                   </div>
                 </td>
                 <td className="px-6 py-3"><span className={`text-[12px] font-semibold ${role.grantOption ? "text-[#006e2f]" : "text-[#64748b]"}`}>{role.grantOption ? "Yes" : "No"}</span></td>
-                <td className="px-6 py-3 text-[13px] text-[#64748b]">{formatDate(role.createdAt)}</td>
+                <td className="px-6 py-3 text-[13px] text-[#64748b]">{formatDate(role.createdAt, true)}</td>
                 <td className="px-6 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingRole(role); setShowRoleModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
@@ -138,6 +134,28 @@ function RoleManagementSection() {
           </div>
         </div>
       </div>
+      </>
+  )}
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="Delete Role"
+        description="Are you sure you want to delete this role? This cannot be undone."
+        itemName={confirmTarget?.name}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={async () => {
+          if (!confirmTarget) return;
+          try {
+            await deleteAdminRole(confirmTarget.id);
+            toast.success(`Role "${confirmTarget.name}" deleted.`);
+            await loadRoles();
+          } catch (err) {
+            toast.error("Could not delete role.");
+          }
+          setConfirmTarget(null);
+        }}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </>
   );
 }
@@ -151,6 +169,7 @@ function UserManagementSection() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<AdminUser | null>(null);
 
   const loadUsers = async () => {
     try {
@@ -181,14 +200,7 @@ function UserManagementSection() {
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleDeleteUser = async (user: AdminUser) => {
-    if (!confirm(`Delete user "${user.name}" (${user.email})? This cannot be undone.`)) return;
-    try {
-      await deleteAdminUser(user.id);
-      toast.success(`User "${user.name}" deleted.`);
-      await loadUsers();
-    } catch (err) {
-      toast.error("Could not delete user.");
-    }
+    setConfirmTarget(user);
   };
 
   const handleToggleBan = async (user: AdminUser) => {
@@ -212,9 +224,12 @@ function UserManagementSection() {
         onDone={loadUsers}
       />
       <div className="flex items-start justify-between mb-5">
-        <p className="text-[14px] text-[#64748b]">{loading ? "Loading..." : "View and manage database users."}</p>
+        <p className="text-[14px] text-[#64748b]">View and manage database users.</p>
         <button onClick={() => setShowModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] text-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#005a26] shadow-sm"><UserPlus size={14} /> Create user</button>
       </div>
+      {loading ? (
+        <LoadingSpinner message="Loading users..." />
+      ) : (
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
           <h2 className="text-[16px] font-semibold text-[#0b1c30]">Users</h2>
@@ -261,6 +276,27 @@ function UserManagementSection() {
           </div>
         </div>
       </div>
+  )}
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="Delete User"
+        description="Are you sure you want to delete this user? This cannot be undone."
+        itemName={confirmTarget ? `${confirmTarget.name} (${confirmTarget.email})` : undefined}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={async () => {
+          if (!confirmTarget) return;
+          try {
+            await deleteAdminUser(confirmTarget.id);
+            toast.success(`User "${confirmTarget.name}" deleted.`);
+            await loadUsers();
+          } catch (err) {
+            toast.error("Could not delete user.");
+          }
+          setConfirmTarget(null);
+        }}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </>
   );
 }
@@ -275,6 +311,7 @@ function UserFormModal({
   onDone: () => Promise<void>;
 }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "", role: "" });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const isEditing = Boolean(user);
 
@@ -287,22 +324,36 @@ function UserFormModal({
       confirmPassword: "",
       role: user?.role ?? "",
     });
+    setFieldErrors({});
   }, [isOpen, user]);
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    if (!form.name.trim()) errs.name = "Name is required";
+    if (!form.email.trim()) errs.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = "Enter a valid email";
+    if (!form.role) errs.role = "Role is required";
+    if (!isEditing) {
+      if (!form.password) errs.password = "Password is required";
+      else if (form.password.length < 6) errs.password = "At least 6 characters";
+      if (!form.confirmPassword) errs.confirmPassword = "Please confirm your password";
+      else if (form.password !== form.confirmPassword) errs.confirmPassword = "Passwords do not match";
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.role) {
-      toast.error("Name, email, and role are required.");
-      return;
-    }
-    if (!isEditing && form.password !== form.confirmPassword) {
-      toast.error("Passwords do not match.");
-      return;
-    }
-    if (!isEditing && !form.password) {
-      toast.error("Password is required for new users.");
-      return;
-    }
+    if (!validate()) return;
 
     setSaving(true);
     try {
@@ -336,27 +387,32 @@ function UserFormModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Name *</label>
-            <input required value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            <input value={form.name} onChange={(e) => { setForm(f => ({ ...f, name: e.target.value })); clearFieldError("name"); }} placeholder="Full name" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            {fieldErrors.name && <p className="text-xs text-red-500 mt-1">{fieldErrors.name}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Email *</label>
-            <input required type="email" value={form.email} onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            <input type="email" value={form.email} onChange={(e) => { setForm(f => ({ ...f, email: e.target.value })); clearFieldError("email"); }} placeholder="user@example.com" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Role *</label>
-              <select required value={form.role} onChange={(e) => setForm(f => ({ ...f, role: e.target.value }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
+              <select value={form.role} onChange={(e) => { setForm(f => ({ ...f, role: e.target.value })); clearFieldError("role"); }} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
                 <option value="">Select role...</option>
                 {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
               </select>
+            {fieldErrors.role && <p className="text-xs text-red-500 mt-1">{fieldErrors.role}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">{isEditing ? "New Password (leave blank to keep)" : "Password *"}</label>
-            <input type="password" value={form.password} onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} placeholder={isEditing ? "Leave blank to keep current" : "Enter password"} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            <input type="password" value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); clearFieldError("password"); }} placeholder={isEditing ? "Leave blank to keep current" : "Enter password"} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
           </div>
           {!isEditing && (
             <div>
               <label className="text-[12px] font-medium text-[#64748b]">Confirm Password *</label>
-              <input type="password" value={form.confirmPassword} onChange={(e) => setForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="Confirm password" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+              <input type="password" value={form.confirmPassword} onChange={(e) => { setForm(f => ({ ...f, confirmPassword: e.target.value })); clearFieldError("confirmPassword"); }} placeholder="Confirm password" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+              {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
             </div>
           )}
           <div className="flex justify-end gap-3 pt-4 border-t border-[#e2e8f0]">

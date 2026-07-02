@@ -7,8 +7,11 @@ export function useBookmarks() {
   const isLoggedIn = user?.role_scope === "CONSUMER";
   const [bookmarks, setBookmarks] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
   const bookmarksRef = useRef(bookmarks);
+  const pendingRef = useRef(pendingToggles);
   bookmarksRef.current = bookmarks;
+  pendingRef.current = pendingToggles;
 
   useEffect(() => {
     if (!isLoggedIn) {
@@ -27,7 +30,7 @@ export function useBookmarks() {
           .map(String);
         setBookmarks(new Set(ids));
       })
-      .catch(() => {})
+      .catch(() => {/* fetch best-effort */})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [isLoggedIn]);
@@ -36,16 +39,20 @@ export function useBookmarks() {
     if (!isLoggedIn) return;
 
     const bookmarkId = String(placeId);
+
+    if (pendingRef.current.has(bookmarkId)) return;
+
+    setPendingToggles((prev) => new Set(prev).add(bookmarkId));
+
     const current = bookmarksRef.current;
     const isCurrentlyBookmarked = current.has(bookmarkId);
 
     setBookmarks((prev) => {
       const n = new Set(prev);
-      isCurrentlyBookmarked ? n.delete(bookmarkId) : n.add(bookmarkId);
+      if (isCurrentlyBookmarked) n.delete(bookmarkId);
+      else n.add(bookmarkId);
       return n;
     });
-
-    if (!isLoggedIn) return;
 
     try {
       if (isCurrentlyBookmarked) {
@@ -56,7 +63,14 @@ export function useBookmarks() {
     } catch {
       setBookmarks((prev) => {
         const n = new Set(prev);
-        isCurrentlyBookmarked ? n.add(bookmarkId) : n.delete(bookmarkId);
+        if (isCurrentlyBookmarked) n.add(bookmarkId);
+        else n.delete(bookmarkId);
+        return n;
+      });
+    } finally {
+      setPendingToggles((prev) => {
+        const n = new Set(prev);
+        n.delete(bookmarkId);
         return n;
       });
     }

@@ -1,6 +1,7 @@
 import VendorRepository from "../repositories/VendorRepository.js";
 import VendorModel from "../models/vendorModel.js";
 import AppError from "../utils/AppError.js";
+import { sanitizeText } from "../utils/sanitize.js";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,6 +55,8 @@ class VendorService {
       ...data,
       category_id: categoryId,
       menu_item_ids: normalizeMenuItemIds(data),
+      name: sanitizeText(data.name),
+      description: data.description ? sanitizeText(data.description) : data.description,
     });
 
     return VendorModel.toResponse(stall);
@@ -68,7 +71,12 @@ class VendorService {
   async updateStall(ownerId, stallId, data) {
     const stall = await this.vendorRepo.findOwnedById(stallId, ownerId);
     if (!stall) throw new AppError("Stall not found", 404);
-    const updated = await this.vendorRepo.update(stallId, ownerId, data);
+    const sanitized = {
+      ...data,
+      name: data.name ? sanitizeText(data.name) : data.name,
+      description: data.description ? sanitizeText(data.description) : data.description,
+    };
+    const updated = await this.vendorRepo.update(stallId, ownerId, sanitized);
     return VendorModel.toResponse(updated);
   }
 
@@ -96,13 +104,23 @@ class VendorService {
     if (!placeId) {
       throw new AppError("No stall found to add item to. Create a stall first.", 400);
     }
-    const item = await this.vendorRepo.createMenuItem(placeId, ownerId, data);
+    const sanitized = {
+      ...data,
+      name: sanitizeText(data.name),
+      description: data.description ? sanitizeText(data.description) : data.description,
+    };
+    const item = await this.vendorRepo.createMenuItem(placeId, ownerId, sanitized);
     if (!item) throw new AppError("Stall not found", 404);
     return item;
   }
 
   async updateMenuItemGlobal(ownerId, itemId, data) {
-    const item = await this.vendorRepo.updateMenuItemGlobal(ownerId, itemId, data);
+    const sanitized = {
+      ...data,
+      name: data.name ? sanitizeText(data.name) : data.name,
+      description: data.description ? sanitizeText(data.description) : data.description,
+    };
+    const item = await this.vendorRepo.updateMenuItemGlobal(ownerId, itemId, sanitized);
     if (!item) throw new AppError("Menu item not found", 404);
     return item;
   }
@@ -122,13 +140,23 @@ class VendorService {
     if (!data.name || data.price === undefined || data.price === null || data.price === "") {
       throw new AppError("Name and price are required", 400);
     }
-    const item = await this.vendorRepo.createMenuItem(placeId, ownerId, data);
+    const sanitized = {
+      ...data,
+      name: sanitizeText(data.name),
+      description: data.description ? sanitizeText(data.description) : data.description,
+    };
+    const item = await this.vendorRepo.createMenuItem(placeId, ownerId, sanitized);
     if (!item) throw new AppError("Stall not found", 404);
     return item;
   }
 
   async updateMenuItem(ownerId, placeId, itemId, data) {
-    const item = await this.vendorRepo.updateMenuItem(placeId, itemId, ownerId, data);
+    const sanitized = {
+      ...data,
+      name: data.name ? sanitizeText(data.name) : data.name,
+      description: data.description ? sanitizeText(data.description) : data.description,
+    };
+    const item = await this.vendorRepo.updateMenuItem(placeId, itemId, ownerId, sanitized);
     if (!item) throw new AppError("Menu item not found", 404);
     return item;
   }

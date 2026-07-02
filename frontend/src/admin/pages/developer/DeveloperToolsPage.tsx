@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getDevQueryPresets, getAllDevQueryPresets, createDevQueryPreset, updateDevQueryPreset, deleteDevQueryPreset,
   postDevQuery, getDevMaintenanceStatus, getDevActivityLog, getDevQueryHistory,
   QueryPreset, QueryResult, TableMaintenanceRow, ActivityLogEntry, QueryHistoryEntry,
 } from "../../services/developerService";
 import { toast } from "sonner";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 
 const CATEGORIES = [
   { value: "", label: "All Categories", color: "bg-gray-100 text-gray-700" },
@@ -18,15 +19,16 @@ function categoryBadge(cat: string) {
   return <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${c?.color || "bg-gray-100 text-gray-700"}`}>{c?.label || cat}</span>;
 }
 
-/* ───── Error Log Tab (only login_failed) ───── */
+/* ───── Error Log Tab (all system events) ───── */
 function ErrorLogTab() {
   const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "errors" | "logins">("all");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getDevActivityLog({ eventType: "login_failed", limit: 200 });
+      const data = await getDevActivityLog({ limit: 200 });
       setLogs(data);
     } catch { setLogs([]); }
     finally { setLoading(false); }
@@ -34,10 +36,25 @@ function ErrorLogTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  const filtered = filter === "errors"
+    ? logs.filter((l) => (l.payload ?? "").toUpperCase().includes("ERROR"))
+    : filter === "logins"
+    ? logs.filter((l) => l.event_type.startsWith("login"))
+    : logs;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-[13px] text-[#64748b]">Failed login attempts — {logs.length} entries</p>
+        <div className="flex items-center gap-3">
+          <p className="text-[13px] text-[#64748b]">{filtered.length} entries</p>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+            {([{ k: "all" as const, l: "All" }, { k: "errors" as const, l: "Errors" }, { k: "logins" as const, l: "Logins" }]).map((t) => (
+              <button key={t.k} onClick={() => setFilter(t.k)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${filter === t.k ? "bg-white text-[#0b1c30] shadow-sm" : "text-[#64748b] hover:text-[#0b1c30]"}`}
+              >{t.l}</button>
+            ))}
+          </div>
+        </div>
         <button onClick={load} className="text-[12px] px-3 py-1.5 rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50" disabled={loading}>Refresh</button>
       </div>
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -45,21 +62,32 @@ function ErrorLogTab() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-gray-50 text-gray-500 sticky top-0">
+                <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Type</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Actor</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Payload</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-[11px] uppercase tracking-wider">Time</th>
               </tr>
             </thead>
             <tbody>
-              {logs.map((log) => (
+              {filtered.map((log) => {
+                const isBad = log.event_type === "login_failed" || (log.payload ?? "").toUpperCase().includes("ERROR");
+                return (
                 <tr key={log.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-2 text-[13px] text-[#ba1a1a] font-mono">{log.actor_email || log.actor_id || "—"}</td>
+                  <td className="px-4 py-2">
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                      isBad ? "bg-red-50 text-red-700" :
+                      log.event_type === "login_success" ? "bg-green-50 text-green-700" :
+                      "bg-blue-50 text-blue-700"
+                    }`}>{log.event_type}</span>
+                  </td>
+                  <td className="px-4 py-2 text-[13px] text-[#64748b] font-mono">{log.actor_email || log.actor_id || "—"}</td>
                   <td className="px-4 py-2 text-[13px] text-[#374151] max-w-[500px] truncate">{log.payload?.slice(0, 200) || "—"}</td>
                   <td className="px-4 py-2 text-[13px] text-[#64748b] whitespace-nowrap">{new Date(log.executed_at).toLocaleString()}</td>
                 </tr>
-              ))}
-              {logs.length === 0 && (
-                <tr><td colSpan={3} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">{loading ? "Loading..." : "No login failures found."}</td></tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">{loading ? <LoadingSpinner inline message="Loading events..." /> : "No events found."}</td></tr>
               )}
             </tbody>
           </table>
@@ -76,6 +104,7 @@ export default function DeveloperToolsPage() {
   // Database Tools state
   const [presets, setPresets] = useState<QueryPreset[]>([]);
   const [totalPresets, setTotalPresets] = useState(0);
+  const [presetsLoading, setPresetsLoading] = useState(false);
   const [sql, setSql] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState("");
@@ -93,21 +122,34 @@ export default function DeveloperToolsPage() {
   const [createCategory, setCreateCategory] = useState("viewing");
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
-  // Query History
+  // Query History — search bar with dropdown on focus
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<QueryHistoryEntry[]>([]);
   const [historySearch, setHistorySearch] = useState("");
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setHistoryOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Table Health state
   const [maintenanceData, setMaintenanceData] = useState<TableMaintenanceRow[]>([]);
   const [maintenanceLoading, setMaintenanceLoading] = useState(false);
 
   const loadPresets = useCallback(async () => {
+    setPresetsLoading(true);
     try {
       const data = await getDevQueryPresets({ category: presetCategory || undefined, search: presetSearch || undefined });
       setPresets(data.presets);
       setTotalPresets(data.totalPresets);
     } catch { setPresets([]); }
+    finally { setPresetsLoading(false); }
   }, [presetCategory, presetSearch]);
 
   useEffect(() => { loadPresets(); }, [loadPresets]);
@@ -235,16 +277,32 @@ export default function DeveloperToolsPage() {
                 </div>
               </div>
               <div className="p-4 space-y-2">
-                <div className="flex gap-2">
-                  <select value="" onChange={(e) => { const idx = parseInt(e.target.value); if (!isNaN(idx)) recallQuery(filteredHistory[idx]); e.target.value = ""; }}
-                    className="flex-1 text-[13px] px-3 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f] bg-white">
-                    <option value="">Query History</option>
-                    {filteredHistory.map((h, i) => (
-                      <option key={h.id} value={i}>{(h.payload ?? "").slice(0, 80)}{(h.payload ?? "").length > 80 ? "…" : ""} — {new Date(h.executed_at).toLocaleString()}</option>
-                    ))}
-                  </select>
-                  <input value={historySearch} onChange={(e) => { setHistorySearch(e.target.value); if (!historyOpen) { setHistoryOpen(true); loadHistory(); } }}
-                    placeholder="Search history..." className="w-48 text-[13px] px-3 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f]" />
+                <div ref={historyRef} className="relative">
+                  <input
+                    value={historySearch}
+                    onChange={(e) => { setHistorySearch(e.target.value); if (!historyOpen) { setHistoryOpen(true); loadHistory(); } }}
+                    onFocus={() => { if (!historyOpen) { setHistoryOpen(true); loadHistory(); } }}
+                    placeholder="Search query history..."
+                    className="w-full text-[13px] px-3 py-1.5 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f] bg-white"
+                  />
+                  {historyOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e2e8f0] rounded-lg shadow-lg z-50 max-h-[280px] overflow-y-auto">
+                      {filteredHistory.length === 0 ? (
+                        <div className="p-3 text-[13px] text-[#94a3b8] text-center">No matching queries</div>
+                      ) : (
+                        filteredHistory.slice(0, 50).map((h) => (
+                          <button
+                            key={h.id}
+                            onClick={() => { recallQuery(h); setHistoryOpen(false); setHistorySearch(""); }}
+                            className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50 border-b border-gray-100 last:border-0 flex flex-col gap-0.5"
+                          >
+                            <span className="font-mono text-[#0b1c30] truncate">{(h.payload ?? "").slice(0, 120)}{(h.payload ?? "").length > 120 ? "…" : ""}</span>
+                            <span className="text-[11px] text-[#94a3b8]">{new Date(h.executed_at).toLocaleString()}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
                 <textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={8}
                   className="w-full font-mono text-[14px] p-3 border border-[#e2e8f0] rounded-lg focus:outline-none focus:border-[#006e2f] resize-y leading-relaxed"
@@ -295,7 +353,7 @@ export default function DeveloperToolsPage() {
                       )}
                     </div>
                   ))}
-                  {presets.length === 0 && <p className="text-[13px] text-[#94a3b8] text-center py-4">No presets found</p>}
+                  {presetsLoading ? <div className="py-4"><LoadingSpinner message="Loading presets..." /></div> : presets.length === 0 && <p className="text-[13px] text-[#94a3b8] text-center py-4">No presets found</p>}
                 </div>
               </div>
             </div>
@@ -358,7 +416,7 @@ export default function DeveloperToolsPage() {
             </div>
             <button onClick={loadMaintenance} disabled={maintenanceLoading}
               className="px-4 py-1.5 text-[13px] font-medium bg-[#006e2f] text-white rounded-lg hover:bg-[#005a26] disabled:opacity-50"
-            >{maintenanceLoading ? "Refreshing..." : "Refresh"}</button>
+            >{maintenanceLoading ? <LoadingSpinner inline message="Refreshing..." /> : "Refresh"}</button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -388,7 +446,7 @@ export default function DeveloperToolsPage() {
                 </thead>
                 <tbody>
                   {maintenanceLoading ? (
-                    <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">Loading table health...</td></tr>
+                    <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]"><LoadingSpinner inline message="Loading table health..." /></td></tr>
                   ) : maintenanceData.length === 0 ? (
                     <tr><td colSpan={4} className="px-4 py-10 text-center text-[13px] text-[#94a3b8]">No table health data available.</td></tr>
                   ) : (

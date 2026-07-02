@@ -1,3 +1,5 @@
+import { sanitizeText } from "../utils/sanitize.js";
+
 const toStorageImage = (row) => {
   if (!row.image_bucket || !row.image_path) return null;
 

@@ -8,9 +8,9 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'development'
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: true }
+    : { rejectUnauthorized: false },
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,

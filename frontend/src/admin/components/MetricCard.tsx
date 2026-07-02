@@ -11,7 +11,7 @@ interface Props {
 }
 
 const subColors: Record<string, string> = {
-  green: "text-[#006e2f]",
+  green: "text-[#22c55e]",
   blue: "text-[#005ac2]",
   red: "text-[#ba1a1a]",
   amber: "text-[#b45309]",

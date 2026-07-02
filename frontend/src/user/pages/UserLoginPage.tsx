@@ -4,7 +4,7 @@ import { useAuth } from "../../shared/hooks/useAuth";
 import api from "../../shared/services/axiosService";
 import { consumeSessionNotice } from "../../shared/utils/authRedirect";
 import { getApiErrorMessage } from "../../shared/utils/apiError";
-import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, CheckCircle, KeyRound } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, CheckCircle } from "lucide-react";
 
 type Step = "login" | "signup" | "forgot" | "otp" | "reset" | "success";
 
@@ -15,6 +15,7 @@ export default function UserLoginPage() {
   const [step, setStep] = useState<Step>("login");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -43,11 +44,48 @@ export default function UserLoginPage() {
 
   function resetForm() {
     setError("");
+    setFieldErrors({});
     setLoading(false);
     setPassword("");
     setOtp("");
     setNewPassword("");
     setSuccessMsg("");
+  }
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validate(stepName: Step): boolean {
+    const errs: Record<string, string> = {};
+    if (stepName === "login" || stepName === "signup") {
+      if (stepName === "login" || stepName === "signup") {
+        if (!email.trim()) errs.email = "Email is required";
+        else if (!/\S+@\S+\.\S+/.test(email)) errs.email = "Enter a valid email";
+      }
+      if (stepName === "login") {
+        if (!password) errs.password = "Password is required";
+      }
+      if (stepName === "signup") {
+        if (!firstName.trim()) errs.firstName = "First name is required";
+        if (!password) errs.password = "Password is required";
+        else if (password.length < 8) errs.password = "At least 8 characters";
+      }
+    }
+    if (stepName === "forgot") {
+      if (!email.trim()) errs.email = "Email is required";
+      else if (!/\S+@\S+\.\S+/.test(email)) errs.email = "Enter a valid email";
+    }
+    if (stepName === "reset") {
+      if (!newPassword) errs.newPassword = "New password is required";
+      else if (newPassword.length < 8) errs.newPassword = "At least 8 characters";
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
   }
 
   function goTo(s: Step) {
@@ -58,6 +96,7 @@ export default function UserLoginPage() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!validate("login")) return;
     setLoading(true);
     try {
       await login(email, password, "CONSUMER");
@@ -71,13 +110,13 @@ export default function UserLoginPage() {
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
-    if (!firstName.trim()) { setError("First name is required."); return; }
     setError("");
+    if (!validate("signup")) return;
     setLoading(true);
     try {
       await signup({ firstName, lastName, email, password });
-      setStep("otp");
-      setSuccessMsg("Account created! Verify your email.");
+      setStep("success");
+      setSuccessMsg("Account created successfully! You can now explore PathEats.");
     } catch (err: any) {
       setError(getApiErrorMessage(err, "Registration failed."));
     } finally {
@@ -88,6 +127,7 @@ export default function UserLoginPage() {
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!validate("forgot")) return;
     setLoading(true);
     try {
       await api.post("/auth/forgot-password", { email });
@@ -121,8 +161,8 @@ export default function UserLoginPage() {
 
   async function handleResetPassword(e: React.FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
     setError("");
+    if (!validate("reset")) return;
     setLoading(true);
     try {
       await api.post("/auth/reset-password", { email, otp, newPassword });
@@ -190,10 +230,9 @@ export default function UserLoginPage() {
           <div className="px-8 mb-3">
             <button
               onClick={() => {
-                if (step === "otp" && successMsg?.includes("Account created")) goTo("signup");
+                if (step === "otp") goTo("forgot");
                 else if (step === "reset") goTo("forgot");
-                else if (step === "otp") goTo("forgot");
-                else if (step === "success" && successMsg?.includes("verified")) goTo("login");
+                else if (step === "success" && successMsg?.includes("password has been reset")) goTo("login");
                 else goTo("login");
               }}
               className="flex items-center gap-1 text-xs font-medium hover:underline"
@@ -207,17 +246,19 @@ export default function UserLoginPage() {
         {step === "login" && (
           <form onSubmit={handleLogin} className="px-8 pb-8 space-y-4">
             <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="sophea@patheat.app" required className={inp} />
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Email *</label>
+              <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }} placeholder="sophea@patheat.app" className={inp} />
+              {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
             </div>
             <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Password</label>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Password *</label>
               <div className="relative">
-                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" required className={inp + " pr-10"} />
+                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }} placeholder="Your password" className={inp + " pr-10"} />
                 <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#94a3b8" }}>
                   {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
+              {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
             </div>
             <div className="flex justify-end -mt-1">
               <button type="button" onClick={() => { setEmail(email); goTo("forgot"); }} className="text-[11px] font-medium hover:underline" style={{ color: GREEN }}>
@@ -248,8 +289,9 @@ export default function UserLoginPage() {
           <form onSubmit={handleSignup} className="px-8 pb-8 space-y-4">
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>First name</label>
-                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First" required className={inp} />
+                <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>First name *</label>
+                <input type="text" value={firstName} onChange={(e) => { setFirstName(e.target.value); clearFieldError("firstName"); }} placeholder="First" className={inp} />
+                {fieldErrors.firstName && <p className="text-xs text-red-500 mt-1">{fieldErrors.firstName}</p>}
               </div>
               <div className="flex-1">
                 <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Last name</label>
@@ -257,17 +299,19 @@ export default function UserLoginPage() {
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" required className={inp} />
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Email *</label>
+              <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }} placeholder="your@email.com" className={inp} />
+              {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
             </div>
             <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Password</label>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Password *</label>
               <div className="relative">
-                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" required minLength={6} className={inp + " pr-10"} />
+                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }} placeholder="At least 6 characters" className={inp + " pr-10"} />
                 <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#94a3b8" }}>
                   {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
+              {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
             </div>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <button type="submit" disabled={loading}
@@ -283,8 +327,9 @@ export default function UserLoginPage() {
           <form onSubmit={handleForgotPassword} className="px-8 pb-8 space-y-4">
             <p className="text-xs" style={{ color: "#64748b" }}>Enter your email and we'll send a verification code.</p>
             <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" required className={inp} />
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Email *</label>
+              <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }} placeholder="your@email.com" className={inp} />
+              {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
             </div>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <button type="submit" disabled={loading}
@@ -323,14 +368,15 @@ export default function UserLoginPage() {
               Choose a new password for <span className="font-semibold" style={{ color: NAVY }}>{email}</span>
             </p>
             <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>New password</label>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>New password *</label>
               <div className="relative">
-                <input type={showPw ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 6 characters" required minLength={6} className={inp + " pr-10"} />
+                <input type={showPw ? "text" : "password"} value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearFieldError("newPassword"); }}
+                  placeholder="At least 8 characters" className={inp + " pr-10"} />
                 <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#94a3b8" }}>
                   {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
+              {fieldErrors.newPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.newPassword}</p>}
             </div>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <button type="submit" disabled={loading}

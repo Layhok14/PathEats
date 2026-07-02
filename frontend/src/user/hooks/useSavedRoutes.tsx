@@ -48,7 +48,7 @@ export function useSavedRoutes() {
         if (cancelled) return;
         setSavedRoutes((data?.data ?? []).map(normalizeRoute));
       })
-      .catch(() => {})
+      .catch(() => {/* fetch best-effort */})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [isLoggedIn]);

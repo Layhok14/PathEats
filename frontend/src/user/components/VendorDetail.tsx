@@ -40,16 +40,17 @@ export function VendorDetail({
   }, [onClose]);
 
   const c = {
-    bg: darkMode ? "#0F172A" : "#F8F9FF",
-    text: darkMode ? "rgba(255,255,255,0.88)" : "#0F172A",
-    textMid: darkMode ? "rgba(255,255,255,0.6)" : "#3F465C",
-    textFaint: darkMode ? "rgba(255,255,255,0.35)" : "#5C647A",
-    textDim: darkMode ? "rgba(255,255,255,0.2)" : "#BEC6E0",
-    surface: darkMode ? "rgba(255,255,255,0.05)" : "#FFFFFF",
-    scoreCard: darkMode ? "rgba(255,255,255,0.04)" : "#F0FDF4",
-    scoreCardBorder: darkMode ? "rgba(255,255,255,0.07)" : "#D1D5DB",
-    scoreBarBg: darkMode ? "rgba(255,255,255,0.08)" : "#D1D5DB",
-    rowBorder: darkMode ? "rgba(255,255,255,0.05)" : "#D1D5DB",
+    bg: tm.appBg,
+    text: tm.text1,
+    textMid: tm.text2,
+    textFaint: tm.text3,
+    textDim: tm.text4,
+    surface: tm.surface2,
+    scoreCard: tm.surface1,
+    scoreCardBorder: tm.border,
+    scoreBarBg: tm.surface3,
+    rowBorder: tm.border,
+    primary: tm.primary,
     backBtn: darkMode ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)",
   };
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Search, Plus, Pencil, Trash2, X, Ban, CheckCircle, Download } from "lucide-react";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
+import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
@@ -56,6 +58,7 @@ export default function ConsumerManagementPage() {
 
   const [detailRow, setDetailRow] = useState<AdminUserOverviewRow | null>(null);
   const [detailTable, setDetailTable] = useState<"user" | "preferences" | "search">("user");
+  const [confirmTarget, setConfirmTarget] = useState<AdminUserOverviewRow | null>(null);
 
   const loadRows = async () => {
     try {
@@ -107,14 +110,7 @@ export default function ConsumerManagementPage() {
   };
 
   const handleDelete = async (row: AdminUserOverviewRow) => {
-    if (!confirm(`Delete consumer "${consumerName(row)}"?`)) return;
-    try {
-      await deleteAdminUser(row.id);
-      toast.success(`"${consumerName(row)}" deleted.`);
-      await loadRows();
-    } catch (err) {
-      toast.error("Could not delete consumer.");
-    }
+    setConfirmTarget(row);
   };
 
   const handleStatus = async (row: AdminUserOverviewRow) => {
@@ -159,9 +155,8 @@ export default function ConsumerManagementPage() {
 
         <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-[13px] text-[#94a3b8]">
-              <div className="w-5 h-5 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              Loading consumers...
+            <div className="p-8 text-center">
+              <LoadingSpinner message="Loading consumers..." />
             </div>
           ) : (
             <>
@@ -300,6 +295,27 @@ export default function ConsumerManagementPage() {
           onClose={() => setDetailRow(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="Delete Consumer"
+        description="Are you sure you want to delete this consumer?"
+        itemName={confirmTarget ? consumerName(confirmTarget) : undefined}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={async () => {
+          if (!confirmTarget) return;
+          try {
+            await deleteAdminUser(confirmTarget.id);
+            toast.success(`"${consumerName(confirmTarget)}" deleted.`);
+            await loadRows();
+          } catch (err) {
+            toast.error("Could not delete consumer.");
+          }
+          setConfirmTarget(null);
+        }}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 }

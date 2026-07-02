@@ -7,6 +7,7 @@ import { catchAsync } from "../utils/catchAsync.js";
 import VendorService from "../services/VendorService.js";
 import UserRepository from "../repositories/UserRepository.js";
 import { uploadVendorImage } from "../services/storageService.js";
+import { getOnboardingConfig } from "../repositories/adminRepository.js";
 import AppError from "../utils/AppError.js";
 
 const userRepo = new UserRepository();
@@ -24,6 +25,12 @@ const imageUpload = multer({
     cb(new AppError("Only JPEG, PNG, WEBP, and GIF images are allowed", 400));
   },
 });
+
+// Public route — no auth needed, returns non-sensitive Telegram config
+router.get("/onboarding", catchAsync(async (req, res) => {
+  const config = await getOnboardingConfig();
+  res.json({ success: true, data: config });
+}));
 
 router.use(authMiddleware);
 router.use(restrictToRoles("VENDOR"));
@@ -66,8 +73,8 @@ router.post("/change-password", catchAsync(async (req, res) => {
   if (!currentPassword || !newPassword) {
     throw new AppError("Current password and new password are required", 400);
   }
-  if (newPassword.length < 6) {
-    throw new AppError("New password must be at least 6 characters", 400);
+  if (newPassword.length < 8) {
+    throw new AppError("New password must be at least 8 characters", 400);
   }
   const user = await userRepo.findByEmailWithPassword(req.user.email);
   if (!user) throw new AppError("User not found", 404);
@@ -136,12 +143,6 @@ router.delete("/items/:itemId", catchAsync(async (req, res) => {
   const ownerId = req.user.sub;
   await vendorService.deleteMenuItemGlobal(ownerId, req.params.itemId);
   res.json({ success: true, data: { message: "Menu item deleted" } });
-}));
-
-router.get("/onboarding", catchAsync(async (req, res) => {
-  const adminRepository = await import("../repositories/adminRepository.js");
-  const config = await adminRepository.getOnboardingConfig();
-  res.json({ success: true, data: config });
 }));
 
 router.get("/reviews", catchAsync(async (req, res) => {

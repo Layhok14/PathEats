@@ -162,6 +162,17 @@ class UserRepository {
     );
     return rows[0] || null;
   }
+
+  /**
+   * Find user by ID including password_hash (for password change).
+   */
+  async findByIdWithPassword(id) {
+    const { rows } = await db.query(
+      `SELECT * FROM users WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+    return rows[0] || null;
+  }
 }
 
 export default UserRepository;

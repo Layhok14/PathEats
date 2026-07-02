@@ -8,10 +8,21 @@ import AppError from "../utils/AppError.js";
 import { isPublicRegistrationRole, normalizeRoleScope } from "../utils/roles.js";
 import { sendOTPEmail } from "./emailService.js";
 
-const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || "dev-secret-change-in-production";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "dev-refresh-secret-change-in-production";
+const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || "15m";
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
+
+const MIN_PASSWORD_LENGTH = 8;
+
+function validatePassword(password) {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    throw new AppError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400, {
+      code: "WEAK_PASSWORD",
+      safeMessage: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
+    });
+  }
+}
 
 function normalizeExpectedRoles(expectedRoles) {
   if (!expectedRoles) return [];
@@ -44,6 +55,8 @@ class AuthService {
         details: { requestedRole: normalizedRoleScope },
       });
     }
+
+    validatePassword(password);
 
     const existing = await this.userRepo.findByEmail(email);
     if (existing) throw new AppError("Email already registered", 409);
@@ -263,24 +276,24 @@ class AuthService {
 
   async forgotPassword(email) {
     const user = await this.userRepo.findByEmail(email);
-    if (!user) throw new AppError("No account found with that email", 404);
+    if (user) {
+      const otp = crypto.randomInt(100000, 999999).toString();
+      await this.otpRepo.store(email, otp, "password_reset", 15);
 
-    const otp = crypto.randomInt(100000, 999999).toString();
-    await this.otpRepo.store(email, otp, "password_reset", 15);
-
-    try {
-      await sendOTPEmail(email, otp, "password_reset");
-    } catch (err) {
-      await this.otpRepo.invalidateAll(email, "password_reset");
-      console.error("Failed to send OTP email:", err.message);
-      if (err?.isOperational) throw err;
-      throw new AppError("Failed to send OTP. Please try again.", 502, {
-        code: "OTP_EMAIL_DELIVERY_FAILED",
-        safeMessage: "Could not send the OTP email. Check SMTP settings and try again.",
-      });
+      try {
+        await sendOTPEmail(email, otp, "password_reset");
+      } catch (err) {
+        await this.otpRepo.invalidateAll(email, "password_reset");
+        console.error("Failed to send OTP email:", err.message);
+        if (err?.isOperational) throw err;
+        throw new AppError("Failed to send OTP. Please try again.", 502, {
+          code: "OTP_EMAIL_DELIVERY_FAILED",
+          safeMessage: "Could not send the OTP email. Check SMTP settings and try again.",
+        });
+      }
     }
 
-    return { message: "OTP sent to your email" };
+    return { message: "If an account exists, an OTP has been sent to the registered email." };
   }
 
   async verifyOtp(email, otpCode) {
@@ -292,6 +305,8 @@ class AuthService {
   async resetPassword(email, otpCode, newPassword) {
     const otp = await this.otpRepo.verify(email, otpCode, "password_reset");
     if (!otp) throw new AppError("Invalid or expired OTP", 400);
+
+    validatePassword(newPassword);
 
     const user = await this.userRepo.findByEmail(email);
     if (!user) throw new AppError("No account found with that email", 404);
@@ -306,17 +321,13 @@ class AuthService {
   }
 
   async changePassword(userId, currentPassword, newPassword) {
-    const user = await this.userRepo.findByEmailWithPassword(
-      (await this.userRepo.findById(userId)).email
-    );
+    const user = await this.userRepo.findByIdWithPassword(userId);
     if (!user) throw new AppError("User not found", 404);
 
     const valid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!valid) throw new AppError("Current password is incorrect", 401);
 
-    if (newPassword.length < 6) {
-      throw new AppError("New password must be at least 6 characters", 400);
-    }
+    validatePassword(newPassword);
 
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(newPassword, salt);

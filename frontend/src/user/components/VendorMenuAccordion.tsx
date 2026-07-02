@@ -19,7 +19,8 @@ export function VendorMenuAccordion({ menu, colors: c }) {
   function toggle(cat) {
     setOpen((prev) => {
       const n = new Set(prev);
-      n.has(cat) ? n.delete(cat) : n.add(cat);
+      if (n.has(cat)) n.delete(cat);
+      else n.add(cat);
       return n;
     });
   }
@@ -100,7 +101,7 @@ export function VendorMenuAccordion({ menu, colors: c }) {
                           </div>
                         )}
                       </div>
-                      <span className="text-sm font-semibold shrink-0 text-emerald-400">
+                      <span className="text-sm font-semibold shrink-0" style={{ color: c.primary }}>
                         ${Number(item.price).toFixed(2)}
                       </span>
                     </div>

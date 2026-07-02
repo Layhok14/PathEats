@@ -5,12 +5,17 @@ import { Trash2, CheckSquare, Plus, X, Pencil, Search, Expand } from "lucide-rea
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { PhotoUpload } from "../components/PhotoUpload";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { SuccessModal } from "../../shared/components/SuccessModal";
 import { useStalls } from "../../shared/hooks/useStalls";
 import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import { STALL_CATEGORIES, MENU_CATEGORIES } from "../../shared/constants/categories";
 import { formatPrice } from "../../shared/utils/formatters";
 import { LIGHT_VECTOR_STYLE, PHNOM_PENH_CENTER } from "../../shared/constants/appConfig";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+} from "../../shared/utils/maplibreLifecycle";
 import type { StallFormData, StallCategory, VendorMenuItem as MenuItem, MenuCategory } from "../../shared/types";
 import type { MenuItemFormData } from "../../shared/hooks/useMenuItems";
 import api from "../../shared/services/axiosService";
@@ -197,7 +202,7 @@ function CatalogPicker({ selectedIds, onToggle, onClose }: { selectedIds: string
             const sel = selectedIds.includes(item.id);
             return (
               <button key={item.id} onClick={() => onToggle(item.id)} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "8px", border: `2px solid ${sel ? "var(--brand-green)" : "var(--brand-card-border)"}`, background: sel ? "#f0fdf4" : "var(--card)", cursor: "pointer", textAlign: "left" }}>
-                {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded" />}
+                {item.imageUrl && <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-12 h-12 object-cover rounded" />}
                 <div>
                   <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--brand-text-dark)", margin: 0 }}>{item.name}</p>
                   <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-green)", margin: 0 }}>{formatPrice(item.price)}</p>
@@ -223,6 +228,8 @@ function LocationPreviewMap({ lat, lng, onOpenFullscreen, onCoordsChange }: { la
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const detachRecoveryRef = useRef<(() => void) | null>(null);
+  const [mapRecovering, setMapRecovering] = useState(false);
 
   useEffect(() => {
     if (mapRef.current || !mapDivRef.current) return;
@@ -236,7 +243,14 @@ function LocationPreviewMap({ lat, lng, onOpenFullscreen, onCoordsChange }: { la
     });
     mapRef.current = map;
 
+    detachRecoveryRef.current = attachMapContextRecovery(map, {
+      onLost: () => setMapRecovering(true),
+      onRestored: () => setMapRecovering(false),
+    });
+
     map.on("load", () => {
+      setMapRecovering(false);
+      map.resize();
       const el = document.createElement("div");
       el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
       el.style.cursor = "grab";
@@ -260,7 +274,12 @@ function LocationPreviewMap({ lat, lng, onOpenFullscreen, onCoordsChange }: { la
       });
     });
 
-    return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
+    return () => {
+      detachRecoveryRef.current?.();
+      detachRecoveryRef.current = null;
+      removeMapSafely(mapRef);
+      markerRef.current = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -274,6 +293,11 @@ function LocationPreviewMap({ lat, lng, onOpenFullscreen, onCoordsChange }: { la
 
   return (
     <div style={{ position: "relative", borderRadius: "8px", overflow: "hidden" }}>
+      {mapRecovering && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+          <LoadingSpinner message="Recovering map view..." />
+        </div>
+      )}
       <div ref={mapDivRef} style={{ width: "100%", height: "160px" }} />
       <button
         type="button"
@@ -306,6 +330,7 @@ export function StallDetailPage() {
   const [showCatalog, setShowCatalog] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [stallItems, setStallItems] = useState<MenuItem[]>([]);
+  const [itemsError, setItemsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -330,9 +355,12 @@ export function StallDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    setItemsError(null);
     api.get(`/vendor/stalls/${id}/items`).then(({ data }) => {
       setStallItems(data.data.map(mapItem));
-    }).catch((err) => console.error("[StallDetailPage] Failed to load menu items:", err));
+    }).catch(() => {
+      setItemsError("Failed to load menu items.");
+    });
   }, [id]);
 
   useEffect(() => {
@@ -597,7 +625,7 @@ export function StallDetailPage() {
             <div className="flex flex-col gap-3">
               {linkedItems.map((item) => (
                 <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg border" style={{ borderColor: "var(--brand-card-border)", opacity: item.isAvailable ? 1 : 0.6 }}>
-                  {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="w-14 h-14 object-cover rounded-lg shrink-0" />}
+                  {item.imageUrl && <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-14 h-14 object-cover rounded-lg shrink-0" />}
                   <div className="flex-1">
                     <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600, color: "var(--brand-text-dark)", margin: 0 }}>{item.name}</p>
                     <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)", margin: 0 }}>{item.description}</p>

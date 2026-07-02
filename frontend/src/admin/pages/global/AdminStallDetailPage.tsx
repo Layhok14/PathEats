@@ -8,11 +8,17 @@ import {
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import api from "../../../shared/services/axiosService";
+import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
 import { formatPrice } from "../../../shared/utils/formatters";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { ReviewsManager } from "../../../shared/components/ReviewsManager";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import { getAdminPlaceCategories, type AdminStallRow, type AdminMenuItemRow } from "../../services/adminDashboardService";
 import { LIGHT_VECTOR_STYLE } from "../../../shared/constants/appConfig";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+} from "../../../shared/utils/maplibreLifecycle";
 
 type Tab = "info" | "menu" | "reviews";
 
@@ -21,6 +27,8 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const detachRecoveryRef = useRef<(() => void) | null>(null);
+  const [mapRecovering, setMapRecovering] = useState(false);
 
   const handleFullscreen = () => {
     const container = containerRef.current;
@@ -49,7 +57,14 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
 
+    detachRecoveryRef.current = attachMapContextRecovery(map, {
+      onLost: () => setMapRecovering(true),
+      onRestored: () => setMapRecovering(false),
+    });
+
     map.on("load", () => {
+      setMapRecovering(false);
+      map.resize();
       const el = document.createElement("div");
       el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
       el.style.cursor = "grab";
@@ -69,11 +84,21 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
       });
     });
 
-    return () => { map.remove(); mapRef.current = null; markerRef.current = null; };
+    return () => {
+      detachRecoveryRef.current?.();
+      detachRecoveryRef.current = null;
+      removeMapSafely(mapRef);
+      markerRef.current = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ position: "relative", borderRadius: "8px", overflow: "hidden" }}>
+      {mapRecovering && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80">
+          <LoadingSpinner message="Recovering map view..." />
+        </div>
+      )}
       <div ref={containerRef} className="w-full" style={{ height: isFullscreen ? "100vh" : "200px" }} />
       <button
         onClick={handleFullscreen}
@@ -178,6 +203,7 @@ export default function AdminStallDetailPage() {
   const [showCreateItem, setShowCreateItem] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteItemTarget, setDeleteItemTarget] = useState<AdminMenuItemRow | null>(null);
   const [categories, setCategories] = useState<string[]>(["snack", "main course", "drink", "dessert"]);
 
   const loadData = async () => {
@@ -253,13 +279,19 @@ export default function AdminStallDetailPage() {
   };
 
   const handleDeleteItem = async (item: AdminMenuItemRow) => {
-    if (!confirm(`Delete "${item.name}"?`)) return;
+    setDeleteItemTarget(item);
+  };
+
+  const confirmDeleteItem = async () => {
+    if (!deleteItemTarget) return;
     try {
-      await api.delete(`/admin/stalls/menu-items/${item.id}`);
-      toast.success(`"${item.name}" deleted.`);
+      await api.delete(`/admin/stalls/menu-items/${deleteItemTarget.id}`);
+      toast.success(`"${deleteItemTarget.name}" deleted.`);
+      setDeleteItemTarget(null);
       await loadData();
     } catch (err) {
       toast.error("Could not delete menu item.");
+      setDeleteItemTarget(null);
     }
   };
 
@@ -274,12 +306,7 @@ export default function AdminStallDetailPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
-        <p className="mt-3 text-[13px] text-[#94a3b8]">Loading stall details...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Loading stall details..." />;
   }
 
   if (!stall) {
@@ -381,7 +408,7 @@ export default function AdminStallDetailPage() {
                     </button>
                   </div>
                   {stall.photoUrl && (
-                    <img src={stall.photoUrl} alt={stall.name} className="w-full h-48 object-cover rounded-lg" />
+                    <img src={stall.photoUrl} alt={stall.name} loading="lazy" className="w-full h-48 object-cover rounded-lg" />
                   )}
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748b] mb-1">Name</p>
@@ -485,7 +512,7 @@ export default function AdminStallDetailPage() {
                 <div className="flex flex-col gap-3">
                   {stallItems.map(item => (
                     <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg border border-[#e2e8f0]" style={{ opacity: item.isAvailable ? 1 : 0.5 }}>
-                      {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="w-14 h-14 object-cover rounded-lg shrink-0" />}
+                      {item.imageUrl && <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-14 h-14 object-cover rounded-lg shrink-0" />}
                       <div className="flex-1">
                         <p className="text-[14px] font-semibold text-[#0b1c30]">{item.name}</p>
                         {item.description && <p className="text-[12px] text-[#94a3b8]">{item.description}</p>}

@@ -3,8 +3,10 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, Search, Star, ListOrdered, Store, Plus, X, Eye } from "lucide-react";
 import { toast } from "sonner";
 import api from "../services/axiosService";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ReviewsManager } from "./ReviewsManager";
 import { SuccessModal } from "./SuccessModal";
+import { LoadingSpinner } from "./LoadingSpinner";
 import type { AdminStallRow, AdminMenuItemRow } from "../../admin/services/adminDashboardService";
 
 type Tab = "stalls" | "menu-items" | "reviews";
@@ -38,6 +40,8 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
   const [showCreateStall, setShowCreateStall] = useState(false);
   const [showCreateMenuItem, setShowCreateMenuItem] = useState(false);
   const [successState, setSuccessState] = useState<{ message: string } | null>(null);
+  const [deleteStallTarget, setDeleteStallTarget] = useState<AdminStallRow | null>(null);
+  const [deleteMenuItemTarget, setDeleteMenuItemTarget] = useState<AdminMenuItemRow | null>(null);
 
   const loadData = () => {
     Promise.all([
@@ -87,11 +91,16 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
     }
   };
 
-  const handleDeleteStall = async (stall: AdminStallRow) => {
-    if (!confirm(`Delete "${stall.name}"? This will also remove its menu items, hours, and reviews.`)) return;
+  const handleDeleteStall = (stall: AdminStallRow) => {
+    setDeleteStallTarget(stall);
+  };
+
+  const confirmDeleteStall = async () => {
+    if (!deleteStallTarget) return;
     try {
-      await api.delete(`/admin/stalls/${stall.id}`);
-      toast.success(`"${stall.name}" deleted.`);
+      await api.delete(`/admin/stalls/${deleteStallTarget.id}`);
+      toast.success(`"${deleteStallTarget.name}" deleted.`);
+      setDeleteStallTarget(null);
       loadData();
     } catch (err) {
       console.error("[VendorDetailView] Failed to delete stall:", err);
@@ -128,11 +137,16 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
     }
   };
 
-  const handleDeleteMenuItem = async (item: AdminMenuItemRow) => {
-    if (!confirm(`Delete menu item "${item.name}"?`)) return;
+  const handleDeleteMenuItem = (item: AdminMenuItemRow) => {
+    setDeleteMenuItemTarget(item);
+  };
+
+  const confirmDeleteMenuItem = async () => {
+    if (!deleteMenuItemTarget) return;
     try {
-      await api.delete(`/admin/stalls/menu-items/${item.id}`);
-      toast.success(`"${item.name}" deleted.`);
+      await api.delete(`/admin/stalls/menu-items/${deleteMenuItemTarget.id}`);
+      toast.success(`"${deleteMenuItemTarget.name}" deleted.`);
+      setDeleteMenuItemTarget(null);
       loadData();
     } catch (err) {
       console.error("[VendorDetailView] Failed to delete menu item:", err);
@@ -200,12 +214,7 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
-        <p className="mt-3 text-[13px] text-[#94a3b8]">Loading vendor data...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Loading vendor data..." />;
   }
 
   return (

@@ -8,6 +8,7 @@ import { MENU_CATEGORIES } from "../../shared/constants/categories";
 import { formatPrice } from "../../shared/utils/formatters";
 import type { VendorMenuItem as MenuItem, MenuCategory } from "../../shared/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../app/components/ui/dialog";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 
 const inp: React.CSSProperties = {
   width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "4px",
@@ -31,13 +32,30 @@ function ItemFormModal({
     category: (item?.category as MenuCategory) ?? "Snack",
     isAvailable: item?.isAvailable ?? true,
   });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    if (!form.name.trim()) errs.name = "Item name is required";
+    const priceNum = parseFloat(form.price);
+    if (!form.price.trim()) errs.price = "Price is required";
+    else if (isNaN(priceNum) || priceNum < 0) errs.price = "Enter a valid price";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { toast.error("Item name is required."); return; }
-    const priceNum = parseFloat(form.price);
-    if (isNaN(priceNum) || priceNum < 0) { toast.error("Valid price is required."); return; }
+    if (!validate()) return;
     setSaving(true);
     try {
       await onSave({
@@ -69,7 +87,8 @@ function ItemFormModal({
         <form onSubmit={submit} className="flex flex-col gap-4 mt-2">
           <div>
             <label style={lbl}>Item Name *</label>
-            <input type="text" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Chicken Rice" style={inp} />
+            <input type="text" value={form.name} onChange={(e) => { setForm((f) => ({ ...f, name: e.target.value })); clearFieldError("name"); }} placeholder="e.g. Chicken Rice" style={inp} />
+            {fieldErrors.name && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{fieldErrors.name}</p>}
           </div>
           <div>
             <label style={lbl}>Description</label>
@@ -78,7 +97,8 @@ function ItemFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label style={lbl}>Price ($) *</label>
-              <input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="0.00" inputMode="decimal" style={inp} />
+              <input value={form.price} onChange={(e) => { setForm((f) => ({ ...f, price: e.target.value })); clearFieldError("price"); }} placeholder="0.00" inputMode="decimal" style={inp} />
+              {fieldErrors.price && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{fieldErrors.price}</p>}
             </div>
             <div>
               <label style={lbl}>Category</label>
@@ -124,7 +144,7 @@ export function MenuItemsPage() {
   const [modalItem, setModalItem] = useState<MenuItem | null | "new">(null);
   const [deleteTarget, setDeleteTarget] = useState<MenuItem | null>(null);
 
-  const { items, allItems, createItem, updateItem, deleteItem } = useMenuItems(activeCategory);
+  const { items, allItems, createItem, updateItem, deleteItem, loading, error } = useMenuItems(activeCategory);
 
   const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -194,14 +214,26 @@ export function MenuItemsPage() {
         ))}
       </div>
 
+      {/* Loading / Error */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner message="Loading menu items..." />
+        </div>
+      )}
+      {error && !loading && (
+        <div className="flex items-center justify-center py-12">
+          <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "#ef4444" }}>{error}</p>
+        </div>
+      )}
+
       {/* Grid */}
-      {filtered.length > 0 ? (
+      {!loading && !error && filtered.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
           {filtered.map((item) => (
             <div key={item.id} style={{ background: "var(--card)", borderRadius: "10px", border: "1px solid var(--brand-card-border)", overflow: "hidden", opacity: item.isAvailable ? 1 : 0.65 }}>
               <div className="relative h-36 overflow-hidden" style={{ background: "var(--muted)" }}>
                 {item.imageUrl
-                  ? <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                  ? <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
                   : <div className="w-full h-full flex items-center justify-center" style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "24px" }}>🍽</div>
                 }
                 {!item.isAvailable && (
@@ -227,7 +259,7 @@ export function MenuItemsPage() {
             </div>
           ))}
         </div>
-      ) : (
+      ) : !loading && !error && (
         <div className="flex items-center justify-center py-16" style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px" }}>
           No items found. {activeCategory !== "All" && <button onClick={() => setActiveCategory("All")} style={{ color: "var(--brand-green)", background: "none", border: "none", cursor: "pointer", marginLeft: "6px" }}>Show all</button>}
         </div>

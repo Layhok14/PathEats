@@ -2,13 +2,15 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import { catchAsync } from "../utils/catchAsync.js";
+import AppError from "../utils/AppError.js";
 import * as adminController from "../controllers/adminController.js";
 import db, { pool } from "../config/db.js";
 
 const router = Router();
 
 const devAdminBypass = (req, res, next) => {
-  const isDevelopment = process.env.NODE_ENV !== "production";
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
+  const isDevelopment = nodeEnv === "development" || nodeEnv === "dev";
   const isBypassEnabled = process.env.PATHEAT_ADMIN_BYPASS === "true";
 
   if (isDevelopment && isBypassEnabled) {
@@ -391,7 +393,7 @@ router.get("/place-categories", catchAsync(adminController.getPlaceCategories));
  *       200:
  *         description: Approval status updated
  */
-router.post("/vendors/:id/approve", catchAsync(adminController.approveVendor));
+router.post("/vendors/:id/approve", globalAdminOnly, catchAsync(adminController.approveVendor));
 
 /**
  * @swagger
@@ -528,7 +530,7 @@ router.get("/stalls/:id", catchAsync(adminController.getStallById));
  *       201:
  *         description: Stall created
  */
-router.post("/stalls", catchAsync(adminController.createStall));
+router.post("/stalls", globalAdminOnly, catchAsync(adminController.createStall));
 
 /**
  * @swagger
@@ -595,7 +597,7 @@ router.patch("/stalls/:id", catchAsync(adminController.editStall));
  *         description: Stall status toggled
  */
 router.patch("/stalls/:id/toggle", catchAsync(adminController.toggleStallStatus));
-router.delete("/stalls/:id", catchAsync(adminController.deleteStall));
+router.delete("/stalls/:id", globalAdminOnly, catchAsync(adminController.deleteStall));
 
 /**
  * @swagger
@@ -686,7 +688,7 @@ router.post("/stalls/:placeId/menu-items", catchAsync(adminController.createStal
  *       200:
  *         description: Menu item deleted
  */
-router.delete("/stalls/menu-items/:id", catchAsync(adminController.deleteStallMenuItem));
+router.delete("/stalls/menu-items/:id", globalAdminOnly, catchAsync(adminController.deleteStallMenuItem));
 
 /**
  * @swagger
@@ -709,7 +711,7 @@ router.delete("/stalls/menu-items/:id", catchAsync(adminController.deleteStallMe
  *       201:
  *         description: Category created
  */
-router.post("/stalls/place-categories", catchAsync(adminController.createStallCategory));
+router.post("/stalls/place-categories", globalAdminOnly, catchAsync(adminController.createStallCategory));
 
 /**
  * @swagger
@@ -727,7 +729,7 @@ router.post("/stalls/place-categories", catchAsync(adminController.createStallCa
  *       200:
  *         description: Category deleted
  */
-router.delete("/stalls/place-categories/:id", catchAsync(adminController.deleteStallCategory));
+router.delete("/stalls/place-categories/:id", globalAdminOnly, catchAsync(adminController.deleteStallCategory));
 
 /**
  * @swagger
@@ -756,7 +758,7 @@ router.delete("/stalls/place-categories/:id", catchAsync(adminController.deleteS
  *       201:
  *         description: Hours created
  */
-router.post("/stalls/:placeId/place-hours", catchAsync(adminController.createStallPlaceHour));
+router.post("/stalls/:placeId/place-hours", globalAdminOnly, catchAsync(adminController.createStallPlaceHour));
 
 /**
  * @swagger
@@ -774,7 +776,7 @@ router.post("/stalls/:placeId/place-hours", catchAsync(adminController.createSta
  *       200:
  *         description: Hours deleted
  */
-router.delete("/stalls/place-hours/:id", catchAsync(adminController.deleteStallPlaceHour));
+router.delete("/stalls/place-hours/:id", globalAdminOnly, catchAsync(adminController.deleteStallPlaceHour));
 
 /**
  * @swagger
@@ -833,7 +835,7 @@ router.get("/stalls/:placeId/reviews", catchAsync(adminController.getReviewsByPl
  *       201:
  *         description: Review created
  */
-router.post("/stalls/:placeId/reviews", catchAsync(adminController.createStallReview));
+router.post("/stalls/:placeId/reviews", globalAdminOnly, catchAsync(adminController.createStallReview));
 
 /**
  * @swagger
@@ -851,7 +853,7 @@ router.post("/stalls/:placeId/reviews", catchAsync(adminController.createStallRe
  *       200:
  *         description: Review deleted
  */
-router.delete("/stalls/reviews/:id", catchAsync(adminController.deleteStallReview));
+router.delete("/stalls/reviews/:id", globalAdminOnly, catchAsync(adminController.deleteStallReview));
 
 /**
  * @swagger
@@ -900,11 +902,11 @@ router.post("/audit/kill-query", globalAdminOnly, catchAsync(async (req, res) =>
 
 // ── Onboarding Config ──────────────────────────────────────────────────
 router.get("/onboarding", catchAsync(adminController.getOnboardingConfig));
-router.put("/onboarding", catchAsync(adminController.updateOnboardingConfig));
+router.put("/onboarding", globalAdminOnly, catchAsync(adminController.updateOnboardingConfig));
 
 // ── Review Moderation ──────────────────────────────────────────────────
 router.patch("/stalls/reviews/:id/flag", catchAsync(adminController.flagReview));
 router.patch("/stalls/reviews/:id/unflag", catchAsync(adminController.unflagReview));
-router.delete("/stalls/reviews/:id/remove", catchAsync(adminController.removeReview));
+router.delete("/stalls/reviews/:id/remove", globalAdminOnly, catchAsync(adminController.removeReview));
 
 export default router;

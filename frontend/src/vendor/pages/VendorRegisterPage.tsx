@@ -12,15 +12,32 @@ export function VendorRegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    if (!firstName.trim()) errs.firstName = "First name is required";
+    if (!email.trim()) errs.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(email)) errs.email = "Enter a valid email";
+    if (!password) errs.password = "Password is required";
+    else if (password.length < 6) errs.password = "At least 6 characters";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!firstName.trim()) {
-      setError("First name is required.");
-      return;
-    }
     setError("");
+    if (!validate()) return;
     setLoading(true);
     try {
       await vendorSignup({ firstName, lastName, email, password });
@@ -43,15 +60,15 @@ export function VendorRegisterPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="text-xs font-medium text-[#374151] block mb-1.5">First name</label>
+              <label className="text-xs font-medium text-[#374151] block mb-1.5">First name *</label>
               <input
                 type="text"
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                onChange={(e) => { setFirstName(e.target.value); clearFieldError("firstName"); }}
                 placeholder="First"
-                required
                 className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
               />
+              {fieldErrors.firstName && <p className="text-xs text-red-500 mt-1">{fieldErrors.firstName}</p>}
             </div>
             <div className="flex-1">
               <label className="text-xs font-medium text-[#374151] block mb-1.5">Last name</label>
@@ -65,27 +82,26 @@ export function VendorRegisterPage() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-[#374151] block mb-1.5">Email</label>
+            <label className="text-xs font-medium text-[#374151] block mb-1.5">Email *</label>
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }}
               placeholder="vendor@example.com"
-              required
               className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
             />
+            {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
           </div>
           <div>
-            <label className="text-xs font-medium text-[#374151] block mb-1.5">Password</label>
+            <label className="text-xs font-medium text-[#374151] block mb-1.5">Password *</label>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }}
               placeholder="At least 6 characters"
-              required
-              minLength={6}
               className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
             />
+            {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <button

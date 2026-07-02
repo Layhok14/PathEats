@@ -3,12 +3,14 @@
 
 // MapLibre GL styles
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useDeferredValue } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router";
-import { PenLine, Eye, BookmarkPlus, LogOut, X } from "lucide-react";
+import { PenLine, Eye, BookmarkPlus, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { useTheme } from "../../shared/hooks/useTheme";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { useAuth } from "../../shared/hooks/useAuth";
 import { useGeolocation } from "../../shared/hooks/useGeolocation";
 import { PLACES, VENDOR_RANGE_DEFAULT } from "../../shared/constants/appConfig";
@@ -28,7 +30,6 @@ import { HistoryPanel } from "../components/HistoryPanel";
 import { SearchHistoryPanel } from "../components/SearchHistoryPanel";
 import { VendorDetail } from "../components/VendorDetail";
 import { UserProfileModal } from "../components/UserProfileModal";
-import { VendorPhoto } from "../components/VendorPhoto";
 import type { Vendor } from "../../shared/types";
 
 type RoutePlace = {
@@ -57,7 +58,7 @@ function isCurrentLocationText(value = "") {
 
 export default function UserSearchPage() {
   const { darkMode, tm } = useTheme();
-  const { user, isGuest, logout } = useAuth();
+  const { user, isGuest } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -96,11 +97,11 @@ export default function UserSearchPage() {
   const [filterMaxPrice, setFilterMaxPrice] = useState(4);
   const [filterOpenNow, setFilterOpenNow] = useState(false);
   const [vendorSearch, setVendorSearch] = useState("");
+  const deferredVendorSearch = useDeferredValue(vendorSearch);
   const [vendorRange, setVendorRange] = useState(VENDOR_RANGE_DEFAULT);
 
   // ── User data ─────────────────────────────────────────────────────────────
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
-  const [menuVendor, setMenuVendor] = useState<Vendor | null>(null);
   const { bookmarks, toggleBookmark } = useBookmarks();
   const { savedRoutes, addRoute, deleteRoute, clearRoutes } = useSavedRoutes();
   const { history: searchHistory, addSearch, deleteSearch, clearHistory } = useSearchHistory();
@@ -134,26 +135,27 @@ export default function UserSearchPage() {
     loading: vendorLoading,
     error: vendorError,
     refetch: refetchVendors,
+    searchMeta,
   } = useVendors({
     routePoints,
     vendorRange,
     filterCuisine,
     filterMaxPrice,
     filterOpenNow,
-    vendorSearch,
+    vendorSearch: deferredVendorSearch,
   });
   const activeFilterCount =
     (filterCuisine !== "All" ? 1 : 0) +
     (filterMaxPrice < 4 ? 1 : 0) +
     (filterOpenNow ? 1 : 0);
 
-  function handleToggleBookmark(placeId: string | number) {
+  const handleToggleBookmark = useCallback((placeId: string | number) => {
     if (user?.role_scope !== "CONSUMER") {
       navigate("/user/login");
       return;
     }
     toggleBookmark(placeId);
-  }
+  }, [user, navigate, toggleBookmark]);
 
   async function handleFindRoute(overrideOrigin?: RoutePlace, overrideDest?: RoutePlace) {
     const wantsCurrentLocation = !overrideOrigin && isCurrentLocationText(originText);
@@ -217,14 +219,14 @@ export default function UserSearchPage() {
     }
   }
 
-  function handleBack() {
+  const handleBack = useCallback(() => {
     setPage("home");
     setRouteReady(false);
     setEditRouteMode(false);
     setSelectedVendor(null);
     setRouteError("");
     setRouteFallbackWarning("");
-  }
+  }, []);
 
   function handleSaveRoute() {
     addRoute({
@@ -235,6 +237,7 @@ export default function UserSearchPage() {
       destPlace,
       points: routePoints,
     });
+    toast.success("Route saved!");
   }
 
   function handleLoadRoute(r) {
@@ -269,12 +272,11 @@ export default function UserSearchPage() {
     }
   }
 
-  function handleVendorSelect(v) {
-    setMenuVendor(v);
+  const handleVendorSelect = useCallback((v) => {
     setSelectedVendor(v);
-  }
+  }, []);
 
-    const { mapDivRef } = useMaplibreMap({
+    const { mapDivRef, mapRecovering } = useMaplibreMap({
     darkMode,
     routePoints,
     routeReady,
@@ -283,15 +285,16 @@ export default function UserSearchPage() {
     selectedVendorId: selectedVendor?.id ?? null,
     onSelectVendor: handleVendorSelect,
     onWaypointAdded: handleWaypointAdded,
-    onEndpointDrag: (type, lat, lng) => {
+    onEndpointDrag: useCallback((type, lat, lng) => {
       const newOrigin = type === "origin" ? { ...originPlace, lat, lng } : originPlace;
       const newDest = type === "dest" ? { ...destPlace, lat, lng } : destPlace;
       if (type === "origin") setOriginPlace(newOrigin);
       else setDestPlace(newDest);
       handleFindRoute(newOrigin, newDest);
-    },
+    }, [originPlace, destPlace, handleFindRoute]),
     debugPlaces: [],
     userLocation: latitude !== null && longitude !== null ? { latitude, longitude } : null,
+    favorites: bookmarks,
   });
 
   const hasRoute = routeReady && routePoints.length >= 2;
@@ -339,7 +342,7 @@ export default function UserSearchPage() {
               <FavoritesPanel
                 favorites={bookmarks}
                 vendors={scoredVendors}
-                onSelectVendor={(v) => { setMenuVendor(v); setSelectedVendor(v); }}
+                onSelectVendor={(v) => { setSelectedVendor(v); }}
                 onToggleFavorite={handleToggleBookmark}
               />
             </motion.div>
@@ -443,7 +446,8 @@ export default function UserSearchPage() {
                 destText={destText}
                 vendorCount={scoredVendors.length}
                 scoredVendors={scoredVendors}
-                onSelectVendor={(v) => { setMenuVendor(v); setSelectedVendor(v); }}
+                onSelectVendor={(v) => { setSelectedVendor(v); }}
+                searchMeta={searchMeta}
                 filterCuisine={filterCuisine}
                 setFilterCuisine={setFilterCuisine}
                 filterMaxPrice={filterMaxPrice}
@@ -473,10 +477,15 @@ export default function UserSearchPage() {
 
       {/* Map area — click outside dismisses vendor detail */}
       <div className="flex-1 relative overflow-hidden flex flex-col" onClick={() => selectedVendor && setSelectedVendor(null)}>
+        {mapRecovering && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+            <LoadingSpinner message="Recovering map view..." />
+          </div>
+        )}
         <div
           ref={mapDivRef}
           className="w-full transition-[height] duration-200"
-          style={{ height: hasRoute ? "calc(100% - 116px)" : "100%" }}
+          style={{ height: hasRoute ? "calc(100% - 48px)" : "100%" }}
         />
 
         {/* Edit mode banner */}
@@ -484,9 +493,9 @@ export default function UserSearchPage() {
           <div
             className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[400] flex items-center gap-2.5 px-3 py-2 rounded-2xl"
             style={{
-              background: "rgba(99,102,241,0.92)",
+              background: "rgba(34,197,94,0.92)",
               backdropFilter: "blur(12px)",
-              boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
+              boxShadow: "0 4px 20px rgba(34,197,94,0.4)",
             }}
           >
             <PenLine size={13} className="text-white/70 shrink-0" />
@@ -506,6 +515,7 @@ export default function UserSearchPage() {
               onClick={() => {
                 setEditRouteMode(false);
               }}
+              aria-label="Dismiss edit mode"
               className="flex items-center justify-center w-7 h-7 rounded-xl transition-all hover:bg-white/20 active:scale-95"
               style={{ color: "rgba(255,255,255,0.7)" }}
             >
@@ -525,10 +535,10 @@ export default function UserSearchPage() {
               className="flex items-center gap-2 px-3 h-9 rounded-xl transition-all hover:brightness-110 active:scale-95"
               style={
                 editRouteMode
-                  ? {
-                      background: "rgba(99,102,241,0.9)",
-                      backdropFilter: "blur(12px)",
-                      boxShadow: "0 0 0 3px rgba(99,102,241,0.3)",
+                    ? {
+                        background: "rgba(34,197,94,0.9)",
+                        backdropFilter: "blur(12px)",
+                        boxShadow: "0 0 0 3px rgba(34,197,94,0.3)",
                     }
                   : {
                       background: tm.glassCard,
@@ -609,22 +619,6 @@ export default function UserSearchPage() {
           </span>
         </div>
 
-        {/* Logout button for signed-in users */}
-        {!isGuest && (
-          <button
-            onClick={logout}
-            title="Sign out"
-            className="absolute top-4 right-[88px] z-[500] w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
-            style={{
-              background: tm.glassCard,
-              backdropFilter: "blur(12px)",
-              border: `1px solid ${tm.border}`,
-            }}
-          >
-            <LogOut size={14} style={{ color: tm.text3 }} />
-          </button>
-        )}
-
         <div
           className="absolute bottom-2 right-3 z-[400] text-[9px]"
           style={{ color: tm.text4 }}
@@ -632,80 +626,40 @@ export default function UserSearchPage() {
           © OpenStreetMap contributors
         </div>
 
-        {/* Menu strip — vendor tabs + menu items */}
+        {/* Vendor dock — compact pill strip, click opens detail panel */}
         {hasRoute && (
-          <div
+          <motion.div
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-0 left-0 right-0 z-[300]"
             onClick={(e) => e.stopPropagation()}
             style={{
               background: darkMode
-                ? "rgba(15,23,42,0.97)"
-                : "rgba(255,255,255,0.98)",
+                ? "rgba(15,23,42,0.94)"
+                : "rgba(255,255,255,0.96)",
               borderTop: `1px solid ${tm.border}`,
+              backdropFilter: "blur(12px)",
             }}
           >
-            {/* Vendor tabs */}
-            <div className="flex items-center gap-1 px-4 pt-2 pb-1 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-center gap-1.5 px-4 py-2.5 overflow-x-auto [&::-webkit-scrollbar]:hidden">
               {scoredVendors.map((v) => (
-                <button
+                <motion.button
                   key={v.id}
-                  onClick={() => setMenuVendor(v)}
-                  className="shrink-0 text-[10px] font-semibold px-2.5 py-1 rounded-lg transition-colors"
+                  whileTap={{ scale: 0.92 }}
+                  onClick={() => setSelectedVendor(v)}
+                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full transition-colors whitespace-nowrap"
                   style={
-                    menuVendor?.id === v.id
-                      ? { background: "#22c55e", color: "white" }
-                      : { background: tm.surface2, color: tm.text3 }
+                    selectedVendor?.id === v.id
+                      ? { background: tm.primary, color: tm.primaryText }
+                      : { background: tm.surface2, color: tm.text2 }
                   }
                 >
                   {v.name}
-                </button>
+                </motion.button>
               ))}
             </div>
-            {/* Menu items row */}
-            {menuVendor && menuVendor.menu?.length > 0 && (
-              <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden">
-                <div
-                  className="flex gap-3 px-4 py-2"
-                  style={{ width: "max-content", minWidth: "100%" }}
-                >
-                  {menuVendor.menu.map((item, i) => (
-                    <div
-                      key={i}
-                      className="shrink-0 rounded-xl border transition-colors flex flex-col overflow-hidden"
-                      style={{
-                        width: 160,
-                        borderColor: tm.border,
-                        background: darkMode ? "rgba(255,255,255,0.04)" : "#fafafa",
-                      }}
-                    >
-                      <div className="h-20 overflow-hidden bg-[#e2e8f0] shrink-0">
-                        <VendorPhoto
-                          vendor={{
-                            name: item.name,
-                            photo_url: item.image_url || menuVendor.photo_url,
-                          }}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="p-2.5 flex flex-col flex-1">
-                        <p className="text-[11px] font-semibold leading-tight" style={{ color: tm.text1 }}>
-                          {item.name}
-                        </p>
-                        {item.desc && (
-                          <p className="text-[9px] mt-0.5 leading-tight line-clamp-2" style={{ color: tm.text4 }}>
-                            {item.desc}
-                          </p>
-                        )}
-                        <p className="text-[11px] font-bold mt-auto pt-1" style={{ color: "#22c55e" }}>
-                          ${Number(item.price).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          </motion.div>
         )}
 
         {/* Vendor detail slide-in */}

@@ -4,8 +4,14 @@ import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useStalls } from "../../shared/hooks/useStalls";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { SuccessModal } from "../../shared/components/SuccessModal";
 import { PHNOM_PENH_CENTER, LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+  removeMarkersSafely,
+} from "../../shared/utils/maplibreLifecycle";
 
 export function LocationPinpointPage() {
   const navigate = useNavigate();
@@ -13,6 +19,7 @@ export function LocationPinpointPage() {
   const [searchParams] = useSearchParams();
   const { getStall, updateStall, stalls } = useStalls();
   const [showSuccess, setShowSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const isCreateMode = !id;
   const stall = id ? getStall(id) : null;
@@ -28,8 +35,10 @@ export function LocationPinpointPage() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const detachRecoveryRef = useRef<(() => void) | null>(null);
 
   const [coords, setCoords] = useState({ lat: initialLat, lng: initialLng });
+  const [mapRecovering, setMapRecovering] = useState(false);
 
   useEffect(() => {
     if (mapRef.current || !mapDivRef.current) return;
@@ -44,7 +53,14 @@ export function LocationPinpointPage() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
 
+    detachRecoveryRef.current = attachMapContextRecovery(map, {
+      onLost: () => setMapRecovering(true),
+      onRestored: () => setMapRecovering(false),
+    });
+
     map.on("load", () => {
+      setMapRecovering(false);
+      map.resize();
       const el = document.createElement("div");
       el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
       el.style.cursor = "grab";
@@ -70,10 +86,11 @@ export function LocationPinpointPage() {
     });
 
     return () => {
-      otherMarkersRef.current.forEach((m) => m.remove());
-      otherMarkersRef.current = [];
-      map.remove();
-      mapRef.current = null;
+      detachRecoveryRef.current?.();
+      detachRecoveryRef.current = null;
+      removeMarkersSafely(otherMarkersRef);
+      removeMapSafely(mapRef);
+      markerRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -115,8 +132,7 @@ export function LocationPinpointPage() {
     return () => {
       cancelled = true;
       map.off("load", refreshOtherMarkers);
-      otherMarkersRef.current.forEach((m) => m.remove());
-      otherMarkersRef.current = [];
+      removeMarkersSafely(otherMarkersRef);
     };
   }, [stalls, id]);
 
@@ -133,6 +149,7 @@ export function LocationPinpointPage() {
   }, [isCreateMode, stall]);
 
   async function handleConfirm() {
+    setSaving(true);
     try {
       if (isCreateMode) {
         sessionStorage.setItem("stall_create_location", JSON.stringify(coords));
@@ -146,6 +163,8 @@ export function LocationPinpointPage() {
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Could not update stall location.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -155,6 +174,11 @@ export function LocationPinpointPage() {
 
   return (
     <div className="relative overflow-hidden" style={{ height: "100%" }}>
+      {mapRecovering && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+          <LoadingSpinner message="Recovering map view..." />
+        </div>
+      )}
       <div ref={mapDivRef} className="absolute inset-0" />
 
       <div
@@ -206,15 +230,15 @@ export function LocationPinpointPage() {
           >
             Cancel
           </button>
-          <button onClick={handleConfirm}
+          <button onClick={handleConfirm} disabled={saving}
             style={{
               flex: 1, padding: "13px 16px", borderRadius: "4px", border: "none",
               background: "#22c55e", color: "white", fontFamily: "Poppins, sans-serif",
-              fontSize: "14px", fontWeight: 700, cursor: "pointer",
-              boxShadow: "0px 1px 1px rgba(0,0,0,0.05)",
+              fontSize: "14px", fontWeight: 700, cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.7 : 1, boxShadow: "0px 1px 1px rgba(0,0,0,0.05)",
             }}
           >
-            {isCreateMode ? "Use This Location" : "Confirm Location"}
+            {saving ? "Saving..." : "Confirm Location"}
           </button>
         </div>
       </div>

@@ -430,7 +430,8 @@ async function restorePostgresDump(dumpPath) {
 const router = Router();
 
 const devAdminBypass = (req, res, next) => {
-  const isDevelopment = process.env.NODE_ENV !== "production";
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
+  const isDevelopment = nodeEnv === "development" || nodeEnv === "dev";
   const isBypassEnabled = process.env.PATHEAT_DEV_BYPASS === "true";
 
   if (isDevelopment && isBypassEnabled) {

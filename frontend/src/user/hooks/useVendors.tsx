@@ -20,21 +20,28 @@ type UseVendorsResult = {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  /** Search match breakdown — only populated when vendorSearch is active */
+  searchMeta: {
+    total: number;
+    byName: number;
+    byMenu: number;
+  };
 };
 
 function hasCoordinates(vendor: Vendor) {
   return Number.isFinite(Number(vendor.lat)) && Number.isFinite(Number(vendor.lng));
 }
 
-function matchesSearch(vendor: Vendor, query: string) {
-  if (!query) return true;
-  const name = vendor.name?.toLowerCase() ?? "";
-  const menu = Array.isArray(vendor.menu) ? vendor.menu : [];
-
-  return (
-    name.includes(query) ||
-    menu.some((item) => item.name?.toLowerCase().includes(query))
-  );
+function getSearchMatch(vendor: Vendor, query: string) {
+  if (!query) return null;
+  const q = query.toLowerCase();
+  const nameMatch = vendor.name?.toLowerCase().includes(q);
+  const matchedItems = (Array.isArray(vendor.menu) ? vendor.menu : [])
+    .filter((item) => item.name?.toLowerCase().includes(q));
+  return {
+    matchedByName: !!nameMatch,
+    matchedMenuItems: matchedItems.map((i) => i.name),
+  };
 }
 
 export function useVendors({
@@ -83,6 +90,8 @@ export function useVendors({
         const distance = distToRouteM(vendor.lat, vendor.lng, routePoints);
         if (distance > vendorRange) return null;
 
+        const searchMatch = getSearchMatch(vendor, query);
+
         return {
           ...vendor,
           dist_m: Math.round(distance),
@@ -92,13 +101,18 @@ export function useVendors({
             Number(vendor.rating) || 0,
             Number(vendor.wait_time_est) || 0,
           ),
+          _searchMatch: searchMatch,
+          _searchActive: !!query,
         };
       })
       .filter((vendor): vendor is Vendor => vendor !== null)
       .filter((vendor) => filterCuisine === "All" || vendor.cuisine === filterCuisine)
       .filter((vendor) => Number(vendor.price_range) <= filterMaxPrice)
       .filter((vendor) => !filterOpenNow || vendor.open_now)
-      .filter((vendor) => matchesSearch(vendor, query))
+      .filter((vendor) => {
+        if (!query) return true;
+        return vendor._searchMatch !== null;
+      })
       .sort((a, b) => Number(b.final_score) - Number(a.final_score));
   }, [
     allVendors,
@@ -110,5 +124,12 @@ export function useVendors({
     vendorSearch,
   ]);
 
-  return { scoredVendors, allVendors, loading, error, refetch: fetchVendors };
+  const searchMeta = useMemo(() => {
+    const total = scoredVendors.length;
+    const byName = scoredVendors.filter((v) => v._searchMatch?.matchedByName).length;
+    const byMenu = scoredVendors.filter((v) => v._searchMatch?.matchedMenuItems?.length).length;
+    return { total, byName, byMenu };
+  }, [scoredVendors]);
+
+  return { scoredVendors, allVendors, loading, error, refetch: fetchVendors, searchMeta };
 }

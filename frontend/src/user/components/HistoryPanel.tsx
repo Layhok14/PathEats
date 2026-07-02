@@ -60,11 +60,11 @@ export function HistoryPanel({
                 key={r.id}
                 className="px-4 py-3 flex items-start gap-3 transition-colors hover:bg-white/5"
               >
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ background: "rgba(99,102,241,0.15)" }}
-                >
-                  <Navigation2 size={15} style={{ color: "#818cf8" }} />
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                    style={{ background: "rgba(34,197,94,0.15)" }}
+                  >
+                    <Navigation2 size={15} style={{ color: "#22c55e" }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div
@@ -97,6 +97,7 @@ export function HistoryPanel({
                   </button>
                   <button
                     onClick={() => onDeleteRoute(r.id)}
+                    aria-label="Delete route"
                     className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-red-500/20"
                     style={{ background: tm.surface2 }}
                   >

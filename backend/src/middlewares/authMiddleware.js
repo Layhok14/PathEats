@@ -3,7 +3,7 @@ import db from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import { normalizeRoleScope } from "../utils/roles.js";
 
-const JWT_SECRET = process.env.JWT_ACCESS_SECRET || "dev-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_ACCESS_SECRET;
 
 export async function authMiddleware(req, res, next) {
   try {
@@ -44,7 +44,6 @@ export async function authMiddleware(req, res, next) {
       sub: rows[0].id,
       email: rows[0].email,
       role_scope: roleScope,
-      role: roleScope,
     };
     return next();
   } catch (err) {

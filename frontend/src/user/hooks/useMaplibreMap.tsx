@@ -7,6 +7,11 @@ import {
 } from "../../shared/constants/appConfig";
 import { scoreColor } from "../../shared/utils/geoUtils";
 import { PRICE_LABELS } from "../../shared/constants/appConfig";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+  safeSetMapStyle,
+} from "../../shared/utils/maplibreLifecycle";
 
 const ROUTE_LAYER_ID = "route-line";
 const ROUTE_HITBOX_LAYER_ID = "route-hitbox";
@@ -15,7 +20,7 @@ function styleUrl(dark) {
   return dark ? DARK_VECTOR_STYLE : LIGHT_VECTOR_STYLE;
 }
 
-function makeVendorElement(rank, score, selected) {
+function makeVendorElement(rank, score, selected, isFavorite) {
   const el = document.createElement("div");
   const bg = selected ? "#3B82F6" : scoreColor(score);
   el.style.width = "32px";
@@ -28,9 +33,18 @@ function makeVendorElement(rank, score, selected) {
   el.style.alignItems = "center";
   el.style.justifyContent = "center";
   el.style.cursor = "pointer";
-  el.style.boxShadow = selected
-    ? "0 0 0 4px rgba(59,130,246,0.35),0 3px 12px rgba(0,0,0,0.6)"
-    : "0 3px 12px rgba(0,0,0,0.5)";
+
+  // Build box-shadow: selection ring + favorite ring + drop shadow
+  const shadows = [];
+  if (selected) {
+    shadows.push("0 0 0 4px rgba(59,130,246,0.35)");
+  }
+  if (isFavorite && !selected) {
+    shadows.push("0 0 0 4px rgba(245,158,11,0.35)");
+  }
+  shadows.push("0 3px 12px rgba(0,0,0,0.5)");
+  el.style.boxShadow = shadows.join(",");
+
   const span = document.createElement("span");
   span.style.transform = "rotate(45deg)";
   span.style.color = "white";
@@ -40,6 +54,21 @@ function makeVendorElement(rank, score, selected) {
   span.style.lineHeight = "1";
   span.textContent = String(rank);
   el.appendChild(span);
+
+  // Small star indicator for favorites
+  if (isFavorite) {
+    const star = document.createElement("span");
+    star.textContent = "★";
+    star.style.position = "absolute";
+    star.style.top = "-6px";
+    star.style.right = "-6px";
+    star.style.fontSize = "10px";
+    star.style.color = "#f59e0b";
+    star.style.transform = "rotate(45deg)";
+    star.style.textShadow = "0 1px 3px rgba(0,0,0,0.4)";
+    el.appendChild(star);
+  }
+
   return el;
 }
 
@@ -106,6 +135,7 @@ export function useMaplibreMap({
   onEndpointDrag,
   debugPlaces = [],
   userLocation = null,
+  favorites = new Set(),
 }) {
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
@@ -117,8 +147,15 @@ export function useMaplibreMap({
   const routeListenersRef = useRef(null);
   const debugMarkersRef = useRef([]);
   const userMarkRef = useRef(null);
+  const currentStyleUrlRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [styleVersion, setStyleVersion] = useState(0);
+  const [mapRecovering, setMapRecovering] = useState(false);
+  const selectedVendorRef = useRef(selectedVendorId);
+
+  useEffect(() => {
+    selectedVendorRef.current = selectedVendorId;
+  }, [selectedVendorId]);
 
   useEffect(() => {
     editModeRef.current = editRouteMode;
@@ -127,17 +164,31 @@ export function useMaplibreMap({
   // Initialize map
   useEffect(() => {
     if (mapRef.current || !mapDivRef.current) return;
+    const initialStyle = styleUrl(darkMode);
     const map = new maplibregl.Map({
       container: mapDivRef.current,
-      style: styleUrl(darkMode),
+      style: initialStyle,
       center: [PHNOM_PENH_CENTER[1], PHNOM_PENH_CENTER[0]],
       zoom: 14,
       attributionControl: false,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
+    currentStyleUrlRef.current = initialStyle;
+
+    const detachRecoveryHandlers = attachMapContextRecovery(map, {
+      onLost: () => setMapRecovering(true),
+      onRestored: () => {
+        setMapRecovering(false);
+        setMapReady(true);
+        setStyleVersion((version) => version + 1);
+      },
+    });
+
     map.on("load", () => {
       setMapReady(true);
+      setMapRecovering(false);
+      map.resize();
       if (!document.getElementById("pl-pulse-style")) {
         const s = document.createElement("style");
         s.id = "pl-pulse-style";
@@ -146,8 +197,8 @@ export function useMaplibreMap({
       }
     });
     return () => {
-      map.remove();
-      mapRef.current = null;
+      detachRecoveryHandlers();
+      removeMapSafely(mapRef);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -155,9 +206,17 @@ export function useMaplibreMap({
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
-    map.setStyle(styleUrl(darkMode));
-    map.once("styledata", () => {
-      setStyleVersion((v) => v + 1);
+    const nextStyle = styleUrl(darkMode);
+    if (currentStyleUrlRef.current === nextStyle) return;
+
+    return safeSetMapStyle(map, {
+      nextStyle,
+      currentStyleRef: currentStyleUrlRef,
+      onStyleReady: () => setStyleVersion((version) => version + 1),
+      onStyleError: (error) => {
+        console.error("[useMaplibreMap] Failed to update map style:", error);
+        setMapRecovering(false);
+      },
     });
   }, [darkMode]);
 
@@ -323,7 +382,7 @@ export function useMaplibreMap({
     map.fitBounds(bounds, { padding: 40 });
   }, [mapReady, routePoints, styleVersion, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vendor markers — marker pool with ID-based diffing, popups, and auto-fit bounds
+  // Vendor markers — marker pool with ID-based diffing, popups, hover, and fly-to
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     if (!routeReady || editRouteMode) {
@@ -336,6 +395,9 @@ export function useMaplibreMap({
     const map = mapRef.current;
     const prev = vendorMarkersRef.current;
     const ids = new Set(scoredVendors.map((v) => v.id));
+    const vendorMap = new Map(scoredVendors.map((v) => [v.id, v]));
+
+    selectedVendorRef.current = selectedVendorId;
 
     // Remove stale markers
     prev.forEach((entry, id) => {
@@ -354,30 +416,68 @@ export function useMaplibreMap({
       const bg = isSelected ? "#3B82F6" : scoreColor(v.final_score);
       const lngLat = [v.lng, v.lat];
 
+      const isFavorite = favorites.has(String(v.id));
+
       if (existing) {
         existing.marker.setLngLat(lngLat);
         const el = existing.marker.getElement();
         if (el.style.background !== bg) el.style.background = bg;
-        el.style.boxShadow = isSelected
-          ? "0 0 0 4px rgba(59,130,246,0.35),0 3px 12px rgba(0,0,0,0.6)"
-          : "0 3px 12px rgba(0,0,0,0.5)";
+        const shadows = [];
+        if (isSelected) shadows.push("0 0 0 4px rgba(59,130,246,0.35)");
+        else if (isFavorite) shadows.push("0 0 0 4px rgba(245,158,11,0.35)");
+        shadows.push("0 3px 12px rgba(0,0,0,0.5)");
+        el.style.boxShadow = shadows.join(",");
         const span = el.querySelector("span");
         if (span) span.textContent = String(i + 1);
+        // Update favorite star
+        const starEl = el.querySelector("[data-fav-star]");
+        if (isFavorite && !starEl) {
+          const star = document.createElement("span");
+          star.setAttribute("data-fav-star", "");
+          star.textContent = "★";
+          star.style.position = "absolute";
+          star.style.top = "-6px";
+          star.style.right = "-6px";
+          star.style.fontSize = "10px";
+          star.style.color = "#f59e0b";
+          star.style.transform = "rotate(45deg)";
+          star.style.textShadow = "0 1px 3px rgba(0,0,0,0.4)";
+          el.appendChild(star);
+        } else if (!isFavorite && starEl) {
+          starEl.remove();
+        }
+        if (isSelected && selectedVendorId !== existing.lastFlewId) {
+          map.flyTo({ center: lngLat, zoom: 16, duration: 600 });
+          existing.lastFlewId = selectedVendorId;
+        }
       } else {
-        const el = makeVendorElement(i + 1, v.final_score, isSelected);
+        const el = makeVendorElement(i + 1, v.final_score, isSelected, isFavorite);
         const marker = new maplibregl.Marker(el).setLngLat(lngLat).addTo(map);
 
-        el.addEventListener("click", () => {
+        // Hover
+        el.addEventListener("mouseenter", () => {
+          el.style.transform = "rotate(-45deg) scale(1.15)";
+          el.style.transition = "transform 0.15s ease";
+        });
+        el.addEventListener("mouseleave", () => {
+          el.style.transform = "rotate(-45deg) scale(1)";
+        });
+
+        // Click
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
           onSelectVendor(v);
           if (popupRef.current) popupRef.current.remove();
           const overallScore = Math.round((v.final_score / 0.85) * 100);
           const popupHtml = `
-            <div style="font-family:system-ui;padding:4px 2px;min-width:140px">
-              <div style="font-weight:700;font-size:13px;margin-bottom:4px">${v.name}</div>
-              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#555">
+            <div style="font-family:system-ui;padding:6px 8px;min-width:150px">
+              <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:#1e293b">${v.name}</div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b">
                 <span>${v.cuisine}</span>
+                <span>·</span>
                 <span>${PRICE_LABELS[v.price_range]}</span>
-                <span style="font-weight:700;color:${scoreColor(v.final_score)}">${overallScore}/100</span>
+                <span>·</span>
+                <span style="font-weight:700;color:${scoreColor(v.final_score)}">${overallScore}</span>
               </div>
             </div>`;
           const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: [0, -16] })
@@ -385,19 +485,20 @@ export function useMaplibreMap({
             .setHTML(popupHtml)
             .addTo(map);
           popupRef.current = popup;
+          map.flyTo({ center: lngLat, zoom: 16, duration: 400 });
         });
 
-        prev.set(v.id, { marker });
+        prev.set(v.id, { marker, lastFlewId: null });
       }
 
       bounds.extend(lngLat);
     });
 
-    // Fit map to show all vendors
-    if (scoredVendors.length > 0 && !bounds.isEmpty()) {
+    // Fit map to show all vendors on first load only
+    if (scoredVendors.length > 0 && !bounds.isEmpty() && !selectedVendorId && !prev.size) {
       map.fitBounds(bounds, { padding: 60, maxZoom: 16 });
     }
-  }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, scoredVendors, selectedVendorId, routeReady, editRouteMode, favorites]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debug places — grey dots for all vendors
   useEffect(() => {
@@ -442,6 +543,21 @@ export function useMaplibreMap({
     userMarkRef.current = marker;
   }, [mapReady, userLocation, styleVersion]);
 
+  // Click on empty map area deselects the vendor
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    const handleClick = () => {
+      if (!editModeRef.current && selectedVendorRef.current) {
+        onSelectVendor(null);
+      }
+    };
+
+    map.on("click", handleClick);
+    return () => { map.off("click", handleClick); };
+  }, [mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Lock/unlock map panning based on edit mode
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -460,5 +576,5 @@ export function useMaplibreMap({
     }
   }, [editRouteMode, mapReady]);
 
-  return { mapDivRef, mapReady };
+  return { mapDivRef, mapReady, mapRecovering };
 }

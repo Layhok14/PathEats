@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, MapPin, Star, Edit } from "lucide-react";
 import { useStalls } from "../../shared/hooks/useStalls";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { formatPrice } from "../../shared/utils/formatters";
 import api from "../../shared/services/axiosService";
 import type { Stall, VendorMenuItem as MenuItem } from "../../shared/types";
@@ -9,9 +10,11 @@ import type { Stall, VendorMenuItem as MenuItem } from "../../shared/types";
 export function StallViewPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getStall } = useStalls();
+  const { getStall, loading } = useStalls();
   const [stall, setStall] = useState<Stall | null>(null);
   const [linkedItems, setLinkedItems] = useState<MenuItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
+  const [itemsError, setItemsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -20,15 +23,38 @@ export function StallViewPage() {
 
   useEffect(() => {
     if (!id) return;
+    setItemsLoading(true);
+    setItemsError(null);
     api.get(`/vendor/stalls/${id}/items`).then(({ data }) => {
       setLinkedItems(data.data.map(mapItem));
-    }).catch((err) => console.error("[StallViewPage] Failed to load menu items:", err));
+    }).catch(() => {
+      setItemsError("Failed to load menu items.");
+    }).finally(() => setItemsLoading(false));
   }, [id]);
+
+  if (loading || itemsLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center h-64">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   if (!stall) {
     return (
       <div className="p-6 flex flex-col items-center justify-center h-64 gap-4">
         <p style={{ fontFamily: "Poppins, sans-serif", color: "var(--brand-text-muted)" }}>Stall not found.</p>
+        <button onClick={() => navigate("/vendor/stalls")} style={{ padding: "10px 20px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", cursor: "pointer" }}>
+          Back to Stalls
+        </button>
+      </div>
+    );
+  }
+
+  if (itemsError) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center h-64 gap-4">
+        <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "#ef4444" }}>{itemsError}</p>
         <button onClick={() => navigate("/vendor/stalls")} style={{ padding: "10px 20px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", cursor: "pointer" }}>
           Back to Stalls
         </button>
@@ -86,7 +112,7 @@ export function StallViewPage() {
       <div style={card}>
         <div className="flex gap-5">
           {stall.photoUrl && (
-            <img src={stall.photoUrl} alt={stall.name} className="w-36 h-36 object-cover rounded-lg shrink-0" style={{ border: "1px solid var(--brand-card-border)" }} />
+            <img src={stall.photoUrl} alt={stall.name} loading="lazy" className="w-36 h-36 object-cover rounded-lg shrink-0" style={{ border: "1px solid var(--brand-card-border)" }} />
           )}
           <div className="flex-1">
             <div className="flex items-start justify-between">
@@ -163,7 +189,7 @@ export function StallViewPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             {linkedItemsForDisplay.map((item) => (
               <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg border" style={{ borderColor: "var(--brand-card-border)", opacity: item.isAvailable ? 1 : 0.5 }}>
-                <img src={item.imageUrl} alt={item.name} className="w-12 h-12 object-cover rounded-lg shrink-0" />
+                <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-12 h-12 object-cover rounded-lg shrink-0" />
                 <div>
                   <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", fontWeight: 600, color: "var(--brand-text-dark)", margin: 0 }}>{item.name}</p>
                   <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-green)", margin: 0 }}>{formatPrice(item.price)}</p>

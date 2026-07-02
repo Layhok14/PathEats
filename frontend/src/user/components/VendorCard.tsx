@@ -1,5 +1,6 @@
 // Compact vendor card — used in the filter sidebar results list.
 
+import { memo } from "react";
 import { Star, Timer, MapPin, Heart } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { PRICE_LABELS } from "../../shared/constants/appConfig";
@@ -8,17 +9,38 @@ import { VendorPhoto } from "./VendorPhoto";
 
 /**
  * @param {{ vendor: object, rank: number, isFavorite: boolean,
- *           onSelect: ()=>void, onToggleFavorite: (e:Event)=>void }} props
+ *           onSelect: ()=>void, onToggleFavorite: (e:Event)=>void,
+ *           searchQuery?: string }} props
  */
-export function VendorCard({
+export const VendorCard = memo(function VendorCard({
   vendor,
   rank,
   isFavorite,
   onSelect,
   onToggleFavorite,
+  searchQuery,
 }) {
   const { tm } = useTheme();
   const color = scoreColor(vendor.final_score);
+  const sm = vendor._searchMatch;
+
+  function highlightText(text) {
+    if (!searchQuery || !text) return text;
+    const idx = text.toLowerCase().indexOf(searchQuery.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span
+          className="font-bold"
+          style={{ color: tm.primary }}
+        >
+          {text.slice(idx, idx + searchQuery.length)}
+        </span>
+        {text.slice(idx + searchQuery.length)}
+      </>
+    );
+  }
 
   return (
     <div
@@ -40,7 +62,7 @@ export function VendorCard({
             className="text-sm font-semibold truncate"
             style={{ color: tm.text1 }}
           >
-            {vendor.name}
+            {highlightText(vendor.name)}
           </div>
           <button
             onClick={onToggleFavorite}
@@ -58,7 +80,7 @@ export function VendorCard({
             {vendor.cuisine}
           </span>
           <span style={{ color: tm.text5 }}>·</span>
-          <span className="text-[10px] text-amber-400">
+          <span className="text-[10px]" style={{ color: tm.text4 }}>
             {PRICE_LABELS[vendor.price_range]}
           </span>
           <span style={{ color: tm.text5 }}>·</span>
@@ -80,12 +102,12 @@ export function VendorCard({
           >
             <Timer size={9} /> ~{vendor.wait_time_est} min
           </div>
-          <span
-            className="text-[10px]"
-            style={{ color: vendor.open_now ? "#10b981" : "#f87171" }}
-          >
-            {vendor.open_now ? "● Open" : "● Closed"}
-          </span>
+            <span
+              className="text-[10px]"
+              style={{ color: vendor.open_now ? "#22c55e" : "#f87171" }}
+            >
+              {vendor.open_now ? "● Open" : "● Closed"}
+            </span>
           {vendor.final_score !== undefined && (
             <span
               className="text-[10px] font-bold ml-auto"
@@ -95,7 +117,48 @@ export function VendorCard({
             </span>
           )}
         </div>
+
+        {/* Search match details */}
+        {sm && searchQuery && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {sm.matchedByName && (
+              <span
+                className="text-[9px] px-1.5 py-px rounded-full font-medium"
+                style={{
+                  background: tm.primary + "20",
+                  color: tm.primary,
+                }}
+              >
+                Stall match
+              </span>
+            )}
+            {sm.matchedMenuItems?.length > 0 &&
+              sm.matchedMenuItems.slice(0, 3).map((item, i) => (
+                <span
+                  key={i}
+                  className="text-[9px] px-1.5 py-px rounded-full"
+                  style={{
+                    background: tm.filterChip,
+                    color: tm.text3,
+                  }}
+                >
+                  {highlightText(item)}
+                </span>
+              ))}
+            {sm.matchedMenuItems?.length > 3 && (
+              <span
+                className="text-[9px] px-1.5 py-px rounded-full"
+                style={{
+                  background: tm.filterChip,
+                  color: tm.text4,
+                }}
+              >
+                +{sm.matchedMenuItems.length - 3}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
-}
+});

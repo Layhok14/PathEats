@@ -77,15 +77,15 @@ export async function verifyEmailTransport() {
 }
 
 /**
- * Send an OTP email to the user.
+ * Send a password-reset OTP email to the user.
  * @param {string} to - recipient email
  * @param {string} otp - 6-digit OTP code
- * @param {'email_verify'|'password_reset'} type - purpose
+ * @param {'password_reset'} type - purpose
  */
-export async function sendOTPEmail(to, otp, type = "password_reset") {
+export async function sendOTPEmail(to, otp) {
   const config = requireSmtpConfig();
   const subject =
-    type === "email_verify"
+  const subject = "Password Reset OTP - PathEats";
       ? "Verify Your Email - PathEats"
       : "Password Reset OTP - PathEats";
 

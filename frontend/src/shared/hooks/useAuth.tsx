@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import api from "../services/axiosService";
 import { clearAuthStorage } from "../utils/authRedirect";
 import { getApiErrorMessage } from "../utils/apiError";
@@ -15,7 +15,6 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoggedIn: boolean;
   isGuest: boolean;
-  showAuthGate: boolean;
   login: (email: string, password: string, expectedRoles?: string | string[]) => Promise<void>;
   signup: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
   vendorSignup: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
@@ -29,22 +28,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const stored = localStorage.getItem("auth_user");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.id === "dev-vendor-id") {
-          localStorage.removeItem("auth_user");
-          return null;
-        }
-        return parsed;
-      }
+      if (stored) return JSON.parse(stored) as AuthUser;
     } catch (err) { console.error("[useAuth] Failed to parse stored user:", err); }
     return null;
   });
-  const [isGuest, setIsGuest] = useState(true);
-
-  useEffect(() => {
-    if (user) setIsGuest(false);
-  }, [user]);
+  const [isGuest, setIsGuest] = useState(() => !user);
 
   useEffect(() => {
     const handleAuthCleared = () => {
@@ -91,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const refreshToken = localStorage.getItem("auth_refresh_token");
     try {
       if (refreshToken) await api.post("/auth/logout", { refreshToken });
-    } catch { /* ignore */ }
+    } catch { /* logout best-effort */ }
     clearAuthStorage();
     setUser(null);
     setIsGuest(true);
@@ -103,19 +91,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const showAuthGate = !user && !isGuest;
-
-  const value: AuthContextValue = {
+  const value = useMemo<AuthContextValue>(() => ({
     user,
     isLoggedIn: !!user,
     isGuest,
-    showAuthGate,
     login,
     signup,
     vendorSignup,
     logout,
     continueAsGuest,
-  };
+  }), [user, isGuest, login, signup, vendorSignup, logout, continueAsGuest]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -13,6 +13,7 @@ import {
   type DevRecovery,
   type DevTableInfo,
 } from "../../services/developerService";
+import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { DetailModal } from "./devShared";
 
 const BACKUP_METHODS = ["Entire Database", "Specific Tables", "Specific Rows"];
@@ -516,7 +517,7 @@ function BackupTab() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-[13px] text-[#94a3b8]">{loading ? "Loading backups..." : "No backups found."}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-[13px] text-[#94a3b8]">{loading ? <LoadingSpinner inline message="Loading backups..." /> : "No backups found."}</td></tr>
             )}
           </tbody>
         </table>
@@ -617,7 +618,7 @@ function RecoveryTab() {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px] text-[#94a3b8]">{loading ? "Loading recoveries..." : "No recovery operations found."}</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px] text-[#94a3b8]">{loading ? <LoadingSpinner inline message="Loading recoveries..." /> : "No recovery operations found."}</td></tr>
             )}
           </tbody>
         </table>

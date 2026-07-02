@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { getVendorById } from "../services/vendorService";
 import { VendorDetail } from "../components/VendorDetail";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import type { Vendor } from "../../shared/types";
 
 export default function UserVendorDetailPage() {
@@ -58,11 +59,7 @@ export default function UserVendorDetailPage() {
   }
 
   if (loading) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center" style={{ background: tm.appBg }}>
-        <Loader2 size={32} className="animate-spin" style={{ color: tm.primary }} />
-      </div>
-    );
+    return <LoadingSpinner message="Loading vendor details..." />;
   }
 
   if (error || !vendor) {

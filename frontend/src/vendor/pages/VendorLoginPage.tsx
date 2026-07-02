@@ -11,6 +11,7 @@ export function VendorLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,9 +28,27 @@ export function VendorLoginPage() {
     return () => window.removeEventListener("patheats:session-notice", handleNotice);
   }, []);
 
+  function clearFieldError(field: string) {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function validate(): boolean {
+    const errs: Record<string, string> = {};
+    if (!email.trim()) errs.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(email)) errs.email = "Enter a valid email";
+    if (!password) errs.password = "Password is required";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!validate()) return;
     setLoading(true);
     try {
       await login(email, password, "VENDOR");
@@ -56,26 +75,26 @@ export function VendorLoginPage() {
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-[#374151] block mb-1.5">Email</label>
+            <label className="text-xs font-medium text-[#374151] block mb-1.5">Email *</label>
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }}
               placeholder="you@example.com"
-              required
               className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
             />
+            {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
           </div>
           <div>
-            <label className="text-xs font-medium text-[#374151] block mb-1.5">Password</label>
+            <label className="text-xs font-medium text-[#374151] block mb-1.5">Password *</label>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }}
               placeholder="Your password"
-              required
               className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
             />
+            {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <button

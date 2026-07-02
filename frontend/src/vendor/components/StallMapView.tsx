@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
+import {
+  attachMapContextRecovery,
+  removeMapSafely,
+  removeMarkersSafely,
+} from "../../shared/utils/maplibreLifecycle";
 import type { Stall } from "../../shared/types";
 
 interface StallMapViewProps {
@@ -15,6 +21,8 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const detachRecoveryRef = useRef<(() => void) | null>(null);
+  const [mapRecovering, setMapRecovering] = useState(false);
   const mappableStalls = useMemo(() => stalls.filter((stall) =>
     Number.isFinite(stall.location?.latitude) &&
     Number.isFinite(stall.location?.longitude)
@@ -26,14 +34,24 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
 
     if (!mapRef.current) {
       const first = mappableStalls[0];
-      mapRef.current = new maplibregl.Map({
+      const map = new maplibregl.Map({
         container,
         style: LIGHT_VECTOR_STYLE,
         center: [first.location.longitude, first.location.latitude],
         zoom: 13,
         attributionControl: false,
       });
-      mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+      mapRef.current = map;
+
+      detachRecoveryRef.current = attachMapContextRecovery(map, {
+        onLost: () => setMapRecovering(true),
+        onRestored: () => setMapRecovering(false),
+      });
+      map.on("load", () => {
+        setMapRecovering(false);
+        map.resize();
+      });
     }
 
     const map = mapRef.current;
@@ -86,27 +104,27 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
     return () => {
       cancelled = true;
       map.off("load", refreshMarkers);
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
+      removeMarkersSafely(markersRef);
     };
   }, [mappableStalls, onPinClick]);
 
   useEffect(() => {
     return () => {
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-      mapRef.current?.remove();
-      mapRef.current = null;
+      detachRecoveryRef.current?.();
+      detachRecoveryRef.current = null;
+      removeMarkersSafely(markersRef);
+      removeMapSafely(mapRef);
     };
   }, []);
 
   useEffect(() => {
     if (mappableStalls.length > 0) return;
 
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
-    mapRef.current?.remove();
-    mapRef.current = null;
+    detachRecoveryRef.current?.();
+    detachRecoveryRef.current = null;
+    removeMarkersSafely(markersRef);
+    removeMapSafely(mapRef);
+    setMapRecovering(false);
   }, [mappableStalls.length]);
 
   if (loading) {
@@ -115,10 +133,7 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
         className="flex flex-col items-center justify-center h-64 rounded-[var(--radius-lg)] border"
         style={{ background: "var(--muted)", borderColor: "var(--border)" }}
       >
-        <div className="w-6 h-6 border-2 border-[#006e2f] border-t-transparent rounded-full animate-spin" />
-        <p className="mt-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
-          Loading stalls from database...
-        </p>
+        <LoadingSpinner message="Loading stalls from database..." />
       </div>
     );
   }
@@ -167,7 +182,14 @@ export function StallMapView({ stalls, loading = false, onPinClick }: StallMapVi
         </div>
         <span className="ml-auto">Click a pin to manage the stall</span>
       </div>
-      <div ref={mapContainerRef} className="w-full min-h-[360px] md:min-h-[420px]" />
+      <div className="relative">
+        {mapRecovering && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+            <LoadingSpinner message="Recovering map view..." />
+          </div>
+        )}
+        <div ref={mapContainerRef} className="w-full min-h-[360px] md:min-h-[420px]" />
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import * as adminService from "../services/adminService.js";
+import * as adminService from "../services/AdminService.js";
 
 class AdminController {
   constructor(service) {
@@ -85,7 +85,9 @@ class AdminController {
 
   getVendors = async (req, res, next) => {
     try {
-      const vendors = await this.service.getVendors();
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+      const vendors = await this.service.getVendors(page, limit);
       res.json({ success: true, data: vendors });
     } catch (error) {
       next(error);
@@ -262,7 +264,9 @@ class AdminController {
 
   getAllStalls = async (req, res, next) => {
     try {
-      const stalls = await this.service.getAllStalls();
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+      const stalls = await this.service.getAllStalls(page, limit);
       res.json({ success: true, data: stalls });
     } catch (error) {
       next(error);
@@ -329,7 +333,9 @@ class AdminController {
 
   getAllReviews = async (req, res, next) => {
     try {
-      const reviews = await this.service.getAllReviews();
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
+      const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+      const reviews = await this.service.getAllReviews(limit, offset);
       res.json({ success: true, data: reviews });
     } catch (error) {
       next(error);

@@ -1,12 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import db from '../config/db.js';
+import {
+  DEFAULT_PASSWORD,
+  hashPassword,
+  hashUserPassword,
+  hashAllPendingPasswords,
+  writeCredentialsFile,
+} from '../utils/passwordSeeder.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const CREDENTIALS_FILE = path.resolve(__dirname, '../../.seed-credentials.txt');
 
 const SEED_USERS = [
   { email: process.env.SEED_CONSUMER_EMAIL, password: process.env.SEED_CONSUMER_PASSWORD, label: 'CONSUMER' },
@@ -19,28 +27,31 @@ const SEED_USERS = [
 async function run() {
   console.log('Setting up roles and seed user passwords...\n');
 
-  // 1. Hash each password and update the user in the database
+  const credentials = [];
+
+  // 1. Hash passwords for the 5 .env-defined accounts
   for (const u of SEED_USERS) {
     if (!u.email || !u.password) {
       console.warn(`  ⚠  ${u.label}: missing email or password in .env, skipping`);
       continue;
     }
-    const hash = await bcrypt.hash(u.password, 12);
-    const { rowCount } = await db.query(
-      `UPDATE users SET password_hash = $1 WHERE email = $2`,
-      [hash, u.email]
-    );
-    if (rowCount > 0) {
+    const result = await hashUserPassword(u.email, u.password);
+    if (result) {
       console.log(`  ✓  ${u.label}: ${u.email}  (password updated)`);
+      credentials.push({ email: u.email, password: u.password, role: u.label });
     } else {
       console.warn(`  ⚠  ${u.label}: ${u.email} not found in DB — run seed.js first`);
     }
   }
 
-  // 2. Database roles are defined in seed-data.sql via the role table
-  //    (roles.sql file is deprecated) - skip if missing
+  // 2. Hash passwords for ALL remaining users with password_hash = 'pending'
+  const pendingCredentials = await hashAllPendingPasswords(DEFAULT_PASSWORD);
+  credentials.push(...pendingCredentials);
 
-  console.log('\nDone. Users can now log in with the passwords in .env');
+  // 3. Write all credentials to a file
+  writeCredentialsFile(credentials, CREDENTIALS_FILE);
+
+  console.log('\nDone. Users can now log in with the saved credentials.');
 }
 
 run().catch((err) => {

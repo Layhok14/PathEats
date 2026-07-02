@@ -72,7 +72,7 @@ export default function DeveloperUserManagementPage() {
                 className="pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white w-[220px] text-[#374151] placeholder:text-[#94a3b8]" />
             </div>
           </div>
-          <MetricCard label="Banned" value={String(bannedUsers)} sub="" subVariant="amber" topBorderColor="#f59e0b" icon={<Ban size={14} />} accent="#f59e0b" />
+          <MetricCard label="Banned" value={String(bannedUsers)} sub="" subVariant="green" topBorderColor="#22c55e" icon={<Ban size={14} />} accent="#22c55e" />
         </div>
 
         <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">

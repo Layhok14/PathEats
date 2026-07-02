@@ -79,7 +79,7 @@ export function FavoritesPanel({
                   </div>
                   <div
                     className="text-[10px] mt-0.5"
-                    style={{ color: v.open_now ? "#10b981" : tm.text5 }}
+                    style={{ color: v.open_now ? "#22c55e" : tm.text5 }}
                   >
                     {v.open_now ? "● Open now" : "● Closed"}
                   </div>

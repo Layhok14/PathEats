@@ -6,7 +6,9 @@ export type Cuisine =
   | "Rice" | "Nom Banh Chok" | "Kuytev" | "Nompang" | "Chek Chen"
   | "Cafe" | "Banh Sung" | "Banh Xeo" | "Others";
 
-export type EntityId = string | number;
+export type StallCategory = Cuisine;
+
+export type EntityId = string;
 
 // ── User-domain types (consumer search, vendor detail, reviews) ───────────
 export interface Place {
@@ -33,7 +35,7 @@ export interface StorageImage {
 }
 
 export interface Vendor {
-  id: EntityId;
+  id: string;
   name: string;
   cuisine: Cuisine;
   price_range: number;
@@ -50,6 +52,11 @@ export interface Vendor {
   menu: MenuItem[];
   dist_m?: number;
   final_score?: number;
+  _searchMatch?: {
+    matchedByName: boolean;
+    matchedMenuItems: string[];
+  } | null;
+  _searchActive?: boolean;
 }
 
 export interface User {
@@ -63,7 +70,7 @@ export interface User {
 
 export interface Review {
   id: string;
-  vendor_id: EntityId;
+  vendor_id: string;
   user_id: string;
   user_name: string;
   stars: number;
@@ -72,7 +79,7 @@ export interface Review {
 }
 
 export interface SavedRoute {
-  id: EntityId;
+  id: string;
   label: string;
   origin: string;
   dest: string;
@@ -90,10 +97,6 @@ export interface OperatingSchedule {
   weekdays: OperatingHours;
   weekends: OperatingHours;
 }
-
-export type StallCategory =
-  | "Rice" | "Nom Banh Chok" | "Kuytev" | "Nompang" | "Chek Chen"
-  | "Cafe" | "Banh Sung" | "Banh Xeo" | "Others";
 
 export type StallStatus = "open" | "closed";
 
@@ -119,7 +122,7 @@ export interface Stall {
 }
 
 export type MenuCategory =
-  | "All" | "Main Course" | "Snack" | "Drink" | "Dessert";
+  | "Main Course" | "Snack" | "Drink" | "Dessert";
 
 export interface VendorMenuItem {
   id: string;

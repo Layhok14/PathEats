@@ -1,19 +1,4 @@
-const DEFAULT_CODES = {
-  400: "BAD_REQUEST",
-  401: "AUTHENTICATION_REQUIRED",
-  403: "FORBIDDEN",
-  404: "NOT_FOUND",
-  409: "CONFLICT",
-  422: "VALIDATION_FAILED",
-  429: "RATE_LIMITED",
-  500: "INTERNAL_ERROR",
-};
-
-const severityForStatus = (statusCode) => {
-  if (statusCode >= 500) return "error";
-  if (statusCode === 401 || statusCode === 403) return "warning";
-  return "info";
-};
+import { DEFAULT_ERROR_CODES, severityForStatus } from "./errorCodes.js";
 
 class AppError extends Error {
   constructor(message, statusCode = 500, options = {}) {
@@ -25,7 +10,7 @@ class AppError extends Error {
     super(message);
     this.statusCode = Number(statusCode) || 500;
     this.isOperational = true;
-    this.code = options.code || DEFAULT_CODES[this.statusCode] || "APP_ERROR";
+    this.code = options.code || DEFAULT_ERROR_CODES[this.statusCode] || "APP_ERROR";
     this.safeMessage = options.safeMessage || null;
     this.details = options.details || null;
     this.fieldErrors = options.fieldErrors || null;

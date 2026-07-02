@@ -1,19 +1,20 @@
 // Review list + write-a-review form — extracted from VendorDetail.
 // Auth-gates the submission form; unauthenticated users see a sign-in prompt.
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Star, Send } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
 import { timeAgo } from "../../shared/utils/formatters";
 import { useReviews } from "../hooks/useReviews";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 
 const AVATAR_COLORS = ["#22C55E", "#005AC2", "#9333EA", "#F59E0B"];
 
 /**
  * @param {{ vendor: object, colors: object, onSignInRequest: ()=>void }} props
  */
-export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
+export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, onSignInRequest }) {
   const { tm } = useTheme();
   const { user, isLoggedIn } = useAuth();
   const {
@@ -147,9 +148,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
       {/* Review cards */}
       <div className="space-y-3">
         {loading && (
-          <p className="text-[12px]" style={{ color: c.textFaint }}>
-            Loading reviews...
-          </p>
+          <LoadingSpinner message="Loading reviews..." />
         )}
 
         {!loading && reviewLoadError && (
@@ -271,6 +270,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
                 <button
                   key={s}
                   type="button"
+                  aria-label={`${s} star`}
                   onMouseEnter={() => setHover(s)}
                   onMouseLeave={() => setHover(0)}
                   onClick={() => setStars(s)}
@@ -291,7 +291,7 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
               onChange={(e) => setBody(e.target.value)}
               rows={3}
               placeholder="Share your experience…"
-              className="w-full px-3 py-2.5 rounded-xl text-[13px] resize-none focus:outline-none"
+              className="w-full px-3 py-2.5 rounded-xl text-[13px] resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
               style={{
                 background: tm.inputBg,
                 borderWidth: 1,
@@ -314,4 +314,4 @@ export function VendorReviews({ vendor, colors: c, onSignInRequest }) {
       </div>
     </div>
   );
-}
+});
