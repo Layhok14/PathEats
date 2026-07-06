@@ -32,6 +32,7 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pwFieldErrors, setPwFieldErrors] = useState<Record<string, string>>({});
 
@@ -100,6 +101,7 @@ export function SettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setShowChangePassword(false);
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Failed to change password"));
     } finally {
@@ -209,30 +211,49 @@ export function SettingsPage() {
       {/* Security */}
       <div style={sectionCard}>
         <p style={sectionTitle}><Lock size={18} /> Change Password</p>
-        <div className="flex flex-col gap-4">
-          <div>
-            <label style={lbl}>Current Password *</label>
-            <input type="password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); clearFieldError("currentPassword", true); }} placeholder="••••••••" style={inp} />
-            {pwFieldErrors.currentPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.currentPassword}</p>}
-          </div>
-          <div>
-            <label style={lbl}>New Password *</label>
-            <input type="password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearFieldError("newPassword", true); }} placeholder="Min. 8 characters" style={inp} />
-            {pwFieldErrors.newPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.newPassword}</p>}
-          </div>
-          <div>
-            <label style={lbl}>Confirm New Password *</label>
-            <input type="password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword", true); }} style={inp} />
-            {pwFieldErrors.confirmPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.confirmPassword}</p>}
-          </div>
+        {!showChangePassword ? (
           <button
-            onClick={handleChangePassword}
-            disabled={changingPassword}
-            style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-text-dark)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", alignSelf: "flex-start", opacity: changingPassword ? 0.7 : 1 }}
+            onClick={() => { setShowChangePassword(true); setPwFieldErrors({}); }}
+            style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px" }}
           >
-            {changingPassword ? "Updating..." : "Update Password"}
+            <Lock size={16} /> Change Password
           </button>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              <label style={lbl}>Current Password *</label>
+              <input type="password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); clearFieldError("currentPassword", true); }} placeholder="Enter current password" style={inp} />
+              {pwFieldErrors.currentPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.currentPassword}</p>}
+            </div>
+            <div>
+              <label style={lbl}>New Password *</label>
+              <input type="password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearFieldError("newPassword", true); }} placeholder="At least 8 characters" style={inp} />
+              {pwFieldErrors.newPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.newPassword}</p>}
+            </div>
+            <div>
+              <label style={lbl}>Confirm New Password *</label>
+              <input type="password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword", true); }} placeholder="Re-enter new password" style={inp} />
+              {pwFieldErrors.confirmPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.confirmPassword}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleChangePassword}
+                disabled={changingPassword}
+                style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", opacity: changingPassword ? 0.7 : 1 }}
+              >
+                <Lock size={16} />
+                {changingPassword ? "Updating..." : "Update Password"}
+              </button>
+              <button
+                onClick={() => { setShowChangePassword(false); setPwFieldErrors({}); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}
+                disabled={changingPassword}
+                style={{ padding: "10px 24px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "white", color: "#64748b", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 600, cursor: "pointer", opacity: changingPassword ? 0.7 : 1 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Sign Out */}

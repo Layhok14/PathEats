@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from "react-router";
+import { Outlet, NavLink, useNavigate } from "react-router";
 import { useAuth } from "../../shared/hooks/useAuth";
 
 interface NavItem {
@@ -53,7 +53,8 @@ const sections: NavSection[] = [
 ];
 
 export default function AdminMainLayout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const userRole = user?.role_scope ?? "";
   const roleAllowed = (roles: string[]) => roles.includes(userRole);
   const visibleSections = sections
@@ -129,7 +130,9 @@ export default function AdminMainLayout() {
               <p className="text-white text-[11px] font-medium truncate">{displayName}</p>
               <p className="text-[10px] truncate" style={{ color: "#bec6e0" }}>{user?.role_scope ?? "Admin"}</p>
             </div>
-
+            <button onClick={async () => { await logout(); navigate("/admin/login", { replace: true }); }} title="Sign out" className="shrink-0 transition-colors hover:text-white" style={{ color: "#bec6e0" }}>
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" /></svg>
+            </button>
           </div>
         </div>
       </aside>

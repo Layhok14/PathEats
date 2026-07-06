@@ -56,15 +56,12 @@ export function AdminLoginPage() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await login(email, password, [
+      const result = await login(email, password, [
         "GLOBAL_ADMIN",
         "BUSINESS_ASSISTANCE",
         "DEVELOPER_ADMIN",
       ]);
-      // Read role_scope from localStorage (React state not yet updated after await)
-      const stored = localStorage.getItem("auth_user");
-      const role = stored ? JSON.parse(stored).role_scope : "";
-      navigate(ROLE_REDIRECTS[role] || "/admin", { replace: true });
+      navigate(ROLE_REDIRECTS[result.user.role_scope] || "/admin", { replace: true });
     } catch (err: any) {
       setError(getApiErrorMessage(err, "Login failed. Check your credentials."));
     } finally {

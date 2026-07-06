@@ -54,6 +54,7 @@ export function FilterPanel({
   onRetryVendors,
   favorites = new Set(),
   onToggleFavorite = () => {},
+  onViewDetails,
   searchMeta = { total: 0, byName: 0, byMenu: 0 },
 }) {
   const { darkMode, tm } = useTheme();
@@ -483,7 +484,8 @@ export function FilterPanel({
                 ) : (
                   <ChevronDown size={12} style={{ color: tm.text4 }} />
                 )}
-              </button>
+
+              </button>        
               <AnimatePresence initial={false}>
                 {openSections.vendors && (
                   <motion.div
@@ -521,6 +523,15 @@ export function FilterPanel({
                             }}
                             searchQuery={vendorSearch}
                           />
+                          {onViewDetails && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onViewDetails(v); }}
+                              className="w-full text-[10px] font-medium text-right pr-4 pb-1 -mt-1"
+                              style={{ color: tm.primary }}
+                            >
+                              View Details →
+                            </button>
+                          )}
                         </motion.div>
                       ))}
                     </AnimatePresence>

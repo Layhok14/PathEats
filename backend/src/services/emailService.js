@@ -80,17 +80,12 @@ export async function verifyEmailTransport() {
  * Send a password-reset OTP email to the user.
  * @param {string} to - recipient email
  * @param {string} otp - 6-digit OTP code
- * @param {'password_reset'} type - purpose
  */
 export async function sendOTPEmail(to, otp) {
   const config = requireSmtpConfig();
-  const subject =
   const subject = "Password Reset OTP - PathEats";
-      ? "Verify Your Email - PathEats"
-      : "Password Reset OTP - PathEats";
 
-  const purpose =
-    type === "email_verify" ? "verify your email address" : "reset your password";
+  const purpose = "reset your password";
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -112,11 +107,11 @@ export async function sendOTPEmail(to, otp) {
       subject,
       html,
     });
-    console.log(`Email sent: ${info.messageId}`, { to, type });
+    console.log(`Email sent: ${info.messageId}`, { to });
     return info;
   } catch (error) {
     if (error?.isOperational) throw error;
-    console.error("Email sending failed:", error.message, { to, type });
+    console.error("Email sending failed:", error.message, { to });
     throw new AppError("SMTP email delivery failed.", 502, {
       code: "SMTP_DELIVERY_FAILED",
       safeMessage: "Could not send the OTP email. Check SMTP credentials and try again.",

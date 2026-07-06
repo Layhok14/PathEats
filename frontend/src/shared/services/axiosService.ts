@@ -52,12 +52,35 @@ function processQueue(error: unknown, token: string | null = null) {
   pendingQueue = [];
 }
 
+function prefixForUrl(url?: string): "consumer" | "vendor" | "admin" {
+  if (!url) return "consumer";
+  if (url.startsWith("/vendor") || url.startsWith("vendor")) return "vendor";
+  if (url.startsWith("/admin") || url.startsWith("admin")) return "admin";
+  return "consumer";
+}
+
+function getTokenForUrl(url?: string): string | null {
+  const prefix = prefixForUrl(url);
+  return localStorage.getItem(`${prefix}_token`);
+}
+
+function getRefreshTokenForUrl(url?: string): string | null {
+  const prefix = prefixForUrl(url);
+  return localStorage.getItem(`${prefix}_refresh_token`);
+}
+
+function saveTokensForUrl(url: string | undefined, accessToken: string, refreshToken: string) {
+  const prefix = prefixForUrl(url);
+  localStorage.setItem(`${prefix}_token`, accessToken);
+  localStorage.setItem(`${prefix}_refresh_token`, refreshToken);
+}
+
 api.interceptors.request.use((config) => {
   if (isFormDataPayload(config.data)) {
     removeContentTypeHeader(config.headers);
   }
 
-  const token = localStorage.getItem("auth_token");
+  const token = getTokenForUrl(config.url);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -95,7 +118,7 @@ api.interceptors.response.use(
     originalRequest._retry = true;
     isRefreshing = true;
 
-    const refreshToken = localStorage.getItem("auth_refresh_token");
+    const refreshToken = getRefreshTokenForUrl(originalRequest.url);
     if (!refreshToken) {
       isRefreshing = false;
       processQueue(err, null);
@@ -108,8 +131,7 @@ api.interceptors.response.use(
       const newAccessToken = data.data.accessToken;
       const newRefreshToken = data.data.refreshToken;
 
-      localStorage.setItem("auth_token", newAccessToken);
-      localStorage.setItem("auth_refresh_token", newRefreshToken);
+      saveTokensForUrl(originalRequest.url, newAccessToken, newRefreshToken);
 
       processQueue(null, newAccessToken);
 

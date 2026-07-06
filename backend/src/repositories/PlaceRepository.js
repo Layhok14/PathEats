@@ -154,9 +154,9 @@ class PlaceRepository {
       `p.status = 'active'`,
       `p.is_open = TRUE`,
       `ST_Distance(p.location::geography, ST_GeomFromGeoJSON($1)::geography) <= $2`,
-      `($3 IS NULL OR pc.name = $3)`,
-      `($4 IS NULL OR p.price_range <= $4)`,
-      `($5 IS NULL OR p.name ILIKE $5 OR mi_search.names IS NOT NULL)`,
+      `($3::text IS NULL OR pc.name = $3)`,
+      `($4::int IS NULL OR p.price_range <= $4)`,
+      `($5::text IS NULL OR p.name ILIKE $5 OR mi_search.names IS NOT NULL)`,
     ];
 
     const fromClause = `FROM places p
@@ -165,7 +165,7 @@ class PlaceRepository {
         FROM menu_items mi2
         WHERE mi2.place_id = p.id
           AND mi2.is_available = TRUE
-          AND ($5 IS NOT NULL AND mi2.name ILIKE $5)
+          AND ($5::text IS NOT NULL AND mi2.name ILIKE $5)
       ) mi_search ON TRUE
       LEFT JOIN place_categories pc ON pc.id = p.category_id
       LEFT JOIN LATERAL (
@@ -184,7 +184,7 @@ class PlaceRepository {
 
     // Always include search select columns — when $5 is null, defaults are returned
     const searchSelect = `
-      CASE WHEN $5 IS NOT NULL AND p.name ILIKE $5 THEN 1 ELSE 0 END AS match_by_name,
+      CASE WHEN $5::text IS NOT NULL AND p.name ILIKE $5 THEN 1 ELSE 0 END AS match_by_name,
       COALESCE(mi_search.names, '{}'::text[]) AS matched_menu_items
     `;
 

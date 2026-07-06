@@ -297,7 +297,7 @@ class AuthService {
   }
 
   async verifyOtp(email, otpCode) {
-    const otp = await this.otpRepo.verify(email, otpCode, "password_reset");
+    const otp = await this.otpRepo.verifyOnly(email, otpCode, "password_reset");
     if (!otp) throw new AppError("Invalid or expired OTP", 400);
     return { message: "OTP verified successfully" };
   }

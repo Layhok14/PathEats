@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useNavigate } from "react-router";
+import { useAuth } from "../../shared/hooks/useAuth";
 
 const navItems = [
   { label: "Dashboard", path: "/developer", icon: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" },
@@ -8,6 +9,7 @@ const navItems = [
 ];
 
 export default function DeveloperLayout() {
+  const { logout } = useAuth();
   const navigate = useNavigate();
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: "#f8fafc" }}>
@@ -29,7 +31,7 @@ export default function DeveloperLayout() {
           <div className="flex items-center gap-2 px-3 py-2.5 mt-2">
             <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-[11px] font-bold shrink-0">AU</div>
             <div className="flex-1 min-w-0"><p className="text-white text-[11px] font-medium truncate">Admin User</p><p className="text-[10px] truncate" style={{ color: "#bec6e0" }}>DEVELOPER_ADMIN</p></div>
-            <button onClick={() => navigate("/")} title="Logout" className="shrink-0 transition-colors hover:text-white" style={{ color: "#bec6e0" }}>
+            <button onClick={async () => { await logout(); navigate("/admin/login", { replace: true }); }} title="Logout" className="shrink-0 transition-colors hover:text-white" style={{ color: "#bec6e0" }}>
               <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" /></svg>
             </button>
           </div>

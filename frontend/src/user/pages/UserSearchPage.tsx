@@ -29,6 +29,7 @@ import { FavoritesPanel } from "../components/FavoritesPanel";
 import { HistoryPanel } from "../components/HistoryPanel";
 import { SearchHistoryPanel } from "../components/SearchHistoryPanel";
 import { VendorDetail } from "../components/VendorDetail";
+import { MenuGallery } from "../components/MenuGallery";
 import { UserProfileModal } from "../components/UserProfileModal";
 import type { Vendor } from "../../shared/types";
 
@@ -101,9 +102,14 @@ export default function UserSearchPage() {
   const [vendorRange, setVendorRange] = useState(VENDOR_RANGE_DEFAULT);
 
   // ── User data ─────────────────────────────────────────────────────────────
+  const [showVendorDetails, setShowVendorDetails] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const selectVendor = useCallback((v: Vendor | null) => {
+    setSelectedVendor(v);
+    setShowVendorDetails(false);
+  }, []);
   const { bookmarks, toggleBookmark } = useBookmarks();
-  const { savedRoutes, addRoute, deleteRoute, clearRoutes } = useSavedRoutes();
+  const { savedRoutes, addRoute, deleteRoute, clearRoutes, updateRouteLabel } = useSavedRoutes();
   const { history: searchHistory, addSearch, deleteSearch, clearHistory } = useSearchHistory();
 
   const { latitude, longitude, loading: geoLoading, error: geoError } = useGeolocation();
@@ -200,7 +206,7 @@ export default function UserSearchPage() {
         setRouteFallbackWarning("Live routing unavailable — showing approximate route.");
       }
       setRouteReady(true);
-      setSelectedVendor(null);
+      selectVendor(null);
       setPage("filter");
       if (originText.trim() && destText.trim()) {
         addSearch({
@@ -223,13 +229,13 @@ export default function UserSearchPage() {
     setPage("home");
     setRouteReady(false);
     setEditRouteMode(false);
-    setSelectedVendor(null);
+    selectVendor(null);
     setRouteError("");
     setRouteFallbackWarning("");
   }, []);
 
-  function handleSaveRoute() {
-    addRoute({
+  async function handleSaveRoute() {
+    const result = await addRoute({
       label: originText && destText ? `${originText} → ${destText}` : "Custom Route",
       origin: originText,
       dest: destText,
@@ -237,7 +243,11 @@ export default function UserSearchPage() {
       destPlace,
       points: routePoints,
     });
-    toast.success("Route saved!");
+    if (result?.success) {
+      toast.success("Route saved!");
+    } else {
+      toast.error(result?.message || "Route already saved");
+    }
   }
 
   function handleLoadRoute(r) {
@@ -272,9 +282,9 @@ export default function UserSearchPage() {
     }
   }
 
-  const handleVendorSelect = useCallback((v) => {
-    setSelectedVendor(v);
-  }, []);
+    const handleVendorSelect = useCallback((v) => {
+      selectVendor(v);
+    }, [selectVendor]);
 
     const { mapDivRef, mapRecovering } = useMaplibreMap({
     darkMode,
@@ -314,7 +324,7 @@ export default function UserSearchPage() {
           setPage("home");
           setRouteReady(false);
           setEditRouteMode(false);
-          setSelectedVendor(null);
+          selectVendor(null);
           setRouteError("");
         }}
         onAuthRequired={() => navigate("/user/login")}
@@ -342,7 +352,7 @@ export default function UserSearchPage() {
               <FavoritesPanel
                 favorites={bookmarks}
                 vendors={scoredVendors}
-                onSelectVendor={(v) => { setSelectedVendor(v); }}
+                onSelectVendor={(v) => { selectVendor(v); }}
                 onToggleFavorite={handleToggleBookmark}
               />
             </motion.div>
@@ -385,6 +395,11 @@ export default function UserSearchPage() {
                 onLoadRoute={handleLoadRoute}
                 onDeleteRoute={(id) => deleteRoute(id)}
                 onClearAll={() => clearRoutes()}
+                onUpdateLabel={async (id, label) => {
+                  const res = await updateRouteLabel(id, label);
+                  if (res && !res.success) toast.error(res.message);
+                  return res;
+                }}
               />
             </motion.div>
           )}
@@ -446,7 +461,8 @@ export default function UserSearchPage() {
                 destText={destText}
                 vendorCount={scoredVendors.length}
                 scoredVendors={scoredVendors}
-                onSelectVendor={(v) => { setSelectedVendor(v); }}
+                onSelectVendor={(v) => { selectVendor(v); }}
+                onViewDetails={(v) => { setSelectedVendor(v); setShowVendorDetails(true); }}
                 searchMeta={searchMeta}
                 filterCuisine={filterCuisine}
                 setFilterCuisine={setFilterCuisine}
@@ -475,8 +491,14 @@ export default function UserSearchPage() {
         </AnimatePresence>
       </aside>
 
-      {/* Map area — click outside dismisses vendor detail */}
-      <div className="flex-1 relative overflow-hidden flex flex-col" onClick={() => selectedVendor && setSelectedVendor(null)}>
+      {/* Map area — click outside dismisses vendor detail or returns to gallery */}
+      <div className="flex-1 relative overflow-hidden flex flex-col" onClick={() => {
+        if (showVendorDetails) {
+          setShowVendorDetails(false);
+        } else {
+          selectVendor(null);
+        }
+      }}>
         {mapRecovering && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
             <LoadingSpinner message="Recovering map view..." />
@@ -485,7 +507,7 @@ export default function UserSearchPage() {
         <div
           ref={mapDivRef}
           className="w-full transition-[height] duration-200"
-          style={{ height: hasRoute ? "calc(100% - 48px)" : "100%" }}
+          style={{ height: selectedVendor && !showVendorDetails ? "calc(100% - 130px)" : "100%" }}
         />
 
         {/* Edit mode banner */}
@@ -626,55 +648,32 @@ export default function UserSearchPage() {
           © OpenStreetMap contributors
         </div>
 
-        {/* Vendor dock — compact pill strip, click opens detail panel */}
-        {hasRoute && (
+        {/* Menu gallery — shows selected vendor's menu items with pictures */}
+        {selectedVendor && !showVendorDetails && (
           <motion.div
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-0 left-0 right-0 z-[300]"
             onClick={(e) => e.stopPropagation()}
-            style={{
-              background: darkMode
-                ? "rgba(15,23,42,0.94)"
-                : "rgba(255,255,255,0.96)",
-              borderTop: `1px solid ${tm.border}`,
-              backdropFilter: "blur(12px)",
-            }}
           >
-            <div className="flex items-center gap-1.5 px-4 py-2.5 overflow-x-auto [&::-webkit-scrollbar]:hidden">
-              {scoredVendors.map((v) => (
-                <motion.button
-                  key={v.id}
-                  whileTap={{ scale: 0.92 }}
-                  onClick={() => setSelectedVendor(v)}
-                  className="shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-full transition-colors whitespace-nowrap"
-                  style={
-                    selectedVendor?.id === v.id
-                      ? { background: tm.primary, color: tm.primaryText }
-                      : { background: tm.surface2, color: tm.text2 }
-                  }
-                >
-                  {v.name}
-                </motion.button>
-              ))}
-            </div>
+            <MenuGallery vendor={selectedVendor} />
           </motion.div>
         )}
 
-        {/* Vendor detail slide-in */}
+        {/* Vendor detail slide-in — only opens when user clicks "Details" */}
         <div
           className="absolute top-0 right-0 bottom-0 z-[1000] transition-transform duration-300"
           style={{
             width: 360,
-            transform: selectedVendor ? "translateX(0)" : "translateX(100%)",
+            transform: showVendorDetails && selectedVendor ? "translateX(0)" : "translateX(100%)",
             boxShadow: "-8px 0 32px rgba(0,0,0,0.35)",
           }}
         >
-          {selectedVendor && (
+          {showVendorDetails && selectedVendor && (
             <VendorDetail
               vendor={selectedVendor}
-              onClose={() => setSelectedVendor(null)}
+              onClose={() => setShowVendorDetails(false)}
               isFavorite={bookmarks.has(String(selectedVendor.id))}
               onToggleFavorite={() => handleToggleBookmark(selectedVendor.id)}
             />

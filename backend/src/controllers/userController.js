@@ -132,6 +132,29 @@ export const deleteRoute = catchAsync(async (req, res) => {
   res.json({ success: true, data: { deleted: true } });
 });
 
+export const updateRoute = catchAsync(async (req, res) => {
+  const { label } = req.body;
+  if (!label || !label.trim()) throw new AppError("Label is required", 400);
+
+  const { rowCount } = await db.query(
+    `SELECT id FROM routes WHERE user_id = $1 AND label = $2 AND id != $3 LIMIT 1`,
+    [req.user.sub, label.trim(), req.params.id]
+  );
+  if (rowCount > 0) {
+    throw new AppError("You already have a route with that label", 409, {
+      code: "DUPLICATE_LABEL",
+      safeMessage: "You already have a saved route with that name.",
+    });
+  }
+
+  const { rows } = await db.query(
+    `UPDATE routes SET label = $1 WHERE id = $2 AND user_id = $3 RETURNING id, label, origin, destination, waypoints, saved_at`,
+    [label.trim(), req.params.id, req.user.sub]
+  );
+  if (rows.length === 0) throw new AppError("Route not found", 404);
+  res.json({ success: true, data: rows[0] });
+});
+
 // ── Search History ──
 
 export const getHistory = catchAsync(async (req, res) => {

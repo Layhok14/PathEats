@@ -306,7 +306,7 @@ export default function UserLoginPage() {
             <div>
               <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Password *</label>
               <div className="relative">
-                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }} placeholder="At least 6 characters" className={inp + " pr-10"} />
+                <input type={showPw ? "text" : "password"} value={password} onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }} placeholder="At least 8 characters" className={inp + " pr-10"} />
                 <button type="button" onClick={() => setShowPw((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "#94a3b8" }}>
                   {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>

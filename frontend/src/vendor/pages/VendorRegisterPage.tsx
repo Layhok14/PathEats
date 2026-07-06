@@ -29,7 +29,7 @@ export function VendorRegisterPage() {
     if (!email.trim()) errs.email = "Email is required";
     else if (!/\S+@\S+\.\S+/.test(email)) errs.email = "Enter a valid email";
     if (!password) errs.password = "Password is required";
-    else if (password.length < 6) errs.password = "At least 6 characters";
+    else if (password.length < 6) errs.password = "At least 8 characters";
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -98,7 +98,7 @@ export function VendorRegisterPage() {
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); clearFieldError("password"); }}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
             />
             {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}

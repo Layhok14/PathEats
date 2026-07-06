@@ -1,19 +1,62 @@
 // Saved routes panel — load or delete previously bookmarked routes.
 
+import { useState, useRef, useEffect } from "react";
 import { Navigation2, Clock, BookMarked, X } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 
 /**
  * @param {{ savedRoutes: object[], onLoadRoute: (r:object)=>void,
- *           onDeleteRoute: (id:number)=>void, onClearAll: ()=>void }} props
+ *           onDeleteRoute: (id:number)=>void, onClearAll: ()=>void,
+ *           onUpdateLabel: (id:number|string, label:string)=>Promise<any> }} props
  */
 export function HistoryPanel({
   savedRoutes,
   onLoadRoute,
   onDeleteRoute,
   onClearAll,
+  onUpdateLabel,
 }) {
   const { tm } = useTheme();
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
+
+  function startEdit(r) {
+    setEditingId(r.id);
+    setEditValue(r.label || `${r.origin} → ${r.dest}`);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue("");
+  }
+
+  async function saveEdit() {
+    const id = editingId;
+    const val = editValue;
+    cancelEdit();
+    if (!id || !val.trim()) return;
+    const result = await onUpdateLabel(id, val.trim());
+    cancelEdit();
+    if (result && !result.success) {
+      // toast is handled by the parent
+    }
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") {
+      saveEdit();
+    } else if (e.key === "Escape") {
+      cancelEdit();
+    }
+  }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -67,12 +110,26 @@ export function HistoryPanel({
                     <Navigation2 size={15} style={{ color: "#22c55e" }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div
-                    className="text-[12px] font-semibold truncate"
-                    style={{ color: tm.text1 }}
-                  >
-                    {r.label || `${r.origin} → ${r.dest}`}
-                  </div>
+                  {editingId === r.id ? (
+                    <input
+                      ref={inputRef}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={saveEdit}
+                      onKeyDown={handleKeyDown}
+                      className="w-full bg-transparent border-b outline-none text-[12px] font-semibold"
+                      style={{ color: tm.text1, borderColor: tm.primary }}
+                    />
+                  ) : (
+                    <div
+                      className="text-[12px] font-semibold truncate cursor-pointer hover:opacity-80"
+                      style={{ color: tm.text1 }}
+                      onClick={() => startEdit(r)}
+                      title="Click to rename"
+                    >
+                      {r.label || `${r.origin} → ${r.dest}`}
+                    </div>
+                  )}
                   <div
                     className="text-[10px] mt-0.5 truncate"
                     style={{ color: tm.text4 }}

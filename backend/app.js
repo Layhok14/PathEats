@@ -25,14 +25,29 @@ process.on("unhandledRejection", (reason) => {
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("[FATAL] Uncaught Exception:", err.message);
+  console.error("[FATAL] Uncaught Exception:", err.message, err.stack);
   if (process.env.NODE_ENV === "production") {
     process.exit(1);
   }
 });
 
-app.listen(PORT, () => {
+let server = app.listen(PORT, () => {
   console.log(`\nPathEat API running on port ${PORT}`);
   console.log(`Swagger UI: http://localhost:${PORT}/api-docs`);
   console.log(`Health: http://localhost:${PORT}/api/health\n`);
 });
+
+function gracefulShutdown(signal) {
+  console.log(`\n[${signal}] Shutting down gracefully...`);
+  server.close(() => {
+    console.log("HTTP server closed.");
+    process.exit(0);
+  });
+  setTimeout(() => {
+    console.error("Forced shutdown after timeout.");
+    process.exit(1);
+  }, 10000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

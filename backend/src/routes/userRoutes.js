@@ -20,6 +20,7 @@ router.delete("/bookmarks/:placeId", userController.removeBookmark);
 router.get("/routes", userController.getRoutes);
 router.post("/routes", userController.addRoute);
 router.delete("/routes", userController.deleteAllRoutes);
+router.patch("/routes/:id", userController.updateRoute);
 router.delete("/routes/:id", userController.deleteRoute);
 
 // Search History

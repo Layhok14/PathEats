@@ -70,6 +70,25 @@ class OtpRepository {
   }
 
   /**
+   * Verify an OTP without marking it as used.
+   * Used to check the OTP before the actual password reset step.
+   */
+  async verifyOnly(email, otpCode, type = "password_reset") {
+    const { rows } = await db.query(
+      `SELECT * FROM otps
+       WHERE LOWER(email) = LOWER($1)
+         AND otp_code = $2
+         AND type = $3
+         AND is_used = FALSE
+         AND expires_at > NOW()
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [email, otpCode, type]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
    * Invalidate all unused OTPs for an email (e.g., after password reset).
    */
   async invalidateAll(email, type = "password_reset") {

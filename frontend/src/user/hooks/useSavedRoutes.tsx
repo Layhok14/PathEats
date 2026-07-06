@@ -54,11 +54,21 @@ export function useSavedRoutes() {
   }, [isLoggedIn]);
 
   const addRoute = useCallback(async (routeData: any) => {
+    const isDuplicate = savedRoutesRef.current.some((r) => {
+      const sameOrigin = r.origin === (routeData.origin || routeData.originPlace?.name);
+      const sameDest = r.dest === (routeData.dest || routeData.destPlace?.name);
+      const samePoints = JSON.stringify(r.points) === JSON.stringify(routeData.points || []);
+      return sameOrigin && sameDest && samePoints;
+    });
+    if (isDuplicate) {
+      return { success: false, message: "Route already saved" };
+    }
+
     if (!isLoggedIn) {
       const localId = Date.now();
       const entry = { ...routeData, id: localId, savedAt: new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) };
       setSavedRoutes((prev) => [entry, ...prev].slice(0, 20));
-      return;
+      return { success: true };
     }
 
     const tempId = Date.now();
@@ -75,8 +85,40 @@ export function useSavedRoutes() {
       setSavedRoutes((prev) =>
         prev.map((r) => (r.id === tempId ? normalizeRoute(data.data) : r))
       );
+      return { success: true };
     } catch {
       setSavedRoutes((prev) => prev.filter((r) => r.id !== tempId));
+      return { success: false, message: "Failed to save route" };
+    }
+  }, [isLoggedIn]);
+
+  const updateRouteLabel = useCallback(async (id: string | number, newLabel: string) => {
+    const trimmed = newLabel.trim();
+    if (!trimmed) return { success: false, message: "Label cannot be empty" };
+
+    const isDuplicate = savedRoutesRef.current.some(
+      (r) => r.id !== id && r.label === trimmed
+    );
+    if (isDuplicate) {
+      return { success: false, message: "You already have a route with that name" };
+    }
+
+    const originalLabel = savedRoutesRef.current.find((r) => r.id === id)?.label;
+
+    setSavedRoutes((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, label: trimmed } : r))
+    );
+
+    if (!isLoggedIn) return { success: true };
+
+    try {
+      await api.patch(`/user/routes/${id}`, { label: trimmed });
+      return { success: true };
+    } catch {
+      setSavedRoutes((prev) => prev.map((r) =>
+        r.id === id ? { ...r, label: originalLabel || r.label } : r
+      ));
+      return { success: false, message: "Failed to update label" };
     }
   }, [isLoggedIn]);
 
@@ -101,5 +143,5 @@ export function useSavedRoutes() {
     }
   }, [isLoggedIn]);
 
-  return { savedRoutes, addRoute, deleteRoute, clearRoutes, loading };
+  return { savedRoutes, addRoute, deleteRoute, clearRoutes, updateRouteLabel, loading };
 }
