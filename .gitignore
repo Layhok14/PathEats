@@ -10,9 +10,9 @@ coverage/      # test coverage
 *.log
 .commandcode
 .vscode
-**.sql
-!backend/src/db/*.sql
-!backend/src/db/migrations/*.sql
+# **.sql
+# !backend/src/db/*.sql
+# !backend/src/db/migrations/*.sql
 to-integrate/
 
 .opencode/
