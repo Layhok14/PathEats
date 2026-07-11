@@ -204,33 +204,6 @@ export default function AdminDashboardPage() {
             )}
           </div>
         </div>
-
-        {/* Weekly growth chart */}
-        {telemetry?.growth && telemetry.growth.length > 0 && (
-          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#f1f5f9]">
-              <h2 className="text-[16px] font-semibold text-[#0b1c30]">Weekly Search Activity</h2>
-            </div>
-            <div className="p-6">
-              <div className="flex items-end gap-3 h-[120px]">
-                {telemetry.growth.map((g) => {
-                  const max = Math.max(...telemetry.growth.map((x) => x.orders), 1);
-                  const height = Math.max((g.orders / max) * 100, 4);
-                  return (
-                    <div key={g.day} className="flex-1 flex flex-col items-center gap-1">
-                      <span className="text-[10px] font-medium text-[#64748b]">{g.orders}</span>
-                      <div
-                        className="w-full rounded-t-md bg-[#006e2f] transition-all"
-                        style={{ height: `${height}%`, minHeight: 4, opacity: g.orders > 0 ? 1 : 0.3 }}
-                      />
-                      <span className="text-[10px] text-[#94a3b8]">{g.day}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -132,6 +132,11 @@ export async function createAdminStall(payload: {
   address?: string;
   priceRange?: string;
   photoUrl?: string;
+  latitude?: number;
+  longitude?: number;
+  status?: string;
+  operatingHours?: import("../../shared/types").OperatingSchedule;
+  menuItemIds?: string[];
 }): Promise<{ id: string; name: string }> {
   const response = await api.post<{ success: boolean; data: { id: string; name: string } }>("/admin/stalls", payload);
   return response.data.data;
@@ -151,8 +156,8 @@ export async function createAdminStallMenuItem(placeId: string, payload: {
   await api.post(`/admin/stalls/${placeId}/menu-items`, payload);
 }
 
-export async function deleteAdminStallMenuItem(id: string): Promise<void> {
-  await api.delete(`/admin/stalls/menu-items/${id}`);
+export async function deleteAdminStallMenuItem(id: string, placeId?: string): Promise<void> {
+  await api.delete(`/admin/stalls/menu-items/${id}`, { params: placeId ? { placeId } : {} });
 }
 
 export async function createAdminStallCategory(payload: {
@@ -267,6 +272,7 @@ export interface AdminStallRow {
   address: string | null;
   priceRange: string | null;
   photoUrl: string | null;
+  storageImage?: import("../../shared/types").StorageImage | null;
   isAdminManaged: boolean;
   isOpen: boolean;
   status: string;
@@ -279,6 +285,7 @@ export interface AdminStallRow {
   ownerName: string;
   category: { id: string; name: string; slug: string } | null;
   location: { type: string; coordinates: [number, number] } | null;
+  operatingHours?: Array<{ dayOfWeek: number; opensAt: string; closesAt: string; isClosed: boolean }>;
 }
 
 export interface AdminMenuItemRow {
@@ -307,12 +314,16 @@ export interface AuditActivityRow {
 }
 
 export async function getAdminAllStalls(): Promise<AdminStallRow[]> {
-  const response = await api.get<{ success: boolean; data: AdminStallRow[] }>("/admin/stalls");
+  const response = await api.get<{ success: boolean; data: AdminStallRow[] }>("/admin/stalls", {
+    params: { limit: 1000 },
+  });
   return response.data.data;
 }
 
 export async function getAdminStallsByOwner(ownerId: string): Promise<AdminStallRow[]> {
-  const response = await api.get<{ success: boolean; data: AdminStallRow[] }>(`/admin/stalls/owner/${ownerId}`);
+  const response = await api.get<{ success: boolean; data: AdminStallRow[] }>(`/admin/stalls/owner/${ownerId}`, {
+    params: { limit: 1000 },
+  });
   return response.data.data;
 }
 
@@ -464,7 +475,9 @@ export interface AdminReview {
 }
 
 export async function getAdminAllReviews(): Promise<AdminReview[]> {
-  const response = await api.get<{ success: boolean; data: AdminReview[] }>("/admin/reviews");
+  const response = await api.get<{ success: boolean; data: AdminReview[] }>("/admin/reviews", {
+    params: { limit: 2000 },
+  });
   return response.data.data;
 }
 

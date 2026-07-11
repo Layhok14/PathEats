@@ -6,6 +6,11 @@ import {
   upsertPrimaryPlaceImage,
 } from "../utils/storageImageMetadata.js";
 import { normalizePlaceStatus, PLACE_STATUS, statusFromOpenFlag } from "../utils/placeStatus.js";
+import {
+  normalizeOperatingSchedule,
+  PLACE_HOURS_JSON_SELECT,
+  replacePlaceHours,
+} from "../utils/placeHours.js";
 
 const menuItemCategory = (cat) => {
   const norm = {
@@ -41,7 +46,8 @@ class VendorRepository {
               pi.mime_type AS image_mime_type,
               pi.alt_text AS image_alt_text,
               pc.slug AS category_slug, pc.name AS category_name,
-              p.category_id
+              p.category_id,
+              ${PLACE_HOURS_JSON_SELECT}
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        LEFT JOIN LATERAL (
@@ -71,7 +77,8 @@ class VendorRepository {
               pi.mime_type AS image_mime_type,
               pi.alt_text AS image_alt_text,
               pc.slug AS category_slug, pc.name AS category_name,
-              p.category_id
+              p.category_id,
+              ${PLACE_HOURS_JSON_SELECT}
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        LEFT JOIN LATERAL (
@@ -121,50 +128,28 @@ class VendorRepository {
       );
 
       await upsertPrimaryPlaceImage(client, rows[0].id, data, uploadedBy(data, data.owner_id));
-      await this.copyMenuItemsToPlace(client, rows[0].id, data.owner_id, data.menu_item_ids);
+      await replacePlaceHours(client, rows[0].id, normalizeOperatingSchedule(data));
+      await this.linkMenuItemsToPlace(client, rows[0].id, data.owner_id, data.menu_item_ids);
       return rows[0];
     });
 
     return this.findOwnedById(place.id, data.owner_id);
   }
 
-  async copyMenuItemsToPlace(client, placeId, ownerId, sourceItemIds = []) {
+  async linkMenuItemsToPlace(client, placeId, ownerId, sourceItemIds = []) {
     if (!Array.isArray(sourceItemIds) || sourceItemIds.length === 0) return;
 
-    const sourceResult = await client.query(
-      `SELECT id FROM menu_items mi
-       JOIN places source_place ON source_place.id = mi.place_id
-       WHERE source_place.owner_id = $1
-         AND mi.id::text = ANY($2::text[])
-       ORDER BY mi.id`,
-      [ownerId, sourceItemIds]
-    );
-    const sourceIds = sourceResult.rows.map((r) => r.id);
-
-    const insertResult = await client.query(
-      `INSERT INTO menu_items (place_id, name, description, price, category, image_url, is_available)
-       SELECT $1, mi.name, mi.description, mi.price, mi.category, mi.image_url, mi.is_available
+    const { rowCount } = await client.query(
+      `INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
+       SELECT $1, mi.id, TRUE
        FROM menu_items mi
-       JOIN places source_place ON source_place.id = mi.place_id
-       WHERE source_place.owner_id = $2
+       WHERE mi.owner_id = $2
          AND mi.id::text = ANY($3::text[])
-       ORDER BY mi.id
-       RETURNING id`,
+       ON CONFLICT (place_id, menu_item_id) DO NOTHING`,
       [placeId, ownerId, sourceItemIds]
     );
-    const newIds = insertResult.rows.map((r) => r.id);
-
-    if (sourceIds.length > 0 && newIds.length > 0) {
-      await client.query(
-        `WITH pairs AS (
-           SELECT unnest($1::uuid[]) AS new_id, unnest($2::uuid[]) AS source_id
-         )
-         INSERT INTO menu_item_images (menu_item_id, bucket_name, object_path, uploaded_by, mime_type, size_bytes, alt_text, sort_order, is_primary)
-         SELECT pairs.new_id, mii.bucket_name, mii.object_path, mii.uploaded_by, mii.mime_type, mii.size_bytes, mii.alt_text, mii.sort_order, mii.is_primary
-         FROM pairs
-         JOIN menu_item_images mii ON mii.menu_item_id = pairs.source_id`,
-        [newIds, sourceIds]
-      );
+    if (rowCount !== sourceItemIds.length) {
+      throw new Error("One or more menu items do not belong to this vendor");
     }
   }
 
@@ -215,6 +200,16 @@ class VendorRepository {
       if (!rows[0]) return null;
 
       await upsertPrimaryPlaceImage(client, id, data, uploadedBy(data, ownerId));
+      await replacePlaceHours(client, id, normalizeOperatingSchedule(data));
+      // Sync menu item links when explicitly provided (same as admin updateStall behavior)
+      if (data.menu_item_ids !== undefined || data.menuItemIds !== undefined) {
+        const ids = data.menu_item_ids ?? data.menuItemIds ?? [];
+        const normalizedIds = [...new Set((Array.isArray(ids) ? ids : []).map(String))];
+        await client.query("DELETE FROM place_menu_items WHERE place_id = $1", [id]);
+        if (normalizedIds.length > 0) {
+          await this.linkMenuItemsToPlace(client, id, ownerId, normalizedIds);
+        }
+      }
       return rows[0];
     });
 
@@ -235,11 +230,16 @@ class VendorRepository {
   }
 
   async deleteStall(id, ownerId) {
-    const { rowCount } = await db.query(
-      `DELETE FROM places WHERE id = $1 AND owner_id = $2`,
-      [id, ownerId]
-    );
-    return rowCount > 0;
+    return db.transaction(async (client) => {
+      await client.query("DELETE FROM place_menu_items WHERE place_id = $1", [id]);
+      await client.query("DELETE FROM place_hours WHERE place_id = $1", [id]);
+      await client.query("DELETE FROM place_images WHERE place_id = $1", [id]);
+      const { rowCount } = await client.query(
+        `DELETE FROM places WHERE id = $1 AND owner_id = $2`,
+        [id, ownerId]
+      );
+      return rowCount > 0;
+    });
   }
 
   async updateStatus(id, status) {
@@ -271,7 +271,7 @@ class VendorRepository {
     return rows[0];
   }
 
-  async getReviews(ownerId, limit = 100) {
+  async getReviews(ownerId, limit = 2000) {
     const { rows } = await db.query(
       `SELECT r.id, r.rating AS stars, r.body, r.created_at,
               u.first_name || ' ' || u.last_name AS user_name,
@@ -290,12 +290,12 @@ class VendorRepository {
   async getAllMenuItems(ownerId, limit = 200) {
     const { rows } = await db.query(
       `SELECT mi.*,
+              COALESCE((SELECT bool_or(pmi.is_available) FROM place_menu_items pmi WHERE pmi.menu_item_id = mi.id), TRUE) AS is_available,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
               mii.alt_text AS image_alt_text
        FROM menu_items mi
-       JOIN places p ON p.id = mi.place_id
        LEFT JOIN LATERAL (
          SELECT bucket_name, object_path, mime_type, alt_text
          FROM menu_item_images
@@ -303,7 +303,7 @@ class VendorRepository {
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
          LIMIT 1
        ) mii ON TRUE
-       WHERE p.owner_id = $1
+       WHERE mi.owner_id = $1
        ORDER BY mi.created_at DESC
        LIMIT $2`,
       [ownerId, limit]
@@ -314,12 +314,14 @@ class VendorRepository {
   async getMenuItems(placeId, ownerId) {
     const { rows } = await db.query(
       `SELECT mi.*,
+              pmi.is_available,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
               mii.alt_text AS image_alt_text
-       FROM menu_items mi
-       JOIN places p ON p.id = mi.place_id
+       FROM place_menu_items pmi
+       JOIN menu_items mi ON mi.id = pmi.menu_item_id
+       JOIN places p ON p.id = pmi.place_id
        LEFT JOIN LATERAL (
          SELECT bucket_name, object_path, mime_type, alt_text
          FROM menu_item_images
@@ -327,7 +329,7 @@ class VendorRepository {
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
          LIMIT 1
        ) mii ON TRUE
-       WHERE mi.place_id = $1 AND p.owner_id = $2
+       WHERE pmi.place_id = $1 AND p.owner_id = $2
        ORDER BY mi.created_at DESC`,
       [placeId, ownerId]
     );
@@ -345,7 +347,6 @@ class VendorRepository {
       description: data.description,
       price: data.price,
       category: data.category !== undefined ? menuItemCategory(data.category) : undefined,
-      is_available: data.is_available,
     };
     if (image_url !== undefined) fields.image_url = image_url;
 
@@ -357,7 +358,8 @@ class VendorRepository {
     }
 
     const hasImageUpdate = hasStorageImageInput(data);
-    if (setClauses.length === 0 && !hasImageUpdate) return null;
+    const hasAvailabilityUpdate = data.is_available !== undefined || data.isAvailable !== undefined;
+    if (setClauses.length === 0 && !hasImageUpdate && !hasAvailabilityUpdate) return null;
     values.push(itemId, ownerId);
 
     return db.transaction(async (client) => {
@@ -365,32 +367,36 @@ class VendorRepository {
         ? await client.query(
             `UPDATE menu_items mi
              SET ${setClauses.join(", ")}
-             FROM places p
-             WHERE mi.id = $${idx} AND mi.place_id = p.id AND p.owner_id = $${idx + 1}
+             WHERE mi.id = $${idx} AND mi.owner_id = $${idx + 1}
              RETURNING mi.*`,
             values
           )
         : await client.query(
             `SELECT mi.*
              FROM menu_items mi
-             JOIN places p ON p.id = mi.place_id
-             WHERE mi.id = $${idx} AND p.owner_id = $${idx + 1}
+             WHERE mi.id = $${idx} AND mi.owner_id = $${idx + 1}
              LIMIT 1`,
             values
           );
 
       if (!rows[0]) return null;
 
+      if (hasAvailabilityUpdate) {
+        await client.query(
+          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
+           WHERE menu_item_id = $2`,
+          [data.is_available ?? data.isAvailable, itemId]
+        );
+      }
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata(rows[0], image);
+      return withMenuImageMetadata({ ...rows[0], is_available: data.is_available ?? data.isAvailable ?? true }, image);
     });
   }
 
   async deleteMenuItemGlobal(ownerId, itemId) {
     const { rowCount } = await db.query(
       `DELETE FROM menu_items mi
-       USING places p
-       WHERE mi.id = $1 AND mi.place_id = p.id AND p.owner_id = $2`,
+       WHERE mi.id = $1 AND mi.owner_id = $2`,
       [itemId, ownerId]
     );
     return rowCount > 0;
@@ -400,12 +406,20 @@ class VendorRepository {
     const image_url = imageDisplayUrlFromStorageInput(data, ["image_url", "imageUrl"]);
     return db.transaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO menu_items (place_id, name, description, price, category, image_url, is_available)
-         SELECT $1, $2, $3, $4, $5, $6, $7
-         WHERE EXISTS (
-           SELECT 1 FROM places WHERE id = $1 AND owner_id = $8
+        `WITH owned_place AS (
+           SELECT id, owner_id FROM places WHERE id = $1 AND owner_id = $7
+         ), created_item AS (
+           INSERT INTO menu_items (owner_id, name, description, price, category, image_url)
+           SELECT owner_id, $2, $3, $4, $5, $6 FROM owned_place
+           RETURNING *
+         ), linked_item AS (
+           INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
+           SELECT $1, id, $8 FROM created_item
          )
-         RETURNING *`,
+         SELECT * FROM created_item
+         WHERE EXISTS (
+           SELECT 1 FROM owned_place
+         )`,
         [
           placeId,
           data.name,
@@ -413,15 +427,36 @@ class VendorRepository {
           data.price,
           menuItemCategory(data.category),
           image_url ?? null,
-          data.is_available !== false,
           ownerId,
+          data.is_available ?? data.isAvailable ?? true,
         ]
       );
 
       if (!rows[0]) return null;
 
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata(rows[0], image);
+      return withMenuImageMetadata({ ...rows[0], is_available: data.is_available ?? data.isAvailable ?? true }, image);
+    });
+  }
+
+  async createMenuItemGlobal(ownerId, data) {
+    const image_url = imageDisplayUrlFromStorageInput(data, ["image_url", "imageUrl"]);
+    return db.transaction(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO menu_items (owner_id, name, description, price, category, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [
+          ownerId,
+          data.name,
+          data.description || null,
+          data.price,
+          menuItemCategory(data.category),
+          image_url ?? null,
+        ]
+      );
+      const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
+      return withMenuImageMetadata({ ...rows[0], is_available: true }, image);
     });
   }
 
@@ -436,7 +471,6 @@ class VendorRepository {
       description: data.description,
       price: data.price,
       category: data.category !== undefined ? menuItemCategory(data.category) : undefined,
-      is_available: data.is_available,
     };
     if (image_url !== undefined) fields.image_url = image_url;
 
@@ -448,7 +482,8 @@ class VendorRepository {
     }
 
     const hasImageUpdate = hasStorageImageInput(data);
-    if (setClauses.length === 0 && !hasImageUpdate) return null;
+    const hasAvailabilityUpdate = data.is_available !== undefined || data.isAvailable !== undefined;
+    if (setClauses.length === 0 && !hasImageUpdate && !hasAvailabilityUpdate) return null;
     values.push(itemId, placeId, ownerId);
 
     return db.transaction(async (client) => {
@@ -456,38 +491,69 @@ class VendorRepository {
         ? await client.query(
             `UPDATE menu_items mi
              SET ${setClauses.join(", ")}
-             FROM places p
-             WHERE mi.id = $${idx} AND mi.place_id = $${idx + 1}
-               AND p.id = $${idx + 1} AND p.owner_id = $${idx + 2}
+             FROM place_menu_items pmi, places p
+             WHERE mi.id = $${idx} AND pmi.menu_item_id = mi.id AND pmi.place_id = $${idx + 1}
+               AND p.id = pmi.place_id AND p.owner_id = $${idx + 2}
              RETURNING mi.*`,
             values
           )
         : await client.query(
             `SELECT mi.*
              FROM menu_items mi
-             JOIN places p ON p.id = mi.place_id
-             WHERE mi.id = $${idx} AND mi.place_id = $${idx + 1}
-               AND p.id = $${idx + 1} AND p.owner_id = $${idx + 2}
+             JOIN place_menu_items pmi ON pmi.menu_item_id = mi.id
+             JOIN places p ON p.id = pmi.place_id
+             WHERE mi.id = $${idx} AND pmi.place_id = $${idx + 1}
+               AND p.owner_id = $${idx + 2}
              LIMIT 1`,
             values
           );
 
       if (!rows[0]) return null;
 
+      if (data.is_available !== undefined || data.isAvailable !== undefined) {
+        await client.query(
+          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
+           WHERE place_id = $2 AND menu_item_id = $3`,
+          [data.is_available ?? data.isAvailable, placeId, itemId]
+        );
+      }
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata(rows[0], image);
+      return withMenuImageMetadata({ ...rows[0], is_available: data.is_available ?? data.isAvailable }, image);
     });
   }
 
   async deleteMenuItem(placeId, itemId, ownerId) {
     const { rowCount } = await db.query(
-      `DELETE FROM menu_items mi
-       USING places p
-       WHERE mi.id = $1 AND mi.place_id = $2
-         AND p.id = $2 AND p.owner_id = $3`,
+      `DELETE FROM place_menu_items pmi
+       USING places p, menu_items mi
+       WHERE pmi.menu_item_id = $1 AND pmi.place_id = $2
+         AND p.id = pmi.place_id AND p.owner_id = $3
+         AND mi.id = pmi.menu_item_id AND mi.owner_id = p.owner_id`,
       [itemId, placeId, ownerId]
     );
     return rowCount > 0;
+  }
+  async findNearbyStalls(latitude, longitude, excludeOwnerId = null, radiusMeters = 50) {
+    const params = [longitude, latitude, radiusMeters];
+    let excludeClause = "";
+    if (excludeOwnerId) {
+      excludeClause = `AND p.owner_id != $4`;
+      params.push(excludeOwnerId);
+    }
+    const { rows } = await db.query(
+      `SELECT p.id, p.name,
+              ST_Y(p.location::geometry) AS lat,
+              ST_X(p.location::geometry) AS lng,
+              ST_Distance(p.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) AS distance_meters
+       FROM places p
+       WHERE p.status != 'deleted'
+         AND ST_Distance(p.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) <= $3
+         ${excludeClause}
+       ORDER BY distance_meters ASC
+       LIMIT 5`,
+      params
+    );
+    return rows;
   }
 }
 

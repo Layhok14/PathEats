@@ -4,12 +4,17 @@ import type { VendorMenuItem as MenuItem, MenuCategory } from "../types";
 
 export type MenuItemFormData = Omit<MenuItem, "id">;
 
-export function useMenuItems(filterCategory?: MenuCategory) {
+export function useMenuItems(filterCategory?: MenuCategory, options: { disabled?: boolean } = {}) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
+    if (options.disabled) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -21,7 +26,7 @@ export function useMenuItems(filterCategory?: MenuCategory) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [options.disabled]);
 
   useEffect(() => {
     fetchItems();
@@ -76,7 +81,7 @@ function mapItem(row: any): MenuItem {
         }
       : null),
     category: mapCategory(row.category),
-    isAvailable: row.is_available,
+    isAvailable: row.is_available ?? true,
   };
 }
 

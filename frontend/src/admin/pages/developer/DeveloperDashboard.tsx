@@ -136,7 +136,7 @@ export default function DeveloperDashboard() {
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[16px] font-semibold text-[#0b1c30]">Recent System Events</h2>
-              <button onClick={() => navigate("/admin/audit")} className="inline-flex items-center gap-1 text-[12px] font-medium text-[#006e2f] hover:text-[#005a26]">
+              <button onClick={() => navigate("/developer/activity")} className="inline-flex items-center gap-1 text-[12px] font-medium text-[#006e2f] hover:text-[#005a26]">
                 View All <ExternalLink size={12} />
               </button>
             </div>
@@ -201,7 +201,7 @@ export default function DeveloperDashboard() {
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#f1f5f9] flex items-center justify-between">
               <h2 className="text-[16px] font-semibold text-[#0b1c30]">Recent Developer Activity</h2>
-              <button onClick={() => navigate("/admin/audit")} className="inline-flex items-center gap-1 text-[12px] font-medium text-[#006e2f] hover:text-[#005a26]">
+              <button onClick={() => navigate("/developer/activity")} className="inline-flex items-center gap-1 text-[12px] font-medium text-[#006e2f] hover:text-[#005a26]">
                 View All <ExternalLink size={12} />
               </button>
             </div>

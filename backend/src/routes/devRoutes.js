@@ -1,6 +1,5 @@
-import { spawn } from "child_process";
-import { createReadStream, createWriteStream } from "fs";
-import { mkdtemp, rm, stat, writeFile } from "fs/promises";
+import { createReadStream } from "fs";
+import { mkdtemp, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import { Router } from "express";
@@ -12,136 +11,61 @@ import db from "../config/db.js";
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import {
+  BACKUP_METHODS,
+  SCHEDULE_UNITS,
+  formatBytes,
+  safeDownloadName,
+  validateIdentifier,
+  validateBackupProfile,
+  quoteIdent,
+  generateBackupForProfile,
+  ensureBackupStorageDir,
+  verifyLogicalBackupArtifact,
+} from "../services/backupService.js";
+import {
+  inspectPostgresDump as inspectPostgresDumpSafe,
+  buildConflictClause,
+  getRestoreMetadata,
+  restoreFullPostgresDump,
+  restoreLogicalBackup,
+  restorePartialPostgresDump,
+} from "../services/backupRecoveryService.js";
+import {
   getUserManagementOverview,
   getVendorManagementOverview,
 } from "../services/AdminService.js";
+import { logAuditAction } from "../repositories/adminRepository.js";
 
 const MAX_RECOVERY_FILE_BYTES = 100 * 1024 * 1024;
 const REQUIRED_RECOVERY_CONFIRMATION = "RECOVER";
 const POSTGRES_DUMP_CONFIRMATION = "RESTORE POSTGRES DUMP";
-const RECOVERY_TYPES = new Set(["PostgreSQL Dump", "Row Level CSV"]);
-const BACKUP_METHODS = new Set(["Entire Database", "Specific Tables", "Specific Rows"]);
-const SCHEDULE_UNITS = new Set(["Hours", "Days", "Months"]);
-const SAFE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/i;
-const PREFERRED_BACKUP_TABLE_ORDER = [
-  "role",
-  "users",
-  "refresh_tokens",
-  "audit_log",
-  "session_events",
-  "user_preferences",
-  "user_profile_images",
-  "place_categories",
-  "places",
-  "place_images",
-  "place_hours",
-  "menu_items",
-  "menu_item_images",
-  "routes",
-  "bookmarks",
-  "search_history",
-  "reviews",
-  "onboarding_config",
-  "query_presets",
-  "database_activity_log",
-  "backup_profiles",
-  "recovery_operations",
-];
+const RECOVERY_TYPES = new Set(["PostgreSQL Dump", "Logical Backup", "Row Level CSV"]);
+
+
+
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_RECOVERY_FILE_BYTES },
   fileFilter: (_req, file, cb) => {
     const ext = file.originalname.split(".").pop()?.toLowerCase();
-    if (["dump", "backup", "pgdump", "csv"].includes(ext)) return cb(null, true);
-    cb(new AppError("Only .dump, .backup, .pgdump, and .csv files are allowed", 400));
+    if (["dump", "backup", "pgdump", "json", "csv"].includes(ext)) return cb(null, true);
+    cb(new AppError("Only .dump, .backup, .pgdump, .json, and .csv files are allowed", 400));
   },
 });
 
-const quoteIdent = (identifier) => `"${identifier.replace(/"/g, '""')}"`;
 
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  let size = bytes;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-}
 
-function safeDownloadName(value) {
-  const name = String(value || "backup")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-  return name || "backup";
-}
 
-function parseScope(scope = "full") {
-  return String(scope || "full")
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce((acc, part) => {
-      const delimiterIndex = part.indexOf(":");
-      if (delimiterIndex === -1) {
-        acc[part] = "";
-      } else {
-        acc[part.slice(0, delimiterIndex)] = part.slice(delimiterIndex + 1);
-      }
-      return acc;
-    }, {});
-}
 
-async function getPublicTableNames(client) {
-  const result = await client.query(`
-    SELECT table_name
-    FROM information_schema.tables
-    WHERE table_schema = 'public'
-      AND table_type = 'BASE TABLE'
-    ORDER BY table_name
-  `);
 
-  const tableNames = result.rows.map((row) => row.table_name);
-  const existing = new Set(tableNames);
-  const preferred = PREFERRED_BACKUP_TABLE_ORDER.filter((tableName) => existing.has(tableName));
-  const remaining = tableNames.filter((tableName) => !PREFERRED_BACKUP_TABLE_ORDER.includes(tableName));
-  return [...preferred, ...remaining];
-}
 
-function resolveBackupTables(scope, availableTables) {
-  const available = new Set(availableTables);
-  const parts = parseScope(scope);
 
-  if (parts.tables) {
-    const tableNames = parts.tables
-      .split(",")
-      .map((name) => name.trim())
-      .filter(Boolean);
-    if (tableNames.length === 0 || tableNames.includes("all")) {
-      return { tableNames: availableTables, filters: new Map() };
-    }
-    tableNames.forEach((tableName) => {
-      validateIdentifier(tableName, "Backup table");
-      if (!available.has(tableName)) throw new AppError(`Backup table "${tableName}" does not exist`, 400);
-    });
-    return { tableNames, filters: new Map() };
-  }
 
-  if (parts.table) {
-    const tableName = parts.table.trim();
-    validateIdentifier(tableName, "Backup table");
-    if (!available.has(tableName)) throw new AppError(`Backup table "${tableName}" does not exist`, 400);
-    return { tableNames: [tableName], filters: new Map([[tableName, parts.filter || "all"]]) };
-  }
 
-  return { tableNames: availableTables, filters: new Map() };
-}
+
+
 
 function parseCsvLine(line) {
   const values = [];
@@ -169,11 +93,7 @@ function parseCsvLine(line) {
   return values.map((value) => value.trim());
 }
 
-function validateIdentifier(identifier, label) {
-  if (!SAFE_IDENTIFIER_PATTERN.test(String(identifier ?? ""))) {
-    throw new AppError(`${label} contains unsafe characters`, 400);
-  }
-}
+
 
 function validateRecoveryContent(_content, type) {
   const issues = [];
@@ -187,218 +107,20 @@ function expectedRecoveryConfirmation(type) {
   return type === "PostgreSQL Dump" ? POSTGRES_DUMP_CONFIRMATION : REQUIRED_RECOVERY_CONFIRMATION;
 }
 
-function postgresToolConfig() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new AppError("DATABASE_URL is not configured for PostgreSQL backup tools", 500);
-  }
 
-  let parsed;
-  try {
-    parsed = new URL(databaseUrl);
-  } catch {
-    throw new AppError("DATABASE_URL is not a valid PostgreSQL connection string", 500);
-  }
 
-  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  if (!databaseName) {
-    throw new AppError("DATABASE_URL does not include a database name", 500);
-  }
 
-  return {
-    databaseName,
-    env: {
-      ...process.env,
-      PGHOST: parsed.hostname,
-      PGPORT: parsed.port || "5432",
-      PGUSER: decodeURIComponent(parsed.username),
-      PGPASSWORD: decodeURIComponent(parsed.password),
-      PGDATABASE: databaseName,
-      PGSSLMODE: process.env.PGSSLMODE || parsed.searchParams.get("sslmode") || "prefer",
-    },
-  };
-}
 
-function runPostgresTool(command, args, options = {}) {
-  const { env } = postgresToolConfig();
-  const timeoutMs = options.timeoutMs ?? 120000;
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      env,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
 
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill("SIGTERM");
-      reject(new AppError(`${command} timed out`, 504));
-    }, timeoutMs);
 
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf-8");
-      if (stdout.length > 1024 * 1024) stdout = stdout.slice(-1024 * 1024);
-    });
 
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString("utf-8");
-      if (stderr.length > 1024 * 1024) stderr = stderr.slice(-1024 * 1024);
-    });
 
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const message = err.code === "ENOENT"
-        ? `${command} executable was not found. Install PostgreSQL client tools on the backend machine.`
-        : `${command} could not start: ${err.message}`;
-      reject(new AppError(message, 500));
-    });
 
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve({ stdout, stderr });
-      } else {
-        const detail = stderr.trim().split(/\r?\n/).slice(-4).join(" ");
-        reject(new AppError(`${command} failed${detail ? `: ${detail}` : ""}`, 500));
-      }
-    });
-  });
-}
 
-async function postgresDumpArgsForProfile(profile) {
-  if (profile.method === "Specific Rows") {
-    throw new AppError("PostgreSQL dump backups do not support row-level filters. Use Specific Tables or Row Level CSV repair.", 400);
-  }
-
-  if (profile.method === "Entire Database") {
-    return ["--schema=public"];
-  }
-
-  if (profile.method !== "Specific Tables") {
-    throw new AppError("Unsupported PostgreSQL dump backup method", 400);
-  }
-
-  const client = await pool.connect();
-  try {
-    const availableTables = await getPublicTableNames(client);
-    const { tableNames } = resolveBackupTables(profile.scope, availableTables);
-    if (tableNames.length === 0) {
-      throw new AppError("Select at least one table for this backup profile", 400);
-    }
-    return tableNames.map((tableName) => `--table=public.${tableName}`);
-  } finally {
-    client.release();
-  }
-}
-
-async function createPostgresDumpFile(profile) {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-pgdump-"));
-  const dumpPath = path.join(tempDir, "backup.dump");
-  const scopeArgs = await postgresDumpArgsForProfile(profile);
-
-  try {
-    await runPostgresTool("pg_dump", [
-      "--format=custom",
-      "--no-owner",
-      "--no-privileges",
-      "--no-comments",
-      "--file",
-      dumpPath,
-      ...scopeArgs,
-    ]);
-
-    const fileStat = await stat(dumpPath);
-    return { tempDir, dumpPath, sizeBytes: fileStat.size };
-  } catch (err) {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    throw err;
-  }
-}
-
-async function createPostgresCsvFile(profile) {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-csv-"));
-  const csvPath = path.join(tempDir, "backup.csv");
-  const parts = parseScope(profile.scope);
-  const tableName = parts.table;
-  if (!tableName) throw new AppError("No table specified for Specific Rows backup", 400);
-  validateIdentifier(tableName, "Backup table");
-
-  const condition = parts.condition || "";
-  const quotedTable = quoteIdent(tableName);
-  const selectQuery = condition
-    ? `SELECT * FROM ${quotedTable} ${condition}`
-    : `SELECT * FROM ${quotedTable}`;
-
-  try {
-    const result = await db.query(selectQuery);
-    const rows = result.rows;
-    if (rows.length === 0) {
-      await writeFile(csvPath, "");
-      return { tempDir, dumpPath: csvPath, sizeBytes: 0 };
-    }
-
-    const headers = Object.keys(rows[0]);
-    const csvLines = [headers.map(quoteCsvField).join(",")];
-    for (const row of rows) {
-      csvLines.push(headers.map((h) => quoteCsvField(String(row[h] ?? ""))).join(","));
-    }
-    await writeFile(csvPath, csvLines.join("\n"), "utf-8");
-    const fileStat = await stat(csvPath);
-    return { tempDir, dumpPath: csvPath, sizeBytes: fileStat.size };
-  } catch (err) {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    throw err;
-  }
-}
-
-function quoteCsvField(value) {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 function hasPostgresDumpSignature(buffer) {
   return buffer.length >= 5 && buffer.subarray(0, 5).toString("ascii") === "PGDMP";
-}
-
-function validatePostgresDumpList(listOutput) {
-  const lines = listOutput
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith(";"));
-
-  if (lines.length === 0) {
-    throw new AppError("PostgreSQL dump contains no restore entries", 400);
-  }
-
-  const prohibited = lines.filter((line) =>
-    /\b(DATABASE|ACL|POLICY|PUBLICATION|SUBSCRIPTION|EVENT TRIGGER|FOREIGN DATA WRAPPER|SERVER)\b/i.test(line)
-  );
-  if (prohibited.length > 0) {
-    throw new AppError("PostgreSQL dump contains unsupported high-risk object entries", 400);
-  }
-
-  const dataLines = lines.filter((line) => /\b(TABLE DATA|SEQUENCE SET)\b/i.test(line));
-  if (dataLines.length === 0) {
-    throw new AppError("PostgreSQL dump contains no table data to restore", 400);
-  }
-
-  const outsidePublic = dataLines.filter((line) => !/\b(TABLE DATA|SEQUENCE SET)\s+public\s+/i.test(line));
-  if (outsidePublic.length > 0) {
-    throw new AppError("PostgreSQL dump contains data outside the public schema", 400);
-  }
-
-  return { entryCount: lines.length, dataEntryCount: dataLines.length };
 }
 
 async function writeRecoveryTempFile(file) {
@@ -406,25 +128,6 @@ async function writeRecoveryTempFile(file) {
   const dumpPath = path.join(tempDir, "recovery.dump");
   await writeFile(dumpPath, file.buffer, { flag: "wx" });
   return { tempDir, dumpPath };
-}
-
-async function inspectPostgresDump(dumpPath) {
-  const { stdout } = await runPostgresTool("pg_restore", ["--list", dumpPath]);
-  return validatePostgresDumpList(stdout);
-}
-
-async function restorePostgresDump(dumpPath) {
-  const { databaseName } = postgresToolConfig();
-  await runPostgresTool("pg_restore", [
-    "--data-only",
-    "--schema=public",
-    "--no-owner",
-    "--no-privileges",
-    "--single-transaction",
-    "--exit-on-error",
-    `--dbname=${databaseName}`,
-    dumpPath,
-  ], { timeoutMs: 300000 });
 }
 
 const router = Router();
@@ -450,8 +153,13 @@ const devAdminBypass = (req, res, next) => {
 
 router.use(devAdminBypass);
 router.use(restrictToRoles("GLOBAL_ADMIN", "DEVELOPER_ADMIN"));
-const developerAdminOnly = restrictToRoles("DEVELOPER_ADMIN");
 const devOrGlobalAdmin = restrictToRoles("DEVELOPER_ADMIN", "GLOBAL_ADMIN");
+
+const logDevAudit = (req, action, targetType, targetId, details = null) => {
+  const actorId = req.user?.sub || null;
+  const roleScope = req.user?.role_scope || req.user?.role || "DEVELOPER_ADMIN";
+  logAuditAction(actorId, action, targetType, targetId, details, roleScope);
+};
 
 // ── Ensure tables ───────────────────────────────────────────────────────────
 
@@ -535,10 +243,19 @@ const ensureBackupRecoveryTables = async () => {
       schedule_interval VARCHAR(50),
       schedule_unit VARCHAR(20),
       status VARCHAR(20) DEFAULT 'CONFIGURED',
-      size VARCHAR(50) DEFAULT '0 MB',
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      size VARCHAR(50) DEFAULT 'N/A',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_backup_at TIMESTAMPTZ,
+      next_backup_at TIMESTAMPTZ
     )
   `);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS last_backup_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS next_backup_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS last_error TEXT`);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS run_count INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS run_started_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS recovery_operations (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -549,6 +266,24 @@ const ensureBackupRecoveryTables = async () => {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS scheduled_backups (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      profile_id UUID REFERENCES backup_profiles(id) ON DELETE CASCADE,
+      profile_name VARCHAR(255),
+      file_name VARCHAR(255) NOT NULL,
+      file_path TEXT NOT NULL,
+      method VARCHAR(50) NOT NULL,
+      scope TEXT,
+      size VARCHAR(50) DEFAULT 'N/A',
+      status VARCHAR(20) DEFAULT 'COMPLETED',
+      message TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`ALTER TABLE scheduled_backups ADD COLUMN IF NOT EXISTS artifact_format VARCHAR(50)`);
+  await pool.query(`ALTER TABLE scheduled_backups ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+  await ensureBackupStorageDir();
 };
 
 const ensureDatabaseActivityLogTable = async () => {
@@ -859,6 +594,8 @@ router.post("/query", catchAsync(async (req, res) => {
 
   const duration = Date.now() - startTime;
 
+  logDevAudit(req, "execute_query", "database", null, { query: sql.slice(0, 200), rowCount: result.rowCount ?? result.rows.length, duration });
+
   res.json({
     success: true, data: {
       rows: result.rows,
@@ -958,7 +695,14 @@ router.get("/activity-log", catchAsync(async (req, res) => {
 
 router.get("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
-  const result = await db.query(`SELECT id, profile_name AS "profileName", method, scope, schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit", status, size, created_at AS "createdAt" FROM backup_profiles ORDER BY created_at DESC`);
+  const result = await db.query(`
+    SELECT id, profile_name AS "profileName", method, scope,
+           schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit",
+           is_enabled AS "isEnabled", status, size, last_error AS "lastError",
+           run_count AS "runCount", created_at AS "createdAt", updated_at AS "updatedAt",
+           last_backup_at AS "lastBackupAt", next_backup_at AS "nextBackupAt"
+    FROM backup_profiles ORDER BY created_at DESC
+  `);
   res.json({ success: true, data: result.rows });
 }));
 
@@ -970,25 +714,30 @@ router.post("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
   if (!BACKUP_METHODS.has(method)) {
     throw new AppError("Invalid backup method", 400);
   }
+  await validateBackupProfile({ method, scope: scope || "full" });
 
   let normalizedInterval = null;
   let normalizedUnit = null;
+  let hasNextBackup = false;
   if (scheduleInterval || scheduleUnit) {
     const interval = Number(scheduleInterval);
-    if (!Number.isInteger(interval) || interval < 1) {
-      throw new AppError("Schedule interval must be a positive integer", 400);
+    if (!Number.isSafeInteger(interval) || interval < 0) {
+      throw new AppError("Schedule interval must be a non-negative integer", 400);
     }
-    if (!SCHEDULE_UNITS.has(scheduleUnit)) {
-      throw new AppError("Invalid schedule unit", 400);
+    if (interval > 0) {
+      if (!SCHEDULE_UNITS.has(scheduleUnit)) {
+        throw new AppError("Invalid schedule unit", 400);
+      }
+      normalizedInterval = String(interval);
+      normalizedUnit = scheduleUnit;
+      hasNextBackup = true;
     }
-    normalizedInterval = String(interval);
-    normalizedUnit = scheduleUnit;
   }
 
-  const result = await db.query(
-    `INSERT INTO backup_profiles (profile_name, method, scope, schedule_interval, schedule_unit, status, size) VALUES ($1, $2, $3, $4, $5, 'CONFIGURED', $6) RETURNING id, profile_name AS "profileName", method, scope, schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit", status, size, created_at AS "createdAt"`,
-    [profileName.trim(), method, scope || "full", normalizedInterval, normalizedUnit, "N/A"]
-  );
+  const nextBackupExpr = hasNextBackup ? "NOW()" : "NULL";
+  const insertSql = "INSERT INTO backup_profiles (profile_name, method, scope, schedule_interval, schedule_unit, is_enabled, status, size, next_backup_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, " + nextBackupExpr + ") RETURNING id, profile_name AS \"profileName\", method, scope, schedule_interval AS \"scheduleInterval\", schedule_unit AS \"scheduleUnit\", is_enabled AS \"isEnabled\", status, size, created_at AS \"createdAt\", next_backup_at AS \"nextBackupAt\"";
+  const result = await db.query(insertSql, [profileName.trim(), method, scope || "full", normalizedInterval, normalizedUnit, hasNextBackup, hasNextBackup ? "ACTIVE" : "MANUAL", "N/A"]);
+  logDevAudit(req, "create_backup", "backup_profiles", result.rows[0].id, { profileName: profileName.trim(), method, scope, scheduleInterval: normalizedInterval, scheduleUnit: normalizedUnit });
   res.status(201).json({ success: true, data: result.rows[0] });
 }));
 
@@ -1003,22 +752,22 @@ router.get("/backups/:id/download", devOrGlobalAdmin, catchAsync(async (req, res
   const profile = result.rows[0];
   if (!profile) throw new AppError("Backup not found", 404);
 
-  const isCsv = profile.method === "Specific Rows";
-  const { tempDir, dumpPath, sizeBytes } = isCsv
-    ? await createPostgresCsvFile(profile)
-    : await createPostgresDumpFile(profile);
+  const { tempDir, dumpPath, sizeBytes, extension, contentType, format } = await generateBackupForProfile(profile);
   const size = formatBytes(sizeBytes);
   await db.query(
-    `UPDATE backup_profiles SET status = 'COMPLETED', size = $2 WHERE id = $1`,
+    `UPDATE backup_profiles
+     SET size = $2,
+         last_backup_at = NOW(),
+         status = CASE WHEN is_enabled THEN 'ACTIVE' WHEN schedule_interval IS NULL THEN 'MANUAL' ELSE status END
+     WHERE id = $1`,
     [profile.id, size]
   );
+  logDevAudit(req, "download_backup", "backup_profiles", profile.id, { profileName: profile.profileName, size });
 
-  const generatedAt = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  const ext = isCsv ? "csv" : "dump";
-  const filename = `patheats-${safeDownloadName(profile.profileName)}-${generatedAt}.${ext}`;
-  res.setHeader("Content-Type", isCsv ? "text/csv" : "application/octet-stream");
+  const filename = `${safeDownloadName(profile.profileName)}.${extension}`;
+  res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.setHeader("X-Backup-Format", isCsv ? "csv" : "postgres-custom");
+  res.setHeader("X-Backup-Format", format);
 
   const stream = createReadStream(dumpPath);
   const cleanup = () => rm(tempDir, { recursive: true, force: true }).catch(() => {});
@@ -1035,10 +784,175 @@ router.get("/backups/:id/download", devOrGlobalAdmin, catchAsync(async (req, res
   stream.pipe(res);
 }));
 
+router.patch("/backups/:id", devOrGlobalAdmin, catchAsync(async (req, res) => {
+  await ensureBackupRecoveryTables();
+  const existingResult = await db.query(
+    `SELECT id, profile_name, method, scope, schedule_interval, schedule_unit, is_enabled
+     FROM backup_profiles WHERE id = $1`,
+    [req.params.id]
+  );
+  const existing = existingResult.rows[0];
+  if (!existing) throw new AppError("Backup not found", 404);
+
+  const profileName = req.body.profileName !== undefined ? String(req.body.profileName).trim() : existing.profile_name;
+  const method = req.body.method ?? existing.method;
+  const scope = req.body.scope !== undefined ? (req.body.scope || "full") : existing.scope;
+  const scheduleInterval = req.body.scheduleInterval !== undefined ? req.body.scheduleInterval : existing.schedule_interval;
+  const scheduleUnit = req.body.scheduleUnit !== undefined ? req.body.scheduleUnit : existing.schedule_unit;
+  if (!profileName) throw new AppError("Profile name cannot be empty", 400);
+  if (!BACKUP_METHODS.has(method)) throw new AppError("Invalid backup method", 400);
+  await validateBackupProfile({ method, scope });
+
+  let normalizedInterval = null;
+  let normalizedUnit = null;
+  if (scheduleInterval !== null && scheduleInterval !== "" && scheduleInterval !== undefined) {
+    const interval = Number(scheduleInterval);
+    if (!Number.isSafeInteger(interval) || interval < 0) throw new AppError("Schedule interval must be a non-negative integer", 400);
+    if (interval > 0) {
+      if (!scheduleUnit || !SCHEDULE_UNITS.has(scheduleUnit)) throw new AppError("Invalid schedule unit", 400);
+      normalizedInterval = String(interval);
+      normalizedUnit = scheduleUnit;
+    }
+  }
+  const hasSchedule = Boolean(normalizedInterval && normalizedUnit);
+  const existingHasSchedule = Boolean(existing.schedule_interval && existing.schedule_unit);
+  const isEnabled = hasSchedule && (
+    req.body.isEnabled !== undefined
+      ? Boolean(req.body.isEnabled)
+      : existingHasSchedule ? Boolean(existing.is_enabled) : true
+  );
+  const status = !hasSchedule ? "MANUAL" : isEnabled ? "ACTIVE" : "PAUSED";
+
+  const result = await db.query(
+    `UPDATE backup_profiles
+     SET profile_name = $1, method = $2, scope = $3,
+         schedule_interval = $4, schedule_unit = $5,
+         is_enabled = $6, status = $7,
+         next_backup_at = CASE WHEN $6 THEN NOW() ELSE NULL END,
+         last_error = NULL, updated_at = NOW()
+     WHERE id = $8
+     RETURNING id, profile_name AS "profileName", method, scope,
+               schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit",
+               is_enabled AS "isEnabled", status, size, last_error AS "lastError",
+               run_count AS "runCount", created_at AS "createdAt", updated_at AS "updatedAt",
+               last_backup_at AS "lastBackupAt", next_backup_at AS "nextBackupAt"`,
+    [profileName, method, scope, normalizedInterval, normalizedUnit, isEnabled, status, req.params.id]
+  );
+  logDevAudit(req, "update_backup", "backup_profiles", req.params.id, { profileName, method, scope, scheduleInterval: normalizedInterval, scheduleUnit: normalizedUnit, isEnabled });
+  res.json({ success: true, data: result.rows[0] });
+}));
+
+router.post("/backups/:id/pause", devOrGlobalAdmin, catchAsync(async (req, res) => {
+  await ensureBackupRecoveryTables();
+  const result = await db.query(
+    `UPDATE backup_profiles
+     SET is_enabled = FALSE, status = CASE WHEN schedule_interval IS NULL THEN 'MANUAL' ELSE 'PAUSED' END,
+         next_backup_at = NULL, run_started_at = NULL, updated_at = NOW()
+     WHERE id = $1
+     RETURNING id, profile_name AS "profileName", method, scope,
+               schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit",
+               is_enabled AS "isEnabled", status, size, last_error AS "lastError",
+               run_count AS "runCount", created_at AS "createdAt", updated_at AS "updatedAt",
+               last_backup_at AS "lastBackupAt", next_backup_at AS "nextBackupAt"`,
+    [req.params.id]
+  );
+  if (!result.rows[0]) throw new AppError("Backup not found", 404);
+  logDevAudit(req, "pause_backup", "backup_profiles", req.params.id);
+  res.json({ success: true, data: result.rows[0] });
+}));
+
+router.post("/backups/:id/resume", devOrGlobalAdmin, catchAsync(async (req, res) => {
+  await ensureBackupRecoveryTables();
+  const result = await db.query(
+    `UPDATE backup_profiles
+     SET is_enabled = TRUE, status = 'ACTIVE', next_backup_at = NOW(),
+         last_error = NULL, updated_at = NOW()
+     WHERE id = $1 AND schedule_interval IS NOT NULL AND schedule_interval NOT IN ('', '0') AND schedule_unit IS NOT NULL
+     RETURNING id, profile_name AS "profileName", method, scope,
+               schedule_interval AS "scheduleInterval", schedule_unit AS "scheduleUnit",
+               is_enabled AS "isEnabled", status, size, last_error AS "lastError",
+               run_count AS "runCount", created_at AS "createdAt", updated_at AS "updatedAt",
+               last_backup_at AS "lastBackupAt", next_backup_at AS "nextBackupAt"`,
+    [req.params.id]
+  );
+  if (!result.rows[0]) throw new AppError("Backup profile has no valid schedule to resume", 400);
+  logDevAudit(req, "resume_backup", "backup_profiles", req.params.id);
+  res.json({ success: true, data: result.rows[0] });
+}));
+
 router.delete("/backups/:id", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
-  const result = await db.query(`DELETE FROM backup_profiles WHERE id = $1 RETURNING id`, [req.params.id]);
+  const files = await db.query(`SELECT file_path FROM scheduled_backups WHERE profile_id = $1 AND status = 'COMPLETED'`, [req.params.id]);
+  const result = await db.query(`DELETE FROM backup_profiles WHERE id = $1 RETURNING id, profile_name AS "profileName"`, [req.params.id]);
   if (!result.rows.length) throw new AppError("Backup not found", 404);
+  const { unlink } = await import("fs/promises");
+  await Promise.all(files.rows.map((file) => unlink(file.file_path).catch(() => {})));
+  logDevAudit(req, "delete_backup", "backup_profiles", req.params.id, { profileName: result.rows[0].profileName });
+  res.json({ success: true, data: { id: req.params.id } });
+}));
+
+// ── Scheduled Backups (auto-generated by the backup scheduler) ──────────────
+
+router.get("/backups/scheduled", devOrGlobalAdmin, catchAsync(async (req, res) => {
+  await ensureBackupRecoveryTables();
+  const profileFilter = req.query.profileId || null;
+  const params = [];
+  let where = "";
+  if (profileFilter) {
+    params.push(profileFilter);
+    where = `WHERE profile_id::text = $1`;
+  }
+  const result = await db.query(
+    `SELECT id, profile_id AS "profileId", profile_name AS "profileName", file_name AS "fileName", method, scope, size, status, message,
+            artifact_format AS "artifactFormat", completed_at AS "completedAt", created_at AS "createdAt"
+     FROM scheduled_backups ${where}
+     ORDER BY created_at DESC LIMIT 200`,
+    params
+  );
+  res.json({ success: true, data: result.rows });
+}));
+
+router.get("/backups/scheduled/:id/download", devOrGlobalAdmin, catchAsync(async (req, res) => {
+  await ensureBackupRecoveryTables();
+  const result = await db.query(
+    `SELECT id, file_name, file_path, method FROM scheduled_backups WHERE id = $1`,
+    [req.params.id]
+  );
+  const backup = result.rows[0];
+  if (!backup) throw new AppError("Scheduled backup not found", 404);
+
+  const { existsSync } = await import("fs");
+  if (!existsSync(backup.file_path)) {
+    throw new AppError("Backup file no longer exists on disk", 404);
+  }
+
+  const ext = path.extname(backup.file_name || "").slice(1).toLowerCase() || "dump";
+  const filename = backup.file_name || `scheduled-backup.${ext}`;
+  res.setHeader("Content-Type", ext === "json" ? "application/json" : ext === "csv" ? "text/csv" : "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("X-Backup-Format", ext === "json" ? "patheats-logical-json" : ext === "csv" ? "csv" : "postgres-custom");
+
+  const stream = createReadStream(backup.file_path);
+  stream.on("error", () => {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: "Could not stream backup file" });
+    } else {
+      res.destroy();
+    }
+  });
+  stream.pipe(res);
+}));
+
+router.delete("/backups/scheduled/:id", devOrGlobalAdmin, catchAsync(async (req, res) => {
+  await ensureBackupRecoveryTables();
+  const result = await db.query(
+    `DELETE FROM scheduled_backups WHERE id = $1 RETURNING id, file_path, file_name`,
+    [req.params.id]
+  );
+  if (!result.rows.length) throw new AppError("Scheduled backup not found", 404);
+  const { unlink } = await import("fs/promises");
+  await unlink(result.rows[0].file_path).catch(() => {});
+  logDevAudit(req, "delete_scheduled_backup", "scheduled_backups", req.params.id, { fileName: result.rows[0].file_name });
   res.json({ success: true, data: { id: req.params.id } });
 }));
 
@@ -1067,6 +981,9 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
   if (type === "Row Level CSV" && !lowerFileName.endsWith(".csv")) {
     throw new AppError("Row Level CSV recovery requires a .csv file", 400);
   }
+  if (type === "Logical Backup" && !lowerFileName.endsWith(".json")) {
+    throw new AppError("Logical backup recovery requires a .json file", 400);
+  }
 
   const insertOp = async (status, message) => {
     const r = await db.query(
@@ -1086,16 +1003,28 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
     try {
       const temp = await writeRecoveryTempFile(req.file);
       tempDir = temp.tempDir;
-      const inspection = await inspectPostgresDump(temp.dumpPath);
-      await restorePostgresDump(temp.dumpPath);
+      const inspection = await inspectPostgresDumpSafe(temp.dumpPath);
+      const restoreResult = inspection.isFullDatabase
+        ? await restoreFullPostgresDump(temp.dumpPath)
+        : await restorePartialPostgresDump(temp.dumpPath, inspection.tableNames);
       const op = await insertOp(
         "COMPLETED",
-        `PostgreSQL dump restored in data-only mode. ${inspection.dataEntryCount} data entries inspected from "${fileName}".`
+        `PostgreSQL dump restored in ${restoreResult.mode} mode. ${inspection.dataEntryCount} data entries from "${fileName}".` +
+          (restoreResult.restoredTables?.length ? ` Merged tables: ${restoreResult.restoredTables.join(", ")}.` : "")
       );
+      logDevAudit(req, "execute_recovery", "recovery_operations", op.id, { type, fileName, status: "COMPLETED" });
       return res.json({ success: true, data: op });
     } catch (err) {
       const msg = err.message || "PostgreSQL dump recovery failed";
       const op = await insertOp("FAILED", msg);
+      if (err.safetyBackupFileName) {
+        return res.status(err.statusCode || 500).json({
+          success: false,
+          data: op,
+          error: msg,
+          safetyBackup: { fileName: err.safetyBackupFileName, path: err.safetyBackupPath },
+        });
+      }
       return res.status(err.statusCode || 500).json({ success: false, data: op, error: msg });
     } finally {
       if (tempDir) await rm(tempDir, { recursive: true, force: true }).catch(() => {});
@@ -1112,6 +1041,23 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
   let client;
   let transactionOpen = false;
   try {
+    if (type === "Logical Backup") {
+      let artifact;
+      try {
+        artifact = JSON.parse(content);
+      } catch {
+        throw new AppError("Logical backup file is not valid JSON", 400);
+      }
+      verifyLogicalBackupArtifact(artifact);
+      const result = await restoreLogicalBackup(artifact);
+      const op = await insertOp(
+        "COMPLETED",
+        `Logical backup restored ${result.restoredRows} rows across ${result.restoredTables.length} tables from "${fileName}".`
+      );
+      logDevAudit(req, "execute_recovery", "recovery_operations", op.id, { type, fileName, status: "COMPLETED", tables: result.restoredTables });
+      return res.json({ success: true, data: op });
+    }
+
     client = await pool.connect();
     await client.query("BEGIN");
     transactionOpen = true;
@@ -1130,7 +1076,7 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
       cols.forEach((column) => validateIdentifier(column, "CSV column"));
 
       const tableColumns = await client.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
+        `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
         [targetTable]
       );
       if (tableColumns.rows.length === 0) {
@@ -1143,17 +1089,34 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
         throw new AppError(`CSV contains unknown columns: ${unknownColumns.join(", ")}`, 400);
       }
 
+      // Build a map of column name → data type so we can convert empty strings to NULL
+      const columnTypes = new Map(tableColumns.rows.map((row) => [row.column_name, row.data_type]));
+      const textLikeTypes = new Set(["text", "character varying", "character", "char", "varchar"]);
+      const nullPlaceholder = "\\N";
+
       const quotedTable = quoteIdent(targetTable);
       const quotedColumns = cols.map(quoteIdent).join(", ");
+      const restoreMetadata = await getRestoreMetadata(client, targetTable);
+      const completePrimaryKey = restoreMetadata.primaryKey.every((column) => cols.includes(column))
+        ? restoreMetadata.primaryKey
+        : [];
+      const conflictClause = buildConflictClause(cols, completePrimaryKey);
       for (const row of rows) {
         const values = parseCsvLine(row);
         if (values.length !== cols.length) {
           throw new AppError("CSV row does not match header column count", 400);
         }
-        const placeholders = values.map((_, i) => `$${i + 1}`);
+        // Convert \N markers and empty strings (for non-text columns) to NULL
+        const typedValues = values.map((val, i) => {
+          if (val === nullPlaceholder) return null;
+          const colType = columnTypes.get(cols[i]);
+          if (val === "" && colType && !textLikeTypes.has(colType)) return null;
+          return val;
+        });
+        const placeholders = typedValues.map((_, i) => `$${i + 1}`);
         await client.query(
-          `INSERT INTO ${quotedTable} (${quotedColumns}) VALUES (${placeholders.join(", ")}) ON CONFLICT DO NOTHING`,
-          values
+          `INSERT INTO ${quotedTable} (${quotedColumns}) VALUES (${placeholders.join(", ")}) ${conflictClause}`,
+          typedValues
         );
       }
     }
@@ -1161,6 +1124,7 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
     await client.query("COMMIT");
     transactionOpen = false;
     const op = await insertOp("COMPLETED", `Recovery from "${fileName}" completed. ${type} restored successfully.`);
+    logDevAudit(req, "execute_recovery", "recovery_operations", op.id, { type, fileName, status: "COMPLETED" });
     res.json({ success: true, data: op });
   } catch (err) {
     if (client && transactionOpen) await client.query("ROLLBACK").catch(() => {});

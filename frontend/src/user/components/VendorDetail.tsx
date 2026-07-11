@@ -168,7 +168,9 @@ export function VendorDetail({
                 style={{ color: c.textDim }}
                 className="shrink-0"
               />{" "}
-              {vendor.hours || "Hours not available"}
+              {typeof vendor.hours === "string"
+                ? vendor.hours || "Hours not available"
+                : `${vendor.hours.weekdays.open} - ${vendor.hours.weekdays.close} weekdays; ${vendor.hours.weekends.open} - ${vendor.hours.weekends.close} weekends`}
             </div>
             <div
               className="flex items-center gap-2 text-xs"

@@ -74,7 +74,7 @@ function MenuItemModal({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { toast.error("Item name is required."); return; }
-    if (!form.price || form.price <= 0) { toast.error("Price must be greater than 0."); return; }
+    if (typeof form.price !== "number" || isNaN(form.price) || form.price <= 0 || form.price > 99999.99 || !/^\d+(\.\d{1,2})?$/.test(String(form.price))) { toast.error("Enter a valid price (e.g. 12.50)."); return; }
     setSaving(true);
     try {
       await onSave(form);

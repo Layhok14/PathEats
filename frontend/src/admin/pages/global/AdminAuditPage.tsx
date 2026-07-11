@@ -7,7 +7,7 @@ import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { getAdminAuditLogs, type AuditLogEntry } from "../../services/adminDashboardService";
 import { getDevQueryHistory, getDevActivityLog, type QueryHistoryEntry, type ActivityLogEntry } from "../../services/developerService";
 
-type MainFilter = "all" | "crud" | "queries" | "logins" | "errors";
+type MainFilter = "recent" | "crud" | "queries" | "logins" | "errors";
 type NestedFilter = string;
 
 function formatTimeAgo(dateStr: string): string {
@@ -35,7 +35,7 @@ function formatActionVerb(action: string): string {
 }
 
 const MAIN_FILTERS: { key: MainFilter; label: string }[] = [
-  { key: "all", label: "All Activities" },
+  { key: "recent", label: "Recent Events" },
   { key: "crud", label: "CRUD Operations" },
   { key: "queries", label: "Query Executions" },
   { key: "logins", label: "Login Events" },
@@ -43,7 +43,7 @@ const MAIN_FILTERS: { key: MainFilter; label: string }[] = [
 ];
 
 export default function AdminAuditPage() {
-  const [mainFilter, setMainFilter] = useState<MainFilter>("all");
+  const [mainFilter, setMainFilter] = useState<MainFilter>("recent");
   const [nestedFilter, setNestedFilter] = useState<NestedFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -86,17 +86,18 @@ export default function AdminAuditPage() {
   }, []);
 
   useEffect(() => {
-    if (mainFilter === "all" || mainFilter === "crud") loadCrudLogs();
-    if (mainFilter === "all" || mainFilter === "queries") loadQueryHistory();
-    if (mainFilter === "all" || mainFilter === "logins" || mainFilter === "errors") loadActivityLog();
+    if (mainFilter === "recent" || mainFilter === "crud") loadCrudLogs();
+    if (mainFilter === "recent" || mainFilter === "queries") loadQueryHistory();
+    if (mainFilter === "recent" || mainFilter === "logins" || mainFilter === "errors") loadActivityLog();
   }, [mainFilter, loadCrudLogs, loadQueryHistory, loadActivityLog]);
 
   const nestedOptions = useMemo(() => {
+    if (mainFilter === "recent") return ["all"];
     if (mainFilter === "crud") return ["all", "create", "update", "delete"];
     if (mainFilter === "queries") return ["all", "success", "error"];
     if (mainFilter === "logins") return ["all", "login_success", "login_failed"];
     if (mainFilter === "errors") return ["all", "high", "medium", "low"];
-    return ["all", "crud", "queries", "logins", "errors"];
+    return ["all"];
   }, [mainFilter]);
 
   const handleRefresh = () => {
@@ -146,6 +147,23 @@ export default function AdminAuditPage() {
   }, [activityLog, nestedFilter, mainFilter]);
 
   const overallLoading = crudLoading || activityLoading || historyLoading;
+
+  const recentEvents = useMemo(() => {
+    const events: { time: string; type: string; typeColor: string; actor: string; details: string }[] = [];
+    crudLogs.slice(0, 50).forEach((log) => {
+      const { label, color } = getCrudActionLabel(log.action);
+      events.push({ time: log.createdAt, type: label, typeColor: color, actor: log.adminId ? log.adminId.slice(0, 8) + "…" : "System", details: `${log.targetType || "—"}` });
+    });
+    history.slice(0, 30).forEach((h) => {
+      const isError = (h.payload ?? "").toUpperCase().includes("ERROR");
+      events.push({ time: h.executed_at, type: isError ? "QUERY ERROR" : "QUERY OK", typeColor: isError ? "bg-red-50 text-[#ba1a1a]" : "bg-green-50 text-[#006e2f]", actor: h.actor_id || "—", details: (h.payload ?? "").slice(0, 80) });
+    });
+    activityLog.slice(0, 30).forEach((a) => {
+      events.push({ time: a.executed_at, type: a.event_type, typeColor: a.event_type === "login_failed" ? "bg-red-50 text-[#ba1a1a]" : "bg-blue-50 text-[#005ac2]", actor: a.actor_email || a.actor_id || "—", details: (a.payload ?? "").slice(0, 80) });
+    });
+    events.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    return events.slice(0, 50);
+  }, [crudLogs, history, activityLog]);
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
@@ -252,8 +270,49 @@ export default function AdminAuditPage() {
           />
         </div>
 
+        {/* ── Recent Events (combined view) ── */}
+        {mainFilter === "recent" && (
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#f1f5f9] flex items-center gap-2">
+              <Database size={14} className="text-[#006e2f]" />
+              <span className="text-[13px] font-semibold text-[#0b1c30]">Recent Events</span>
+              <span className="text-[11px] text-[#94a3b8]">({recentEvents.length})</span>
+            </div>
+            {overallLoading ? (
+              <div className="p-10 text-center"><LoadingSpinner /></div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px]">
+                  <thead>
+                    <tr className="bg-[#f8fafc]">
+                      {["Time", "Type", "Actor", "Details"].map((h) => (
+                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentEvents.map((ev, i) => (
+                      <tr key={i} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
+                        <td className="px-5 py-3 text-[11px] text-[#64748b] whitespace-nowrap">{formatTimeAgo(ev.time)}</td>
+                        <td className="px-5 py-3">
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${ev.typeColor}`}>{ev.type}</span>
+                        </td>
+                        <td className="px-5 py-3 text-[12px] text-[#374151] font-medium">{ev.actor}</td>
+                        <td className="px-5 py-3 text-[12px] text-[#64748b] max-w-[400px] truncate" title={ev.details}>{ev.details}</td>
+                      </tr>
+                    ))}
+                    {recentEvents.length === 0 && (
+                      <tr><td colSpan={4} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No recent events found.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── CRUD Operations table ── */}
-        {(mainFilter === "all" || mainFilter === "crud") && (
+        {(mainFilter === "recent" || mainFilter === "crud") && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-[#f1f5f9] flex items-center gap-2">
               <Database size={14} className="text-[#006e2f]" />
@@ -313,7 +372,7 @@ export default function AdminAuditPage() {
         )}
 
         {/* ── Query Executions table ── */}
-        {(mainFilter === "all" || mainFilter === "queries") && (
+        {(mainFilter === "recent" || mainFilter === "queries") && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-[#f1f5f9] flex items-center gap-2">
               <Terminal size={14} className="text-[#005ac2]" />
@@ -372,7 +431,7 @@ export default function AdminAuditPage() {
         )}
 
         {/* ── Activity Log (logins / errors) ── */}
-        {(mainFilter === "all" || mainFilter === "logins" || mainFilter === "errors") && (
+        {(mainFilter === "recent" || mainFilter === "logins" || mainFilter === "errors") && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-[#f1f5f9] flex items-center gap-2">
               {mainFilter === "errors" ? <Bug size={14} className="text-[#ba1a1a]" /> : <LogIn size={14} className="text-[#005ac2]" />}

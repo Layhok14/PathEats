@@ -11,6 +11,7 @@ const ConsumerManagementPage = lazy(() => import("../pages/global/ConsumerManage
 const VendorListPage = lazy(() => import("../pages/global/VendorListPage"));
 const AdminStallManagePage = lazy(() => import("../pages/global/AdminStallManagePage"));
 const AdminStallDetailPage = lazy(() => import("../pages/global/AdminStallDetailPage"));
+const StallCreatePage = lazy(() => import("../../vendor/pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage })));
 const BusinessDashboardPage = lazy(() => import("../pages/global/BusinessDashboardPage"));
 const VendorOnboardingPage = lazy(() => import("../pages/global/VendorOnboardingPage"));
 const ReviewModerationPage = lazy(() => import("../pages/global/ReviewModerationPage"));
@@ -61,12 +62,15 @@ const adminRoutes: RouteObject = {
     { path: "users", element: globalAdmin(<ConsumerManagementPage />) },
     { path: "business", element: businessOrGlobal(<BusinessDashboardPage />) },
     { path: "stalls", element: businessOrGlobal(<AdminStallManagePage />) },
+    { path: "stalls/new", element: businessOrGlobal(<StallCreatePage />) },
     { path: "stalls/stall/:stallId", element: businessOrGlobal(<AdminStallDetailPage />) },
+    { path: "stalls/stall/:stallId/edit", element: businessOrGlobal(<StallCreatePage />) },
     { path: "vendors", element: businessOrGlobal(<VendorListPage />) },
     { path: "vendors/onboarding", element: businessOrGlobal(<VendorOnboardingPage />) },
     { path: "vendors/moderation", element: businessOrGlobal(<ReviewModerationPage />) },
     { path: "vendors/:vendorId", element: businessOrGlobal(<AdminStallManagePage />) },
     { path: "vendors/:vendorId/stall/:stallId", element: businessOrGlobal(<AdminStallDetailPage />) },
+    { path: "vendors/:vendorId/stall/:stallId/edit", element: businessOrGlobal(<StallCreatePage />) },
     { path: "backups", element: devOrGlobal(<BackupManagerPage />) },
     { path: "developer/dashboard", element: devOrGlobal(<DeveloperDashboard />) },
     { path: "developer/users", element: devOrGlobal(<Navigate to="/admin/users" replace />) },

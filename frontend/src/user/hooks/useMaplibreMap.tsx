@@ -20,9 +20,9 @@ function styleUrl(dark) {
   return dark ? DARK_VECTOR_STYLE : LIGHT_VECTOR_STYLE;
 }
 
-function makeVendorElement(rank, score, selected, isFavorite) {
+function makeVendorElement(rank, selected, isFavorite) {
   const el = document.createElement("div");
-  const bg = selected ? "#3B82F6" : scoreColor(score);
+  const bg = selected ? "#3B82F6" : "#22c55e";
   el.style.width = "32px";
   el.style.height = "32px";
   el.style.background = bg;
@@ -243,10 +243,14 @@ export function useMaplibreMap({
       routeListenersRef.current = null;
     }
 
-    if (!routePoints || routePoints.length < 2) {
+    if (!routeReady || !routePoints || routePoints.length < 2) {
       if (map.getLayer(ROUTE_HITBOX_LAYER_ID)) map.removeLayer(ROUTE_HITBOX_LAYER_ID);
       if (map.getLayer(ROUTE_LAYER_ID)) map.removeLayer(ROUTE_LAYER_ID);
       if (map.getSource("route")) map.removeSource("route");
+      endpointMarkersRef.current.forEach((marker) => marker.remove());
+      endpointMarkersRef.current = [];
+      ghostMarkerRef.current?.remove();
+      ghostMarkerRef.current = null;
       return;
     }
 
@@ -380,7 +384,7 @@ export function useMaplibreMap({
       new maplibregl.LngLatBounds(coords[0], coords[0]),
     );
     map.fitBounds(bounds, { padding: 40 });
-  }, [mapReady, routePoints, styleVersion, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, routePoints, routeReady, styleVersion, editRouteMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Vendor markers — marker pool with ID-based diffing, popups, hover, and fly-to
   useEffect(() => {
@@ -413,7 +417,7 @@ export function useMaplibreMap({
     scoredVendors.forEach((v, i) => {
       const existing = prev.get(v.id);
       const isSelected = selectedVendorId === v.id;
-      const bg = isSelected ? "#3B82F6" : scoreColor(v.final_score);
+      const bg = isSelected ? "#3B82F6" : "#22c55e";
       const lngLat = [v.lng, v.lat];
 
       const isFavorite = favorites.has(String(v.id));
@@ -451,7 +455,7 @@ export function useMaplibreMap({
           existing.lastFlewId = selectedVendorId;
         }
       } else {
-        const el = makeVendorElement(i + 1, v.final_score, isSelected, isFavorite);
+        const el = makeVendorElement(i + 1, isSelected, isFavorite);
         const marker = new maplibregl.Marker(el).setLngLat(lngLat).addTo(map);
 
         // Hover

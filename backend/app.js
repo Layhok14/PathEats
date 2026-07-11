@@ -1,4 +1,5 @@
 import app from "./src/server.js";
+import { startBackupScheduler, stopBackupScheduler } from "./src/services/backupScheduler.js";
 
 const PORT = process.env.PORT || 4000;
 
@@ -35,10 +36,12 @@ let server = app.listen(PORT, () => {
   console.log(`\nPathEat API running on port ${PORT}`);
   console.log(`Swagger UI: http://localhost:${PORT}/api-docs`);
   console.log(`Health: http://localhost:${PORT}/api/health\n`);
+  startBackupScheduler();
 });
 
 function gracefulShutdown(signal) {
   console.log(`\n[${signal}] Shutting down gracefully...`);
+  stopBackupScheduler();
   server.close(() => {
     console.log("HTTP server closed.");
     process.exit(0);

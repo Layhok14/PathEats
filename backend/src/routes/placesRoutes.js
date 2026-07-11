@@ -14,5 +14,7 @@ router.get("/reviews/all", placesController.getAllReviews);
 router.get("/:id", placesController.getById);
 router.get("/:id/reviews", placesController.getReviews);
 router.post("/:id/reviews", authMiddleware, restrictToRoles("CONSUMER"), placesController.createReview);
+router.patch("/:id/reviews/:reviewId", authMiddleware, restrictToRoles("CONSUMER"), placesController.updateReview);
+router.delete("/:id/reviews/:reviewId", authMiddleware, restrictToRoles("CONSUMER"), placesController.deleteReview);
 
 export default router;

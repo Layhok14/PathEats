@@ -21,6 +21,14 @@ export interface DevBackup {
   id: string; profileName: string; method: string; scope: string;
   scheduleInterval: string | null; scheduleUnit: string | null;
   createdAt: string; status: string; size: string;
+  lastBackupAt: string | null; nextBackupAt: string | null;
+  isEnabled: boolean; lastError: string | null; runCount: number; updatedAt: string;
+}
+export interface DevScheduledBackup {
+  id: string; profileId: string | null; profileName: string | null;
+  fileName: string; method: string; scope: string | null;
+  size: string; status: string; message: string | null; createdAt: string;
+  artifactFormat: string | null; completedAt: string | null;
 }
 export interface DevRecovery {
   id: string; type: string; fileName: string; status: string; createdAt: string; message: string;
@@ -56,7 +64,7 @@ export async function createDevBackup(payload: { profileName: string; method: st
   return r.data.data;
 }
 export async function downloadDevBackup(id: string): Promise<{ blob: Blob; filename: string }> {
-  const r = await api.get<Blob>(`/dev/backups/${id}/download`, { responseType: "blob" });
+  const r = await api.get<Blob>(`/dev/backups/${id}/download`, { responseType: "blob", timeout: 300000 });
   const disposition = r.headers["content-disposition"] || "";
   const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
   return {
@@ -66,6 +74,43 @@ export async function downloadDevBackup(id: string): Promise<{ blob: Blob; filen
 }
 export async function deleteDevBackup(id: string): Promise<void> {
   await api.delete(`/dev/backups/${id}`);
+}
+export async function updateDevBackup(id: string, payload: {
+  profileName?: string;
+  method?: string;
+  scope?: string;
+  scheduleInterval?: string | null;
+  scheduleUnit?: string | null;
+  isEnabled?: boolean;
+}): Promise<DevBackup> {
+  const r = await api.patch<{ success: boolean; data: DevBackup }>(`/dev/backups/${id}`, payload);
+  return r.data.data;
+}
+export async function pauseDevBackup(id: string): Promise<DevBackup> {
+  const r = await api.post<{ success: boolean; data: DevBackup }>(`/dev/backups/${id}/pause`);
+  return r.data.data;
+}
+export async function resumeDevBackup(id: string): Promise<DevBackup> {
+  const r = await api.post<{ success: boolean; data: DevBackup }>(`/dev/backups/${id}/resume`);
+  return r.data.data;
+}
+export async function getScheduledBackups(profileId?: string): Promise<DevScheduledBackup[]> {
+  const r = await api.get<{ success: boolean; data: DevScheduledBackup[] }>("/dev/backups/scheduled", {
+    params: profileId ? { profileId } : {},
+  });
+  return r.data.data;
+}
+export async function downloadScheduledBackup(id: string): Promise<{ blob: Blob; filename: string }> {
+  const r = await api.get<Blob>(`/dev/backups/scheduled/${id}/download`, { responseType: "blob", timeout: 120000 });
+  const disposition = r.headers["content-disposition"] || "";
+  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+  return {
+    blob: r.data,
+    filename: filenameMatch?.[1] || `scheduled-backup-${id}.dump`,
+  };
+}
+export async function deleteScheduledBackup(id: string): Promise<void> {
+  await api.delete(`/dev/backups/scheduled/${id}`);
 }
 export async function getDevRecovery(): Promise<DevRecovery[]> {
   const r = await api.get<{ success: boolean; data: DevRecovery[] }>("/dev/recovery");
@@ -82,7 +127,9 @@ export async function initiateDevRecovery(payload: {
   form.append("file", payload.file);
   form.append("confirmationText", payload.confirmationText);
   if (payload.targetTable) form.append("targetTable", payload.targetTable);
-  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", form);
+  const r = await api.post<{ success: boolean; data: DevRecovery }>("/dev/recovery", form, {
+    timeout: 600000,
+  });
   return r.data.data;
 }
 

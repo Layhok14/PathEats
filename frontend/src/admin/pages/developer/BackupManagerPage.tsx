@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Upload, Eye, Trash2, CheckCircle, AlertTriangle, X, ShieldAlert, Download } from "lucide-react";
+import { Search, Upload, Eye, Trash2, CheckCircle, AlertTriangle, X, ShieldAlert, Download, Pencil, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import {
   getDevBackups,
   createDevBackup,
   downloadDevBackup,
   deleteDevBackup,
+  updateDevBackup,
+  pauseDevBackup,
+  resumeDevBackup,
+  getScheduledBackups,
+  downloadScheduledBackup,
+  deleteScheduledBackup,
   getDevRecovery,
   initiateDevRecovery,
   getDevDatabase,
   type DevBackup,
+  type DevScheduledBackup,
   type DevRecovery,
   type DevTableInfo,
 } from "../../services/developerService";
@@ -17,22 +24,27 @@ import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { DetailModal } from "./devShared";
 
 const BACKUP_METHODS = ["Entire Database", "Specific Tables", "Specific Rows"];
-const RECOVERY_TYPES = ["PostgreSQL Dump", "Row Level CSV"];
-const SCHEDULE_UNITS = ["Hours", "Days", "Months"];
+const RECOVERY_TYPES = ["PostgreSQL Dump", "Logical Backup", "Row Level CSV"];
+const SCHEDULE_UNITS = ["Minutes", "Hours", "Days", "Months"];
 const DB_SCHEMAS = ["public"];
 const MAX_RECOVERY_FILE_BYTES = 100 * 1024 * 1024;
 const POSTGRES_DUMP_CONFIRMATION = "RESTORE POSTGRES DUMP";
 const DEFAULT_RECOVERY_CONFIRMATION = "RECOVER";
 
-function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => void; onCreated: (name: string) => void; tables: string[] }) {
-  const [profileName, setProfileName] = useState("");
-  const [method, setMethod] = useState("");
-  const [selectedSchema, setSelectedSchema] = useState("");
-  const [selectedTables, setSelectedTables] = useState<string[]>([]);
-  const [selectedTable, setSelectedTable] = useState("");
-  const [rowCondition, setRowCondition] = useState("");
-  const [scheduleInterval, setScheduleInterval] = useState("");
-  const [scheduleUnit, setScheduleUnit] = useState("Hours");
+function parseBackupScope(scope = "") {
+  return Object.fromEntries(scope.split(";").map((part) => part.split(/:(.*)/s)).filter(([key]) => key));
+}
+
+function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onClose: () => void; onCreated: (name: string) => void; tables: string[]; backup?: DevBackup | null }) {
+  const initialScope = parseBackupScope(backup?.scope || "");
+  const [profileName, setProfileName] = useState(backup?.profileName || "");
+  const [method, setMethod] = useState(backup?.method || "");
+  const [selectedSchema, setSelectedSchema] = useState(initialScope.schema || "public");
+  const [selectedTables, setSelectedTables] = useState<string[]>(initialScope.tables ? initialScope.tables.split(",").filter(Boolean) : []);
+  const [selectedTable, setSelectedTable] = useState(initialScope.table || "");
+  const [rowCondition, setRowCondition] = useState(initialScope.condition || "");
+  const [scheduleInterval, setScheduleInterval] = useState(backup?.scheduleInterval || "");
+  const [scheduleUnit, setScheduleUnit] = useState(backup?.scheduleUnit || "Hours");
 
   const hasBackupTarget =
     method === "Entire Database" ||
@@ -50,22 +62,26 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
       } else if (method === "Specific Rows") {
         scope = `table:${selectedTable}`;
         if (rowCondition.trim()) {
-          scope += `;condition=${rowCondition.trim()}`;
+          scope += `;condition:${rowCondition.trim()}`;
         }
       }
 
-      await createDevBackup({
-        profileName: profileName.trim(),
-        method,
-        scope,
-        scheduleInterval: scheduleInterval || undefined,
-        scheduleUnit: scheduleInterval ? scheduleUnit : undefined,
+      const payload = {
+        profileName: profileName.trim(), method, scope,
+        scheduleInterval: scheduleInterval || null,
+        scheduleUnit: scheduleInterval ? scheduleUnit : null,
+      };
+      if (backup) await updateDevBackup(backup.id, payload);
+      else await createDevBackup({
+        ...payload,
+        scheduleInterval: payload.scheduleInterval || undefined,
+        scheduleUnit: payload.scheduleUnit || undefined,
       });
 
       onCreated(profileName.trim());
     } catch (err) {
       console.error("[BackupCreator] Failed:", err);
-      toast.error("Failed to create backup.");
+      toast.error(backup ? "Failed to update backup profile." : "Failed to create backup profile.");
     }
   };
 
@@ -73,7 +89,7 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-[560px] rounded-xl bg-white shadow-xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
-          <h2 className="text-[16px] font-bold text-[#0b1c30]">Create Backup Profile</h2>
+          <h2 className="text-[16px] font-bold text-[#0b1c30]">{backup ? "Edit Backup Profile" : "Create Backup Profile"}</h2>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-[#334155] hover:bg-[#f1f5f9]">
             <X size={18} />
           </button>
@@ -137,25 +153,26 @@ function BackupCreatorModal({ onClose, onCreated, tables }: { onClose: () => voi
                   placeholder='e.g. WHERE created_at > NOW() - INTERVAL &apos;30 days&apos;'
                   className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] font-mono"
                 />
-                <p className="text-[11px] text-[#64748b] mt-1">Generates a CSV file containing only rows matching this condition.</p>
+                <p className="text-[11px] text-[#64748b] mt-1">Generates a verified logical backup containing only rows matching this condition.</p>
               </div>
             </div>
           )}
 
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Schedule (optional)</label>
-            <div className="flex gap-2">
-              <input type="number" min="1" value={scheduleInterval} onChange={(e) => setScheduleInterval(e.target.value)} placeholder="Interval" className="w-24 px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8]" />
+            <div className="flex gap-2 items-center">
+              <input type="number" min="0" step="1" value={scheduleInterval} onChange={(e) => setScheduleInterval(e.target.value)} placeholder="0 = none" className="w-24 px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8]" />
               <select value={scheduleUnit} onChange={(e) => setScheduleUnit(e.target.value)} className="px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
                 {SCHEDULE_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
               </select>
             </div>
+            <p className="text-[11px] text-[#94a3b8] mt-1">Set to 0 or leave empty for no schedule.</p>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
           <button onClick={onClose} className="px-4 py-1.5 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] bg-white hover:bg-gray-50">Cancel</button>
-          <button onClick={handleCreate} disabled={!canProceed} className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">Create Backup Profile</button>
+          <button onClick={handleCreate} disabled={!canProceed} className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">{backup ? "Save Changes" : "Create Backup Profile"}</button>
         </div>
       </div>
     </div>
@@ -179,8 +196,9 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
     (async () => {
       try {
         const dbData = await getDevDatabase();
-        setTables(dbData.tables);
-        if (dbData.tables.length > 0) setSelectedDb(dbData.tables[0].name);
+        const unique = dbData.tables.filter((t, i, arr) => arr.findIndex((x) => x.name === t.name) === i);
+        setTables(unique);
+        if (unique.length > 0) setSelectedDb(unique[0].name);
       } catch (err) {
         console.error("[RecoveryModal] Failed to load tables:", err);
       }
@@ -190,7 +208,9 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   const availableDbs = [...new Set(tables.map((t) => t.name.split("_")[0] || "public"))];
   const allowedExtensions = recoveryType === "Row Level CSV"
     ? [".csv"]
-    : [".dump", ".backup", ".pgdump"];
+    : recoveryType === "Logical Backup"
+      ? [".json"]
+      : [".dump", ".backup", ".pgdump"];
   const expectedExtensionLabel = allowedExtensions.join(", ");
   const requiredConfirmation = recoveryType === "PostgreSQL Dump"
     ? POSTGRES_DUMP_CONFIRMATION
@@ -209,10 +229,12 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
     const lowerName = droppedFile.name.toLowerCase();
     if (lowerName.endsWith(".csv")) {
       setRecoveryType("Row Level CSV");
+    } else if (lowerName.endsWith(".json")) {
+      setRecoveryType("Logical Backup");
     } else if (lowerName.endsWith(".dump") || lowerName.endsWith(".backup") || lowerName.endsWith(".pgdump")) {
       setRecoveryType("PostgreSQL Dump");
     } else {
-      setError("Unsupported file type. Use .dump, .backup, .pgdump, or .csv files.");
+      setError("Unsupported file type. Use .dump, .backup, .pgdump, .json, or .csv files.");
       setFile(null);
       return;
     }
@@ -248,9 +270,14 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
       toast.success("Recovery completed.");
       setTimeout(() => onInitiated(), 1500);
     } catch (err: unknown) {
-      const response = (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
-      const msg = response?.error || response?.message || "Recovery failed. Check file format and try again.";
-      setError(msg);
+      const axiosErr = err as { code?: string; response?: { data?: { error?: string; message?: string } } };
+      if (axiosErr.code === "ECONNABORTED" || axiosErr.code === "ETIMEDOUT") {
+        setError("Recovery timed out. The operation may still be running on the server — check the recovery history tab in a moment.");
+      } else {
+        const response = axiosErr?.response?.data;
+        const msg = response?.error || response?.message || "Recovery failed. Check file format and try again.";
+        setError(msg);
+      }
     } finally {
       setProcessing(false);
     }
@@ -280,7 +307,9 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
                 Type {requiredConfirmation} to confirm
               </label>
               <p className="mt-1 text-[11px] text-[#64748b]">
-                PostgreSQL dump recovery runs in data-only, single-transaction mode and may insert or overwrite database data.
+                {recoveryType === "PostgreSQL Dump"
+                  ? "A verified full database dump replaces the public schema with automatic rollback protection. Partial dumps merge through an isolated staging schema."
+                  : "Logical and CSV recovery merge backed-up rows by primary key and preserve unrelated rows and tables."}
               </p>
               <input
                 id="recovery-confirmation"
@@ -327,7 +356,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
         <div className="p-6 flex flex-col gap-4">
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-2 block">Recovery Type</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {RECOVERY_TYPES.map((t) => (
                 <button key={t} onClick={() => { setRecoveryType(t); setError(""); setSuccess(""); setFile(null); }}
                   className={`px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors ${recoveryType === t ? "bg-[#006e2f] text-white border-[#006e2f]" : "border-[#e2e8f0] text-[#374151] hover:bg-gray-50"}`}>
@@ -408,11 +437,14 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
 
 function BackupTab() {
   const [backups, setBackups] = useState<DevBackup[]>([]);
+  const [scheduled, setScheduled] = useState<DevScheduledBackup[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreator, setShowCreator] = useState(false);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [schedLoading, setSchedLoading] = useState(true);
   const [viewBackup, setViewBackup] = useState<DevBackup | null>(null);
+  const [editBackup, setEditBackup] = useState<DevBackup | null>(null);
   const [tables, setTables] = useState<string[]>([]);
 
   const loadBackups = async () => {
@@ -428,11 +460,23 @@ function BackupTab() {
     }
   };
 
-  useEffect(() => { loadBackups(); }, []);
+  const loadScheduled = async () => {
+    try {
+      setSchedLoading(true);
+      const data = await getScheduledBackups();
+      setScheduled(data);
+    } catch (err) {
+      console.error("[BackupTab] Failed to load scheduled backups:", err);
+    } finally {
+      setSchedLoading(false);
+    }
+  };
+
+  useEffect(() => { loadBackups(); loadScheduled(); }, []);
 
   useEffect(() => {
     getDevDatabase().then((db) => {
-      setTables(db.tables.map((t) => t.name));
+      setTables([...new Set(db.tables.map((t) => t.name))]);
     }).catch(() => {});
   }, []);
 
@@ -473,6 +517,22 @@ function BackupTab() {
     }
   };
 
+  const handleScheduleToggle = async (backup: DevBackup) => {
+    try {
+      if (backup.isEnabled) {
+        await pauseDevBackup(backup.id);
+        toast.success("Backup schedule paused.");
+      } else {
+        await resumeDevBackup(backup.id);
+        toast.success("Backup schedule resumed and queued.");
+      }
+      await loadBackups();
+    } catch (err) {
+      console.error("[BackupTab] Schedule toggle failed:", err);
+      toast.error(backup.scheduleInterval ? "Could not update backup schedule." : "Add a schedule before resuming this profile.");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -491,7 +551,7 @@ function BackupTab() {
         <table className="w-full">
           <thead>
             <tr className="bg-[#f8fafc]">
-              {["PROFILE NAME", "METHOD", "SCOPE", "SCHEDULE", "SIZE", "STATUS", "ACTIONS"].map((h) => (
+              {["PROFILE NAME", "METHOD", "SCOPE", "SCHEDULE", "NEXT RUN", "SIZE", "STATUS", "ACTIONS"].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
               ))}
             </tr>
@@ -503,21 +563,28 @@ function BackupTab() {
                 <td className="px-4 py-3 text-[12px] text-[#374151]">{b.method}</td>
                 <td className="px-4 py-3 text-[12px] text-[#64748b]">{b.scope}</td>
                 <td className="px-4 py-3 text-[12px] text-[#64748b]">{b.scheduleInterval ? `${b.scheduleInterval} ${b.scheduleUnit}` : "—"}</td>
+                <td className="px-4 py-3 text-[12px] text-[#64748b]">{b.nextBackupAt ? new Date(b.nextBackupAt).toLocaleString() : "—"}</td>
                 <td className="px-4 py-3 text-[13px] text-[#374151]">{b.size}</td>
                 <td className="px-4 py-3">
-                  <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${b.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>{b.status}</span>
+                  <span className={`text-[11px] font-semibold px-2 py-1 rounded-full ${b.status === "ACTIVE" ? "bg-green-100 text-green-700" : b.status === "FAILED" ? "bg-red-100 text-red-700" : b.status === "PAUSED" ? "bg-gray-100 text-gray-700" : "bg-amber-100 text-amber-700"}`}>{b.status}</span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button onClick={() => setViewBackup(b)} className="rounded-lg p-1.5 text-[#006e2f] hover:bg-green-50" title="View Properties"><Eye size={14} /></button>
-                    <button onClick={() => handleDownload(b)} className="rounded-lg p-1.5 text-[#2563eb] hover:bg-blue-50" title="Download PostgreSQL Dump"><Download size={14} /></button>
+                    <button onClick={() => setEditBackup(b)} className="rounded-lg p-1.5 text-[#475569] hover:bg-slate-100" title="Edit Profile"><Pencil size={14} /></button>
+                    {b.scheduleInterval && (
+                      <button onClick={() => handleScheduleToggle(b)} className={`rounded-lg p-1.5 ${b.isEnabled ? "text-[#b45309] hover:bg-amber-50" : "text-[#006e2f] hover:bg-green-50"}`} title={b.isEnabled ? "Pause Schedule" : "Resume Schedule"}>
+                        {b.isEnabled ? <Pause size={14} /> : <Play size={14} />}
+                      </button>
+                    )}
+                    <button onClick={() => handleDownload(b)} className="rounded-lg p-1.5 text-[#2563eb] hover:bg-blue-50" title="Download Backup"><Download size={14} /></button>
                     <button onClick={() => handleDelete(b.id)} className="rounded-lg p-1.5 text-[#ba1a1a] hover:bg-red-50" title="Delete"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-[13px] text-[#94a3b8]">{loading ? <LoadingSpinner inline message="Loading backups..." /> : "No backups found."}</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-[13px] text-[#94a3b8]">{loading ? <LoadingSpinner inline message="Loading backups..." /> : "No backups found."}</td></tr>
             )}
           </tbody>
         </table>
@@ -536,12 +603,85 @@ function BackupTab() {
         )}
       </div>
 
+      {/* Scheduled Backups — auto-generated by the scheduler */}
+      <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e2e8f0] bg-[#f8fafc]">
+          <h3 className="text-[13px] font-semibold text-[#0b1c30]">Scheduled Backup Files</h3>
+          <button onClick={() => loadScheduled()} className="text-[11px] text-[#006e2f] hover:underline">Refresh</button>
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="bg-[#f8fafc]">
+              {["FILE", "PROFILE", "METHOD", "SIZE", "STATUS", "CREATED", "ACTIONS"].map((h) => (
+                <th key={h} className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {scheduled.map((s) => (
+              <tr key={s.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc]">
+                <td className="px-4 py-2.5 font-mono text-[12px] text-[#0b1c30]">{s.fileName}</td>
+                <td className="px-4 py-2.5 text-[12px] text-[#64748b]">{s.profileName || "—"}</td>
+                <td className="px-4 py-2.5 text-[12px] text-[#374151]">{s.method}</td>
+                <td className="px-4 py-2.5 text-[12px] text-[#374151]">{s.size}</td>
+                <td className="px-4 py-2.5">
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${s.status === "COMPLETED" ? "bg-green-100 text-green-700" : s.status === "FAILED" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{s.status}</span>
+                </td>
+                <td className="px-4 py-2.5 text-[12px] text-[#64748b]">{new Date(s.createdAt).toLocaleString()}</td>
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    {s.status === "COMPLETED" && (
+                      <button onClick={async () => {
+                        try {
+                          const { blob, filename } = await downloadScheduledBackup(s.id);
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = filename;
+                          document.body.appendChild(a); a.click(); a.remove();
+                          URL.revokeObjectURL(url);
+                          toast.success("Scheduled backup downloaded.");
+                        } catch { toast.error("Could not download scheduled backup."); }
+                      }} className="rounded-lg p-1.5 text-[#2563eb] hover:bg-blue-50" title="Download"><Download size={14} /></button>
+                    )}
+                    <button onClick={async () => {
+                      if (!confirm("Delete this scheduled backup file?")) return;
+                      try {
+                        await deleteScheduledBackup(s.id);
+                        toast.success("Scheduled backup deleted.");
+                        await loadScheduled();
+                      } catch { toast.error("Could not delete scheduled backup."); }
+                    }} className="rounded-lg p-1.5 text-[#ba1a1a] hover:bg-red-50" title="Delete"><Trash2 size={14} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {scheduled.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-[12px] text-[#94a3b8]">{schedLoading ? "Loading..." : "No scheduled backup files yet. Set a schedule on a backup profile to auto-generate backups."}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {showCreator && (
         <BackupCreatorModal
           onClose={() => setShowCreator(false)}
           onCreated={(name) => {
             setExecutionLog((prev) => [`[${new Date().toLocaleTimeString()}] Backup profile configured: ${name}`, ...prev]);
             setShowCreator(false);
+            loadBackups();
+            loadScheduled();
+          }}
+          tables={tables}
+        />
+      )}
+
+      {editBackup && (
+        <BackupCreatorModal
+          backup={editBackup}
+          onClose={() => setEditBackup(null)}
+          onCreated={(name) => {
+            setExecutionLog((prev) => [`[${new Date().toLocaleTimeString()}] Backup profile updated: ${name}`, ...prev]);
+            setEditBackup(null);
             loadBackups();
           }}
           tables={tables}
@@ -639,7 +779,7 @@ export default function BackupManagerPage() {
       <div className="flex-1 p-6 flex flex-col gap-5">
         <div>
           <h1 className="text-[26px] font-bold text-[#0b1c30]">Backup & Recovery</h1>
-          <p className="text-[13px] text-[#64748b] mt-0.5">Download PostgreSQL dump backups and recover from files selected on this device.</p>
+          <p className="text-[13px] text-[#64748b] mt-0.5">Manage full database dumps, logical table or row backups, schedules, and scope-aware recovery.</p>
         </div>
 
         <div className="flex gap-1 border-b border-[#e2e8f0]">

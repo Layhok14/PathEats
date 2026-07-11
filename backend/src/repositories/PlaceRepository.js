@@ -1,16 +1,18 @@
 import db from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import { sanitizeText } from "../utils/sanitize.js";
+import { OPEN_NOW_SQL, PLACE_HOURS_JSON_SELECT } from "../utils/placeHours.js";
 
 class PlaceRepository {
 
-  async findAllApproved(limit = 100) {
+  async findAllApproved(limit = 2000) {
     const { rows } = await db.query(
       `SELECT p.id, p.name, p.description,
               ST_Y(p.location::geometry) AS lat,
               ST_X(p.location::geometry) AS lng,
               p.photo_url, p.price_range, p.rating_avg AS rating,
-              p.rating_count, p.is_open AS open_now, p.address,
+              p.rating_count, ${OPEN_NOW_SQL} AS open_now, p.address,
+              ${PLACE_HOURS_JSON_SELECT},
               pi.bucket_name AS image_bucket,
               pi.object_path AS image_path,
               pi.mime_type AS image_mime_type,
@@ -44,7 +46,8 @@ class PlaceRepository {
               ST_Y(p.location::geometry) AS lat,
               ST_X(p.location::geometry) AS lng,
               p.photo_url, p.price_range, p.rating_avg AS rating,
-              p.rating_count, p.is_open AS open_now, p.address,
+              p.rating_count, ${OPEN_NOW_SQL} AS open_now, p.address,
+              ${PLACE_HOURS_JSON_SELECT},
               pi.bucket_name AS image_bucket,
               pi.object_path AS image_path,
               pi.mime_type AS image_mime_type,
@@ -79,7 +82,8 @@ class PlaceRepository {
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
               mii.alt_text AS image_alt_text
-       FROM menu_items mi
+       FROM place_menu_items pmi
+       JOIN menu_items mi ON mi.id = pmi.menu_item_id
        LEFT JOIN LATERAL (
          SELECT bucket_name, object_path, mime_type, alt_text
          FROM menu_item_images
@@ -87,7 +91,7 @@ class PlaceRepository {
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
          LIMIT 1
        ) mii ON TRUE
-       WHERE mi.place_id = $1 AND mi.is_available = TRUE
+       WHERE pmi.place_id = $1 AND pmi.is_available = TRUE
        ORDER BY mi.category, mi.name`,
       [placeId]
     );
@@ -97,12 +101,13 @@ class PlaceRepository {
   async getMenuItemsForPlaces(placeIds) {
     if (placeIds.length === 0) return {};
     const { rows } = await db.query(
-      `SELECT mi.place_id, mi.name, mi.price, mi.description, mi.category, mi.image_url,
+      `SELECT pmi.place_id, mi.name, mi.price, mi.description, mi.category, mi.image_url,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
               mii.alt_text AS image_alt_text
-       FROM menu_items mi
+       FROM place_menu_items pmi
+       JOIN menu_items mi ON mi.id = pmi.menu_item_id
        LEFT JOIN LATERAL (
          SELECT bucket_name, object_path, mime_type, alt_text
          FROM menu_item_images
@@ -110,7 +115,7 @@ class PlaceRepository {
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
          LIMIT 1
        ) mii ON TRUE
-       WHERE mi.place_id = ANY($1::uuid[]) AND mi.is_available = TRUE
+       WHERE pmi.place_id = ANY($1::uuid[]) AND pmi.is_available = TRUE
        ORDER BY mi.category, mi.name`,
       [placeIds]
     );
@@ -137,6 +142,7 @@ class PlaceRepository {
     range = 800,
     cuisine,
     maxPrice,
+    openNow = false,
     search: searchQuery,
     limit = 50,
     offset = 0,
@@ -146,7 +152,7 @@ class PlaceRepository {
       coordinates: routePoints.map(([lat, lng]) => [lng, lat]),
     });
 
-    // Fixed 7 params: $1=route, $2=range, $3=cuisine/null, $4=maxPrice/null, $5=searchPattern/null, $6=limit, $7=offset
+    // Fixed 8 params: $1=route, $2=range, $3=cuisine/null, $4=maxPrice/null, $5=searchPattern/null, $6=openNow, $7=limit, $8=offset
     // When a filter param is null/ignored its condition becomes effectively TRUE.
     const searchPattern = (searchQuery && searchQuery.trim()) ? `%${searchQuery.trim()}%` : null;
 
@@ -157,14 +163,16 @@ class PlaceRepository {
       `($3::text IS NULL OR pc.name = $3)`,
       `($4::int IS NULL OR p.price_range <= $4)`,
       `($5::text IS NULL OR p.name ILIKE $5 OR mi_search.names IS NOT NULL)`,
+      `($6::boolean = FALSE OR ${OPEN_NOW_SQL})`,
     ];
 
     const fromClause = `FROM places p
       LEFT JOIN LATERAL (
         SELECT COALESCE(ARRAY_AGG(DISTINCT mi2.name), '{}'::text[]) AS names
-        FROM menu_items mi2
-        WHERE mi2.place_id = p.id
-          AND mi2.is_available = TRUE
+        FROM place_menu_items pmi2
+        JOIN menu_items mi2 ON mi2.id = pmi2.menu_item_id
+        WHERE pmi2.place_id = p.id
+          AND pmi2.is_available = TRUE
           AND ($5::text IS NOT NULL AND mi2.name ILIKE $5)
       ) mi_search ON TRUE
       LEFT JOIN place_categories pc ON pc.id = p.category_id
@@ -194,6 +202,7 @@ class PlaceRepository {
       cuisine || null,
       (maxPrice !== undefined && maxPrice !== null && maxPrice < 4) ? maxPrice : null,
       searchPattern,
+      Boolean(openNow),
     ];
 
     // ── Count ──
@@ -204,7 +213,7 @@ class PlaceRepository {
     const total = countRes.rows[0]?.total || 0;
 
     // ── Data with pagination ──
-    const limitVal = Math.min(Math.max(1, limit), 100);
+    const limitVal = Math.min(Math.max(1, limit), 2000);
     const offsetVal = Math.max(0, offset);
     const dataParams = [...allParams, limitVal, offsetVal];
 
@@ -212,7 +221,8 @@ class PlaceRepository {
       `SELECT
          p.id, p.name, p.description, p.address,
          p.price_range, p.rating_avg AS rating, p.rating_count,
-         p.is_open AS open_now, p.photo_url,
+         ${OPEN_NOW_SQL} AS open_now, p.photo_url,
+         ${PLACE_HOURS_JSON_SELECT},
          ST_Y(p.location::geometry) AS lat,
          ST_X(p.location::geometry) AS lng,
          ST_Distance(p.location::geography, ST_GeomFromGeoJSON($1)::geography)::float8 AS dist_m,
@@ -225,7 +235,7 @@ class PlaceRepository {
        ${fromClause}
        ${whereClause}
        ORDER BY p.rating_avg DESC
-       LIMIT $6 OFFSET $7`,
+       LIMIT $7 OFFSET $8`,
       dataParams
     );
 
@@ -243,7 +253,7 @@ class PlaceRepository {
     return { rows: dataRes.rows, total, searchMeta };
   }
 
-  async getReviews(placeId, limit = 100) {
+  async getReviews(placeId, limit = 2000) {
     const { rows } = await db.query(
       `SELECT r.id, r.place_id AS vendor_id, r.user_id, r.rating AS stars,
               r.body, r.created_at,
@@ -280,6 +290,30 @@ class PlaceRepository {
     // Recalculate the place's rolling average rating
     await db.query("SELECT refresh_place_rating($1)", [placeId]);
 
+    return rows[0] || null;
+  }
+
+  async updateReview(reviewId, userId, data) {
+    const { rows } = await db.query(
+      `UPDATE reviews
+       SET rating = COALESCE($3, rating),
+           body = COALESCE($4, body),
+           updated_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+       RETURNING id, place_id AS vendor_id, user_id, rating AS stars, body, created_at, updated_at`,
+      [reviewId, userId, data.rating || null, data.body !== undefined ? sanitizeText(data.body) || null : null]
+    );
+    return rows[0] || null;
+  }
+
+  async deleteReview(reviewId, userId) {
+    const { rows } = await db.query(
+      `UPDATE reviews
+       SET deleted_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+       RETURNING id, place_id`,
+      [reviewId, userId]
+    );
     return rows[0] || null;
   }
 }

@@ -112,19 +112,12 @@ class VendorService {
     if (!data.name || data.price === undefined || data.price === null || data.price === "") {
       throw new AppError("Name and price are required", 400);
     }
-    const stalls = await this.vendorRepo.findByOwner(ownerId);
-    const placeId = data.place_id || (stalls.length > 0 ? stalls[0].id : null);
-    if (!placeId) {
-      throw new AppError("No stall found to add item to. Create a stall first.", 400);
-    }
     const sanitized = {
       ...data,
       name: sanitizeText(data.name),
       description: data.description ? sanitizeText(data.description) : data.description,
     };
-    const item = await this.vendorRepo.createMenuItem(placeId, ownerId, sanitized);
-    if (!item) throw new AppError("Stall not found", 404);
-    return item;
+    return this.vendorRepo.createMenuItemGlobal(ownerId, sanitized);
   }
 
   async updateMenuItemGlobal(ownerId, itemId, data) {

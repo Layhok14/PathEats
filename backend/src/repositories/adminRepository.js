@@ -7,6 +7,11 @@ import {
   upsertPrimaryPlaceImage,
 } from "../utils/storageImageMetadata.js";
 import { normalizePlaceStatus, PLACE_STATUS } from "../utils/placeStatus.js";
+import {
+  normalizeOperatingSchedule,
+  PLACE_HOURS_JSON_SELECT,
+  replacePlaceHours,
+} from "../utils/placeHours.js";
 
 const quoteIdent = (value) => `"${String(value).replace(/"/g, '""')}"`;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -579,10 +584,11 @@ export const getVendorManagementOverview = async (search = "") => {
     JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
     LEFT JOIN LATERAL (
-      SELECT *
-      FROM menu_items
-      WHERE place_id::text = p.id::text
-      ORDER BY created_at DESC NULLS LAST
+      SELECT menu.*
+      FROM place_menu_items link
+      JOIN menu_items menu ON menu.id = link.menu_item_id
+      WHERE link.place_id::text = p.id::text
+      ORDER BY menu.created_at DESC NULLS LAST
       LIMIT 1
     ) mi ON true
     LEFT JOIN LATERAL (
@@ -792,6 +798,8 @@ export const createStall = async (payload) => {
   const lat = latitude ?? 11.5564;
   const lng = longitude ?? 104.9282;
   const displayPhotoUrl = imageDisplayUrlFromStorageInput(payload, ["photoUrl", "photo_url"]);
+  const status = normalizePlaceStatus(payload.status ?? PLACE_STATUS.ACTIVE);
+  const isOpen = status === PLACE_STATUS.ACTIVE;
 
   const stall = await withTransaction(async (client) => {
     let created;
@@ -800,7 +808,7 @@ export const createStall = async (payload) => {
     if (allowed.has("location")) {
       const result = await client.query(
         `INSERT INTO places (owner_id, category_id, name, description, address, price_range, photo_url, is_open, status, is_admin_managed, location)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'active', FALSE, ST_SetSRID(ST_MakePoint($8, $9), 4326)::geography)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, ST_SetSRID(ST_MakePoint($10, $11), 4326)::geography)
          RETURNING id::text`,
         [
           owner.id,
@@ -810,6 +818,8 @@ export const createStall = async (payload) => {
           address || null,
           priceRange == null ? null : Number(priceRange),
           displayPhotoUrl ?? null,
+          isOpen,
+          status,
           lng,
           lat,
         ]
@@ -826,8 +836,8 @@ export const createStall = async (payload) => {
           address: address || null,
           price_range: priceRange || null,
           photo_url: displayPhotoUrl ?? null,
-          is_open: true,
-          status: PLACE_STATUS.ACTIVE,
+          is_open: isOpen,
+          status,
           is_admin_managed: false,
         },
         client
@@ -837,6 +847,21 @@ export const createStall = async (payload) => {
     if (!created) return null;
 
     await upsertPrimaryPlaceImage(client, created.id, payload, uploadedBy(payload, owner.id));
+    await replacePlaceHours(client, created.id, normalizeOperatingSchedule(payload));
+    const menuItemIds = [...new Set((payload.menuItemIds ?? payload.menu_item_ids ?? []).map(String))];
+    if (menuItemIds.length > 0) {
+      const result = await client.query(
+        `INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
+         SELECT $1, mi.id, TRUE
+         FROM menu_items mi
+         WHERE mi.owner_id = $2 AND mi.id::text = ANY($3::text[])
+         ON CONFLICT (place_id, menu_item_id) DO NOTHING`,
+        [created.id, owner.id, menuItemIds]
+      );
+      if (result.rowCount !== menuItemIds.length) {
+        throw new AppError("One or more menu items do not belong to the selected vendor", 400);
+      }
+    }
     return created;
   });
 
@@ -845,14 +870,7 @@ export const createStall = async (payload) => {
 
 export const deleteStall = async (id) => {
   return withTransaction(async (client) => {
-    await client.query(
-      `DELETE FROM menu_item_images mii
-       USING menu_items mi
-       WHERE mii.menu_item_id::text = mi.id::text
-         AND mi.place_id::text = $1`,
-      [id]
-    );
-    await client.query("DELETE FROM menu_items WHERE place_id::text = $1", [id]);
+    await client.query("DELETE FROM place_menu_items WHERE place_id::text = $1", [id]);
     await client.query("DELETE FROM place_hours WHERE place_id::text = $1", [id]);
     await client.query("DELETE FROM reviews WHERE place_id::text = $1", [id]);
     await client.query("DELETE FROM place_images WHERE place_id::text = $1", [id]);
@@ -864,19 +882,29 @@ export const deleteStall = async (id) => {
 export const createStallMenuItem = async (placeId, payload) => {
   const displayImageUrl = imageDisplayUrlFromStorageInput(payload, ["imageUrl", "image_url"]);
   return withTransaction(async (client) => {
-    const item = await insertAllowed(
-      "menu_items",
-      {
-        place_id: placeId,
-        name: payload.name,
-        description: payload.description || null,
-        price: payload.price,
-        category: menuItemCategory(payload.category),
-        image_url: displayImageUrl ?? null,
-        is_available: payload.isAvailable ?? payload.is_available ?? true,
-      },
-      client
+    const result = await client.query(
+      `WITH target_place AS (
+         SELECT id, owner_id FROM places WHERE id::text = $1
+       ), created_item AS (
+         INSERT INTO menu_items (owner_id, name, description, price, category, image_url)
+         SELECT owner_id, $2, $3, $4, $5, $6 FROM target_place
+         RETURNING *
+       ), linked_item AS (
+         INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
+         SELECT id, (SELECT id FROM created_item), $7 FROM target_place
+       )
+       SELECT * FROM created_item`,
+      [
+        placeId,
+        payload.name,
+        payload.description || null,
+        payload.price,
+        menuItemCategory(payload.category),
+        displayImageUrl ?? null,
+        payload.isAvailable ?? payload.is_available ?? true,
+      ]
     );
+    const item = result.rows[0] ?? null;
 
     if (!item) return null;
 
@@ -885,9 +913,14 @@ export const createStallMenuItem = async (placeId, payload) => {
   });
 };
 
-export const deleteStallMenuItem = async (id) => {
-  await pool.query("DELETE FROM menu_item_images WHERE menu_item_id::text = $1", [id]);
-  const result = await pool.query("DELETE FROM menu_items WHERE id::text = $1 RETURNING id::text", [id]);
+export const deleteStallMenuItem = async (id, placeId = null) => {
+  if (!placeId) {
+    throw new AppError("placeId is required to delete a stall menu item. Use vendor endpoints to manage the global menu catalog.", 400);
+  }
+  const result = await pool.query(
+    "DELETE FROM place_menu_items WHERE menu_item_id::text = $1 AND place_id::text = $2 RETURNING menu_item_id::text AS id",
+    [id, placeId]
+  );
   return result.rows[0] ?? null;
 };
 
@@ -942,7 +975,7 @@ export const deleteStallReview = async (id) => {
   return result.rows[0] ?? null;
 };
 
-export const getAllReviews = async (limit = 100, offset = 0) => {
+export const getAllReviews = async (limit = 2000, offset = 0) => {
   const { rows } = await pool.query(
     `SELECT r.id, r.rating AS stars, r.body, r.created_at,
             u.first_name || ' ' || u.last_name AS user_name,
@@ -958,7 +991,7 @@ export const getAllReviews = async (limit = 100, offset = 0) => {
   return rows;
 };
 
-export const getReviewsByPlaceId = async (placeId, limit = 100) => {
+export const getReviewsByPlaceId = async (placeId, limit = 2000) => {
   const { rows } = await pool.query(
     `SELECT r.id, r.rating AS stars, r.body, r.created_at,
             u.first_name || ' ' || u.last_name AS user_name,
@@ -1158,6 +1191,7 @@ export const findAllStalls = async (page = 1, limit = 50) => {
       COALESCE(u.email, '') AS owner_email,
       CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
       ST_AsGeoJSON(p.location)::jsonb AS location,
+      ${PLACE_HOURS_JSON_SELECT},
       jsonb_build_object(
         'id', pc.id::text,
         'name', pc.name,
@@ -1195,6 +1229,7 @@ export const findAllStalls = async (page = 1, limit = 50) => {
       ownerName: row.owner_name,
       category: row.category,
       location: row.location,
+      operatingHours: row.operating_hours,
     };
   });
 };
@@ -1220,6 +1255,7 @@ export const findStallsByOwner = async (ownerId, limit = 50) => {
       COALESCE(u.email, '') AS owner_email,
       CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
       ST_AsGeoJSON(p.location)::jsonb AS location,
+      ${PLACE_HOURS_JSON_SELECT},
       jsonb_build_object(
         'id', pc.id::text,
         'name', pc.name,
@@ -1257,6 +1293,7 @@ export const findStallsByOwner = async (ownerId, limit = 50) => {
     ownerName: row.owner_name,
     category: row.category,
     location: row.location,
+    operatingHours: row.operating_hours,
   }));
 };
 
@@ -1281,6 +1318,7 @@ export const findStallById = async (id) => {
       COALESCE(u.email, '') AS owner_email,
       CONCAT_WS(' ', u.first_name, u.last_name) AS owner_name,
       ST_AsGeoJSON(p.location)::jsonb AS location,
+      ${PLACE_HOURS_JSON_SELECT},
       jsonb_build_object(
         'id', pc.id::text,
         'name', pc.name,
@@ -1320,6 +1358,7 @@ export const findStallById = async (id) => {
     ownerName: row.owner_name,
     category: row.category,
     location: row.location,
+    operatingHours: row.operating_hours,
   };
 };
 
@@ -1336,6 +1375,7 @@ export const updateStall = async (id, payload) => {
     description: "description",
     address: "address",
     priceRange: "price_range",
+    categoryId: "category_id",
   };
 
   let hasLocation = false;
@@ -1433,6 +1473,25 @@ export const updateStall = async (id, payload) => {
     if (!stall) return null;
 
     await upsertPrimaryPlaceImage(client, id, payload, uploadedBy(payload, payload.ownerId));
+    await replacePlaceHours(client, id, normalizeOperatingSchedule(payload));
+    if (payload.menuItemIds !== undefined || payload.menu_item_ids !== undefined) {
+      const menuItemIds = [...new Set((payload.menuItemIds ?? payload.menu_item_ids ?? []).map(String))];
+      const ownerResult = await client.query("SELECT owner_id FROM places WHERE id::text = $1", [id]);
+      const currentOwnerId = ownerResult.rows[0]?.owner_id;
+      await client.query("DELETE FROM place_menu_items WHERE place_id::text = $1", [id]);
+      if (menuItemIds.length > 0) {
+        const linkResult = await client.query(
+          `INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
+           SELECT $1, mi.id, TRUE
+           FROM menu_items mi
+           WHERE mi.owner_id = $2 AND mi.id::text = ANY($3::text[])`,
+          [id, currentOwnerId, menuItemIds]
+        );
+        if (linkResult.rowCount !== menuItemIds.length) {
+          throw new AppError("One or more menu items do not belong to the stall owner", 400);
+        }
+      }
+    }
     return stall;
   });
 
@@ -1453,7 +1512,7 @@ export const updateStallStatus = async (id, isOpen) => {
   return result.rows[0] ?? null;
 };
 
-export const findAllMenuItems = async (placeId = null) => {
+export const findAllMenuItems = async (placeId = null, ownerId = null) => {
   const rows = await optionalRows(
     `
     SELECT
@@ -1464,17 +1523,25 @@ export const findAllMenuItems = async (placeId = null) => {
       mi.category,
       mi.image_url,
       ${primaryMenuItemImageSelect},
-      mi.is_available,
-      mi.place_id::text,
+      COALESCE(pmi.is_available, TRUE) AS is_available,
+      pmi.place_id::text,
       p.name AS place_name
     FROM menu_items mi
-    LEFT JOIN places p ON p.id::text = mi.place_id::text
+    LEFT JOIN LATERAL (
+      SELECT link.place_id, link.is_available
+      FROM place_menu_items link
+      WHERE link.menu_item_id = mi.id
+        ${placeId ? `AND link.place_id::text = $1` : ""}
+      ORDER BY link.created_at ASC
+      LIMIT 1
+    ) pmi ON TRUE
+    LEFT JOIN places p ON p.id = pmi.place_id
     ${primaryMenuItemImageJoin}
-    ${placeId ? `WHERE mi.place_id::text = $1` : ""}
+    ${placeId ? `WHERE pmi.place_id IS NOT NULL` : ownerId ? `WHERE mi.owner_id::text = $1` : ""}
     ORDER BY p.name ASC, mi.name ASC
     `
   ,
-    placeId ? [placeId] : []
+    placeId ? [placeId] : ownerId ? [ownerId] : []
   );
   return rows.map((row) => ({
     id: row.id,
@@ -1502,7 +1569,6 @@ export const updateMenuItem = async (id, payload) => {
     description: "description",
     price: "price",
     category: "category",
-    isAvailable: "is_available",
   };
 
   for (const [key, col] of Object.entries(fieldMap)) {
@@ -1518,7 +1584,8 @@ export const updateMenuItem = async (id, payload) => {
   }
 
   const hasImageUpdate = hasStorageImageInput(payload);
-  if (sets.length === 0 && !hasImageUpdate) return null;
+  const hasAvailabilityUpdate = payload.isAvailable !== undefined || payload.is_available !== undefined;
+  if (sets.length === 0 && !hasImageUpdate && !hasAvailabilityUpdate) return null;
 
   return withTransaction(async (client) => {
     let item = { id };
@@ -1536,6 +1603,24 @@ export const updateMenuItem = async (id, payload) => {
     }
 
     if (!item) return null;
+
+    if (payload.isAvailable !== undefined || payload.is_available !== undefined) {
+      const availability = payload.isAvailable ?? payload.is_available;
+      const placeId = payload.placeId ?? payload.place_id;
+      if (placeId) {
+        await client.query(
+          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
+           WHERE menu_item_id::text = $2 AND place_id::text = $3`,
+          [availability, id, placeId]
+        );
+      } else {
+        await client.query(
+          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
+           WHERE menu_item_id::text = $2`,
+          [availability, id]
+        );
+      }
+    }
 
     const image = await upsertPrimaryMenuItemImage(client, id, payload, uploadedBy(payload));
     return withMenuImageMetadata(item, image);

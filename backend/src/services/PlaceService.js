@@ -1,5 +1,7 @@
 import PlaceRepository from "../repositories/PlaceRepository.js";
 import AppError from "../utils/AppError.js";
+import db from "../config/db.js";
+import { scheduleToResponse } from "../utils/placeHours.js";
 
 const CATEGORY_TO_CUISINE = {
   "Rice": "Rice",
@@ -41,7 +43,7 @@ class PlaceService {
       maxPrice: maxPrice !== undefined ? maxPrice : null,
       openNow: openNow !== undefined ? openNow : null,
       search: search || null,
-      limit: limit || 50,
+      limit: limit || 1000,
       offset: offset || 0,
     });
 
@@ -109,6 +111,23 @@ class PlaceService {
     return this.placeRepo.createReview(placeId, userId, data);
   }
 
+  async updateReview(reviewId, userId, data) {
+    if (data.rating !== undefined && (data.rating < 1 || data.rating > 5)) {
+      throw new AppError("Rating must be between 1 and 5", 400);
+    }
+    const review = await this.placeRepo.updateReview(reviewId, userId, data);
+    if (!review) throw new AppError("Review not found or you do not have permission to edit it", 404);
+    await db.query("SELECT refresh_place_rating($1)", [review.vendor_id]);
+    return review;
+  }
+
+  async deleteReview(reviewId, userId) {
+    const review = await this.placeRepo.deleteReview(reviewId, userId);
+    if (!review) throw new AppError("Review not found or you do not have permission to delete it", 404);
+    await db.query("SELECT refresh_place_rating($1)", [review.place_id]);
+    return review;
+  }
+
   toVendor(row, menu) {
     return {
       id: row.id,
@@ -124,7 +143,7 @@ class PlaceService {
       storage_image: toStorageImage(row),
       description: row.description || "",
       open_now: row.open_now,
-      hours: "",
+      hours: scheduleToResponse(row.operating_hours),
       address: row.address || "",
       menu: menu.map((m) => ({
         name: m.name,

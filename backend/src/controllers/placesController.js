@@ -157,3 +157,13 @@ export const createReview = catchAsync(async (req, res) => {
   const review = await placeService.createReview(req.params.id, req.user.sub, req.body);
   res.status(201).json({ success: true, data: review });
 });
+
+export const updateReview = catchAsync(async (req, res) => {
+  const review = await placeService.updateReview(req.params.reviewId, req.user.sub, req.body);
+  res.json({ success: true, data: review });
+});
+
+export const deleteReview = catchAsync(async (req, res) => {
+  await placeService.deleteReview(req.params.reviewId, req.user.sub);
+  res.json({ success: true, data: { message: "Review deleted" } });
+});

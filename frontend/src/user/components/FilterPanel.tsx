@@ -370,7 +370,7 @@ export function FilterPanel({
                               : { background: tm.filterChip, color: tm.filterChipText }
                         }
                       >
-                        {PRICE_LABELS[p]}
+                        <span className="relative z-10">{PRICE_LABELS[p]}</span>
                         {isSelected && (
                           <motion.div
                             layoutId="price-indicator"

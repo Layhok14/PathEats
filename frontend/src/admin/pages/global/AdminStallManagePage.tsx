@@ -254,10 +254,7 @@ export default function AdminStallManagePage() {
         <div className="flex items-center justify-between">
           <h1 className="text-[22px] font-bold text-[#0b1c30]">{vendorId ? `Stalls — ${vendorName}` : "All Stalls"}</h1>
           <div className="flex items-center gap-3">
-            <button onClick={() => {
-              if (vendorId) setCreateForm((f) => ({ ...f, ownerId: vendorId }));
-              setShowCreateStall(true);
-            }} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
+            <button onClick={() => navigate(`${portalPath(portalBase, "/stalls/new")}${vendorId ? `?ownerId=${encodeURIComponent(vendorId)}` : ""}`)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
               <Plus size={14} /> Create Stall
             </button>
           </div>

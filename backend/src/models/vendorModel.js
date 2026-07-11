@@ -1,4 +1,5 @@
 import { isPlaceActive } from "../utils/placeStatus.js";
+import { scheduleToResponse } from "../utils/placeHours.js";
 
 const toStorageImage = (row) => {
   if (!row.image_bucket || !row.image_path) return null;
@@ -57,10 +58,7 @@ class VendorModel {
         latitude: parseFloat(row.lat) || 0,
         longitude: parseFloat(row.lng) || 0,
       },
-      operatingHours: {
-        weekdays: { open: "07:00 AM", close: "09:00 PM" },
-        weekends: { open: "08:00 AM", close: "08:00 PM" },
-      },
+      operatingHours: scheduleToResponse(row.operating_hours),
       menuItemIds: [],
       created_at: row.created_at,
     };

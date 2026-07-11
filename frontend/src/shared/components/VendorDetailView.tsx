@@ -144,7 +144,7 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
   const confirmDeleteMenuItem = async () => {
     if (!deleteMenuItemTarget) return;
     try {
-      await api.delete(`/admin/stalls/menu-items/${deleteMenuItemTarget.id}`);
+      await api.delete(`/admin/stalls/menu-items/${deleteMenuItemTarget.id}`, { params: { placeId: deleteMenuItemTarget.placeId } });
       toast.success(`"${deleteMenuItemTarget.name}" deleted.`);
       setDeleteMenuItemTarget(null);
       loadData();
@@ -156,6 +156,8 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
 
   const handleEditMenuItemSave = async () => {
     if (!editMenuItem) return;
+    const priceTrimmed = String(editMenuItem.price).trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(priceTrimmed) || parseFloat(priceTrimmed) > 99999.99) { toast.error("Enter a valid price (e.g. 12.50)."); return; }
     try {
       await api.patch(`/admin/menu-items/${editMenuItem.id}`, {
         name: editMenuItem.name,
@@ -197,6 +199,8 @@ export function VendorDetailView({ vendorId, backPath, title = "Vendor Detail", 
       toast.error("Name, price, and stall required.");
       return;
     }
+    const priceTrimmed = menuCreateForm.price.trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(priceTrimmed) || parseFloat(priceTrimmed) > 99999.99) { toast.error("Enter a valid price (e.g. 12.50)."); return; }
     try {
       await api.post(`/admin/stalls/${menuCreateForm.placeId}/menu-items`, {
         name: menuCreateForm.name,

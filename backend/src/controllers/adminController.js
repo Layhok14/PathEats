@@ -1,4 +1,13 @@
 import * as adminService from "../services/AdminService.js";
+import AppError from "../utils/AppError.js";
+
+function validatePrice(price) {
+  if (price === undefined || price === null || price === "") return;
+  const n = Number(price);
+  if (!Number.isFinite(n) || n < 0 || n > 99999.99 || !String(price).match(/^\d+(\.\d{1,2})?$/)) {
+    throw new AppError("Invalid price. Must be a number between 0 and 99,999.99 with at most 2 decimal places.", 400);
+  }
+}
 
 class AdminController {
   constructor(service) {
@@ -86,7 +95,7 @@ class AdminController {
   getVendors = async (req, res, next) => {
     try {
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+      const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 1000));
       const vendors = await this.service.getVendors(page, limit);
       res.json({ success: true, data: vendors });
     } catch (error) {
@@ -105,7 +114,7 @@ class AdminController {
 
   approveVendor = async (req, res, next) => {
     try {
-      const vendor = await this.service.approveVendor(req.params.id, req.body.approved !== false);
+      const vendor = await this.service.approveVendor(req.params.id, req.body.approved !== false, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.json({ success: true, data: vendor });
     } catch (error) {
       next(error);
@@ -123,7 +132,7 @@ class AdminController {
 
   createStall = async (req, res, next) => {
     try {
-      const stall = await this.service.createStall(req.body);
+      const stall = await this.service.createStall(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({ success: true, data: stall });
     } catch (error) {
       next(error);
@@ -132,7 +141,7 @@ class AdminController {
 
   deleteStall = async (req, res, next) => {
     try {
-      const stall = await this.service.deleteStall(req.params.id);
+      const stall = await this.service.deleteStall(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
       res.json({ success: true, data: stall });
     } catch (error) {
@@ -142,7 +151,8 @@ class AdminController {
 
   createStallMenuItem = async (req, res, next) => {
     try {
-      const menuItem = await this.service.createStallMenuItem(req.params.placeId, req.body);
+      validatePrice(req.body.price);
+      const menuItem = await this.service.createStallMenuItem(req.params.placeId, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({ success: true, data: menuItem });
     } catch (error) {
       next(error);
@@ -151,7 +161,7 @@ class AdminController {
 
   deleteStallMenuItem = async (req, res, next) => {
     try {
-      const menuItem = await this.service.deleteStallMenuItem(req.params.id);
+      const menuItem = await this.service.deleteStallMenuItem(req.params.id, req.query.placeId || null, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!menuItem) return res.status(404).json({ success: false, message: "Menu item not found" });
       res.json({ success: true, data: menuItem });
     } catch (error) {
@@ -161,7 +171,7 @@ class AdminController {
 
   createStallCategory = async (req, res, next) => {
     try {
-      const category = await this.service.createStallCategory(req.body);
+      const category = await this.service.createStallCategory(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({ success: true, data: category });
     } catch (error) {
       next(error);
@@ -170,7 +180,7 @@ class AdminController {
 
   deleteStallCategory = async (req, res, next) => {
     try {
-      const category = await this.service.deleteStallCategory(req.params.id);
+      const category = await this.service.deleteStallCategory(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!category) return res.status(404).json({ success: false, message: "Category not found" });
       res.json({ success: true, data: category });
     } catch (error) {
@@ -180,7 +190,7 @@ class AdminController {
 
   createStallPlaceHour = async (req, res, next) => {
     try {
-      const hour = await this.service.createStallPlaceHour(req.params.placeId, req.body);
+      const hour = await this.service.createStallPlaceHour(req.params.placeId, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({ success: true, data: hour });
     } catch (error) {
       next(error);
@@ -189,7 +199,7 @@ class AdminController {
 
   deleteStallPlaceHour = async (req, res, next) => {
     try {
-      const hour = await this.service.deleteStallPlaceHour(req.params.id);
+      const hour = await this.service.deleteStallPlaceHour(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!hour) return res.status(404).json({ success: false, message: "Place hour not found" });
       res.json({ success: true, data: hour });
     } catch (error) {
@@ -199,7 +209,7 @@ class AdminController {
 
   createStallReview = async (req, res, next) => {
     try {
-      const review = await this.service.createStallReview(req.params.placeId, req.body);
+      const review = await this.service.createStallReview(req.params.placeId, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({ success: true, data: review });
     } catch (error) {
       next(error);
@@ -208,7 +218,7 @@ class AdminController {
 
   deleteStallReview = async (req, res, next) => {
     try {
-      const review = await this.service.deleteStallReview(req.params.id);
+      const review = await this.service.deleteStallReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!review) return res.status(404).json({ success: false, message: "Review not found" });
       res.json({ success: true, data: review });
     } catch (error) {
@@ -265,7 +275,7 @@ class AdminController {
   getAllStalls = async (req, res, next) => {
     try {
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+      const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 1000));
       const stalls = await this.service.getAllStalls(page, limit);
       res.json({ success: true, data: stalls });
     } catch (error) {
@@ -285,7 +295,8 @@ class AdminController {
 
   getStallsByOwner = async (req, res, next) => {
     try {
-      const stalls = await this.service.getStallsByOwner(req.params.ownerId);
+      const limit = Math.min(2000, Math.max(1, parseInt(req.query.limit, 10) || 1000));
+      const stalls = await this.service.getStallsByOwner(req.params.ownerId, limit);
       res.json({ success: true, data: stalls });
     } catch (error) {
       next(error);
@@ -294,7 +305,7 @@ class AdminController {
 
   editStall = async (req, res, next) => {
     try {
-      const stall = await this.service.editStall(req.params.id, req.body);
+      const stall = await this.service.editStall(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
       res.json({ success: true, data: stall });
     } catch (error) {
@@ -304,7 +315,7 @@ class AdminController {
 
   toggleStallStatus = async (req, res, next) => {
     try {
-      const stall = await this.service.toggleStallStatus(req.params.id);
+      const stall = await this.service.toggleStallStatus(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
       res.json({ success: true, data: stall });
     } catch (error) {
@@ -323,8 +334,8 @@ class AdminController {
 
   getAllMenuItems = async (req, res, next) => {
     try {
-      const { placeId } = req.query;
-      const items = await this.service.getAllMenuItems(placeId || null);
+      const { placeId, ownerId } = req.query;
+      const items = await this.service.getAllMenuItems(placeId || null, ownerId || null);
       res.json({ success: true, data: items });
     } catch (error) {
       next(error);
@@ -333,7 +344,7 @@ class AdminController {
 
   getAllReviews = async (req, res, next) => {
     try {
-      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 100));
+      const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit, 10) || 2000));
       const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
       const reviews = await this.service.getAllReviews(limit, offset);
       res.json({ success: true, data: reviews });
@@ -353,7 +364,8 @@ class AdminController {
 
   editMenuItem = async (req, res, next) => {
     try {
-      const item = await this.service.editMenuItem(req.params.id, req.body);
+      validatePrice(req.body.price);
+      const item = await this.service.editMenuItem(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!item) return res.status(404).json({ success: false, message: "Menu item not found" });
       res.json({ success: true, data: item });
     } catch (error) {
@@ -443,7 +455,7 @@ class AdminController {
 
   updateOnboardingConfig = async (req, res, next) => {
     try {
-      const config = await this.service.updateOnboardingConfig(req.body);
+      const config = await this.service.updateOnboardingConfig(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.json({ success: true, data: config });
     } catch (error) {
       next(error);
@@ -454,7 +466,7 @@ class AdminController {
 
   flagReview = async (req, res, next) => {
     try {
-      const review = await this.service.flagReview(req.params.id);
+      const review = await this.service.flagReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!review) return res.status(404).json({ success: false, message: "Review not found" });
       res.json({ success: true, data: review });
     } catch (error) {
@@ -464,7 +476,7 @@ class AdminController {
 
   unflagReview = async (req, res, next) => {
     try {
-      const review = await this.service.unflagReview(req.params.id);
+      const review = await this.service.unflagReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!review) return res.status(404).json({ success: false, message: "Review not found" });
       res.json({ success: true, data: review });
     } catch (error) {
@@ -474,7 +486,7 @@ class AdminController {
 
   removeReview = async (req, res, next) => {
     try {
-      const review = await this.service.removeReview(req.params.id);
+      const review = await this.service.removeReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!review) return res.status(404).json({ success: false, message: "Review not found" });
       res.json({ success: true, data: review });
     } catch (error) {

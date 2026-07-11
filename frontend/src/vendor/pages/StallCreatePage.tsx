@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router";
-import { ChevronLeft, Check, MapPin } from "lucide-react";
+import { useLocation, useNavigate, useParams } from "react-router";
+import { ChevronLeft, Check, MapPin, AlertTriangle } from "lucide-react";
 import { PhotoUpload } from "../components/PhotoUpload";
 import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 import { SuccessModal } from "../../shared/components/SuccessModal";
@@ -11,6 +11,7 @@ import { useStalls } from "../../shared/hooks/useStalls";
 import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import { formatPrice } from "../../shared/utils/formatters";
 import { STALL_CATEGORIES } from "../../shared/constants/categories";
+import api from "../../shared/services/axiosService";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
@@ -20,6 +21,14 @@ import {
   removeMarkersSafely,
 } from "../../shared/utils/maplibreLifecycle";
 import type { StallFormData, StallCategory } from "../../shared/types";
+import type { Stall, VendorMenuItem, OperatingSchedule } from "../../shared/types";
+import {
+  getAdminAllStalls,
+  getAdminStallById,
+  getStallManagementOptions,
+  type StallManagementOptions,
+} from "../../admin/services/adminDashboardService";
+import { portalPath, useManagementPortalBase } from "../../admin/utils/portalPath";
 
 const STEPS = [{ label: "Stall Info" }, { label: "Menu Items" }, { label: "Location" }, { label: "Review" }];
 const EMPTY: StallFormData = {
@@ -44,11 +53,12 @@ function to24h(t: string) {
   return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
-function StallInfoForm({ form, onChange, fieldErrors, clearFieldError }: {
+function StallInfoForm({ form, onChange, fieldErrors, clearFieldError, categories = [...STALL_CATEGORIES] }: {
   form: StallFormData;
   onChange: (f: StallFormData) => void;
   fieldErrors: Record<string, string>;
   clearFieldError: (field: string) => void;
+  categories?: string[];
 }) {
   const inp: React.CSSProperties = { width: "100%", border: "1px solid var(--brand-input-border)", borderRadius: "4px", padding: "10px 14px", fontSize: "14px", fontFamily: "Poppins, sans-serif", color: "var(--brand-text-dark)", background: "var(--card)", outline: "none" };
   const lbl: React.CSSProperties = { fontFamily: "Poppins, sans-serif", fontSize: "13px", fontWeight: 500, color: "var(--brand-text-dark)", display: "block", marginBottom: "6px" };
@@ -72,7 +82,7 @@ function StallInfoForm({ form, onChange, fieldErrors, clearFieldError }: {
       <div>
         <label style={lbl}>Primary Category</label>
         <div className="flex flex-wrap gap-2">
-          {STALL_CATEGORIES.map((cat) => {
+          {categories.map((cat: string) => {
             const sel = form.category === cat;
             return <button key={cat} type="button" onClick={() => onChange({ ...form, category: cat as StallCategory })} style={{ padding: "5px 14px", borderRadius: "9999px", border: sel ? "none" : "1px solid var(--brand-card-border)", background: sel ? "var(--brand-green)" : "var(--card)", color: sel ? "white" : "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "13px", cursor: "pointer" }}>{cat}</button>;
           })}
@@ -107,9 +117,8 @@ function StallInfoForm({ form, onChange, fieldErrors, clearFieldError }: {
   );
 }
 
-function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: StallFormData) => void }) {
+function LocationStep({ form, onChange, stalls, managementMode = false }: { form: StallFormData; onChange: (f: StallFormData) => void; stalls: Stall[]; managementMode?: boolean }) {
   const navigate = useNavigate();
-  const { stalls } = useStalls();
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -118,6 +127,8 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
   const initialCoords = { lat: form.location.latitude, lng: form.location.longitude };
   const [coords, setCoords] = useState(initialCoords);
   const [mapRecovering, setMapRecovering] = useState(false);
+  const [nearbyStalls, setNearbyStalls] = useState<Array<{ id: string; name: string; distance_meters: number }>>([]);
+  const nearbyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coordsRef = useRef(coords);
   coordsRef.current = coords;
   const syncRef = useRef(onChange);
@@ -131,6 +142,19 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
       ...currentForm,
       location: { ...currentForm.location, latitude: lat, longitude: lng },
     });
+  };
+
+  const checkNearby = (lat: number, lng: number) => {
+    if (managementMode) return;
+    if (nearbyTimerRef.current) clearTimeout(nearbyTimerRef.current);
+    nearbyTimerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/vendor/stalls/nearby`, { params: { latitude: lat, longitude: lng } });
+        setNearbyStalls(Array.isArray(data.data) ? data.data : []);
+      } catch {
+        setNearbyStalls([]);
+      }
+    }, 500);
   };
 
   useEffect(() => {
@@ -178,6 +202,7 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
         const lngLat = marker.getLngLat();
         setCoords({ lat: lngLat.lat, lng: lngLat.lng });
         syncCoords(lngLat.lat, lngLat.lng);
+        checkNearby(lngLat.lat, lngLat.lng);
       });
       markerRef.current = marker;
 
@@ -186,6 +211,7 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
           markerRef.current.setLngLat(e.lngLat);
           setCoords({ lat: e.lngLat.lat, lng: e.lngLat.lng });
           syncCoords(e.lngLat.lat, e.lngLat.lng);
+          checkNearby(e.lngLat.lat, e.lngLat.lng);
         }
       });
 
@@ -217,25 +243,31 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
 
   useEffect(() => {
     const marker = markerRef.current;
-    const map = mapRef.current;
-    if (!marker || !map) return;
+    if (!marker) return;
 
     marker.setLngLat([coords.lng, coords.lat]);
-    map.setCenter([coords.lng, coords.lat]);
   }, [coords.lat, coords.lng]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div style={{ position: "relative" }}>
+    <div className="flex flex-col gap-4" style={{ height: "100%" }}>
+      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
         {mapRecovering && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
             <LoadingSpinner message="Recovering map view..." />
           </div>
         )}
-        <div ref={mapDivRef} style={{ height: "400px", borderRadius: "8px", border: "1px solid var(--brand-card-border)", overflow: "hidden" }} />
+        <div ref={mapDivRef} style={{ height: "100%", borderRadius: "8px", border: "1px solid var(--brand-card-border)", overflow: "hidden" }} />
         <button
           type="button"
-          onClick={() => navigate(`/vendor/stalls/location-pinpoint?lat=${coords.lat}&lng=${coords.lng}`)}
+          onClick={() => {
+            if (managementMode) {
+              mapDivRef.current?.parentElement?.requestFullscreen?.().then(() => {
+                requestAnimationFrame(() => mapRef.current?.resize());
+              }).catch(() => undefined);
+            } else {
+              navigate(`/vendor/stalls/location-pinpoint?lat=${coords.lat}&lng=${coords.lng}`);
+            }
+          }}
           style={{
             position: "absolute", bottom: "12px", right: "12px", zIndex: 10,
             padding: "7px 12px", borderRadius: "6px", border: "none",
@@ -257,6 +289,19 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
           </p>
         </div>
       </div>
+      {nearbyStalls.length > 0 && (
+        <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: "8px" }}>
+          <AlertTriangle size={16} style={{ color: "#F59E0B", marginTop: "2px", flexShrink: 0 }} />
+          <div>
+            <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", fontWeight: 600, color: "#92400e", margin: 0 }}>
+              {nearbyStalls.length === 1 ? "1 stall is" : `${nearbyStalls.length} stalls are`} nearby
+            </p>
+            <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "11px", color: "#92400e", margin: "2px 0 0 0", opacity: 0.8 }}>
+              {nearbyStalls.map((s) => `${s.name} (${Math.round(s.distance_meters)}m)`).join(", ")}
+            </p>
+          </div>
+        </div>
+      )}
       <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "#64748b", fontStyle: "italic", margin: 0 }}>
         Grey dots show your existing stalls. Drag the green pin or click the map to set location.
       </p>
@@ -274,14 +319,149 @@ function LocationStep({ form, onChange }: { form: StallFormData; onChange: (f: S
   );
 }
 
+function scheduleFromAdmin(rows: any): OperatingSchedule {
+  if (!Array.isArray(rows)) return EMPTY.operatingHours;
+  const byDay = new Map(rows.map((row) => [Number(row.dayOfWeek ?? row.day_of_week), row]));
+  const format = (days: number[], fallback: { open: string; close: string }) => {
+    const row: any = days.map((day) => byDay.get(day)).find(Boolean);
+    if (!row) return fallback;
+    return { open: to12h(String(row.opensAt ?? row.opens_at).slice(0, 5)), close: to12h(String(row.closesAt ?? row.closes_at).slice(0, 5)) };
+  };
+  return {
+    weekdays: format([1, 2, 3, 4, 5], EMPTY.operatingHours.weekdays),
+    weekends: format([0, 6], EMPTY.operatingHours.weekends),
+  };
+}
+
+function mapAdminMenuItem(row: any): VendorMenuItem {
+  const categories: Record<string, VendorMenuItem["category"]> = {
+    snack: "Snack", dessert: "Dessert", drink: "Drink", "main course": "Main Course",
+  };
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description || "",
+    price: Number(row.price),
+    imageUrl: row.imageUrl || "",
+    storageImage: row.storageImage || null,
+    category: categories[row.category] || "Snack",
+    isAvailable: row.isAvailable ?? true,
+  };
+}
+
 export function StallCreatePage() {
   const navigate = useNavigate();
-  const { createStall, loading } = useStalls();
-  const { allItems } = useMenuItems();
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState<StallFormData>(EMPTY);
+  const location = useLocation();
+  const { stallId } = useParams<{ stallId: string }>();
+  const portalBase = useManagementPortalBase();
+  const managementMode = location.pathname.startsWith("/admin") || location.pathname.startsWith("/business");
+  const editing = managementMode && Boolean(stallId);
+  const { createStall, stalls: vendorStalls, loading: vendorLoading } = useStalls({ disabled: managementMode });
+  const { allItems: vendorItems } = useMenuItems(undefined, { disabled: managementMode });
+  const [managementItems, setManagementItems] = useState<VendorMenuItem[]>([]);
+  const [managementStalls, setManagementStalls] = useState<Stall[]>([]);
+  const [managementOptions, setManagementOptions] = useState<StallManagementOptions | null>(null);
+  const [ownerId, setOwnerId] = useState(() => new URLSearchParams(location.search).get("ownerId") || "");
+  const [categoryId, setCategoryId] = useState("");
+  const [managementLoading, setManagementLoading] = useState(false);
+  const sessionKey = managementMode ? `management_stall_form_${stallId || "new"}` : "stall_create_form";
+  const [step, setStep] = useState(() => {
+    const saved = sessionStorage.getItem(sessionKey);
+    if (!saved) return 0;
+    try { return JSON.parse(saved)._step ?? 0; } catch { return 0; }
+  });
+  const [form, setForm] = useState<StallFormData>(() => {
+    const saved = sessionStorage.getItem(sessionKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const { _step, ...rest } = parsed;
+        return { ...EMPTY, ...rest, location: { ...EMPTY.location, ...(rest.location || {}) }, operatingHours: { ...EMPTY.operatingHours, ...(rest.operatingHours || {}) } };
+      } catch { /* ignore */ }
+    }
+    return EMPTY;
+  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
+
+  const allItems = managementMode ? managementItems : vendorItems;
+  const allStalls = managementMode ? managementStalls : vendorStalls;
+  const loading = managementMode ? managementLoading : vendorLoading;
+  const backPath = portalPath(portalBase, "/stalls");
+
+  useEffect(() => {
+    if (!managementMode) return;
+    let active = true;
+    setManagementLoading(true);
+    Promise.all([
+      getStallManagementOptions(),
+      getAdminAllStalls(),
+      editing && stallId ? getAdminStallById(stallId) : Promise.resolve(null),
+      editing && stallId ? api.get(`/admin/menu-items`, { params: { placeId: stallId } }) : Promise.resolve(null),
+    ]).then(([options, rows, current, menuResponse]) => {
+      if (!active) return;
+      setManagementOptions(options);
+      setManagementStalls(rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        photoUrl: row.photoUrl || "",
+        category: (row.category?.name || "Others") as StallCategory,
+        description: row.description || "",
+        operatingHours: scheduleFromAdmin(row.operatingHours),
+        status: row.isOpen ? "open" : "closed",
+        location: {
+          landmark: row.address || "",
+          latitude: row.location?.coordinates?.[1] ?? 11.5564,
+          longitude: row.location?.coordinates?.[0] ?? 104.9282,
+        },
+        rating: Number(row.rating || 0),
+        reviewCount: row.ratingCount || 0,
+        menuItemIds: [],
+      })));
+      if (current) {
+        const menu = (menuResponse as any)?.data?.data || [];
+        setOwnerId(current.ownerId);
+        setCategoryId(current.category?.id || "");
+        setManagementItems(menu.map(mapAdminMenuItem));
+        setForm({
+          name: current.name,
+          photoUrl: current.photoUrl || "",
+          storageImage: current.storageImage || undefined,
+          category: (current.category?.name || "Others") as StallCategory,
+          description: current.description || "",
+          operatingHours: scheduleFromAdmin(current.operatingHours),
+          status: current.isOpen ? "open" : "closed",
+          location: {
+            landmark: current.address || "",
+            latitude: current.location?.coordinates?.[1] ?? 11.5564,
+            longitude: current.location?.coordinates?.[0] ?? 104.9282,
+          },
+          menuItemIds: menu.map((item: any) => item.id),
+        });
+      }
+    }).catch((err) => {
+      console.error("[StallCreatePage] Failed to load management workflow:", err);
+      toast.error("Could not load stall management data.");
+    }).finally(() => active && setManagementLoading(false));
+    return () => { active = false; };
+  }, [managementMode, editing, stallId]);
+
+  useEffect(() => {
+    if (!managementMode || !ownerId) return;
+    api.get("/admin/menu-items", { params: { ownerId } })
+      .then(({ data }) => setManagementItems((data.data || []).map(mapAdminMenuItem)))
+      .catch(() => setManagementItems([]));
+  }, [managementMode, ownerId]);
+
+  useEffect(() => {
+    if (!managementMode || !managementOptions) return;
+    const category = managementOptions.categories.find((item) => item.name === form.category);
+    if (category) setCategoryId(category.id);
+  }, [managementMode, managementOptions, form.category]);
+
+  useEffect(() => {
+    sessionStorage.setItem(sessionKey, JSON.stringify({ ...form, _step: step }));
+  }, [form, step, sessionKey]);
 
   function clearFieldError(field: string) {
     setFieldErrors((prev) => {
@@ -295,6 +475,8 @@ export function StallCreatePage() {
     const errs: Record<string, string> = {};
     if (stepIndex === 0) {
       if (!form.name.trim()) errs.name = "Stall name is required";
+      if (managementMode && !ownerId) errs.ownerId = "Vendor owner is required";
+      if (managementMode && !categoryId) errs.categoryId = "Category is required";
     }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -305,12 +487,35 @@ export function StallCreatePage() {
   }
 
   async function handleConfirm() {
+    setManagementLoading(true);
     try {
-      await createStall(form);
+      if (managementMode) {
+        const payload = {
+          ownerId,
+          categoryId,
+          name: form.name,
+          description: form.description,
+          address: form.location.landmark,
+          photoUrl: form.photoUrl,
+          storageImage: form.storageImage,
+          latitude: form.location.latitude,
+          longitude: form.location.longitude,
+          status: form.status,
+          operatingHours: form.operatingHours,
+          menuItemIds: form.menuItemIds,
+        };
+        if (editing && stallId) await api.patch(`/admin/stalls/${stallId}`, payload);
+        else await api.post("/admin/stalls", payload);
+      } else {
+        await createStall(form);
+      }
+      sessionStorage.removeItem(sessionKey);
       setShowSuccess(true);
     } catch (err) {
       console.error("[StallCreatePage] Failed to register stall:", err);
-      toast.error("Failed to register stall. Check your connection and try again.");
+      toast.error((err as any)?.response?.data?.message || `Failed to ${editing ? "update" : "register"} stall.`);
+    } finally {
+      setManagementLoading(false);
     }
   }
 
@@ -319,18 +524,21 @@ export function StallCreatePage() {
   }
 
   const selectedItems = allItems.filter((i) => form.menuItemIds.includes(i.id));
-  const cardStyle: React.CSSProperties = { background: "var(--card)", border: "1px solid var(--brand-card-border)", borderRadius: "10px", padding: "24px" };
+  const isLocationStep = step === 2;
+  const cardStyle: React.CSSProperties = isLocationStep
+    ? { background: "var(--card)", border: "1px solid var(--brand-card-border)", borderRadius: "10px", padding: "24px", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }
+    : { background: "var(--card)", border: "1px solid var(--brand-card-border)", borderRadius: "10px", padding: "24px" };
   const btnPrimary: React.CSSProperties = { padding: "11px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer" };
   const btnOutline: React.CSSProperties = { padding: "11px 24px", borderRadius: "6px", border: "1px solid var(--brand-card-border)", background: "var(--card)", color: "var(--brand-text-dark)", fontFamily: "Poppins, sans-serif", fontSize: "14px", cursor: "pointer" };
 
   return (
-    <div className="p-6 flex flex-col gap-5 max-w-3xl">
-      <button onClick={() => navigate("/vendor/stalls")} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: "pointer", color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px" }}>
-        <ChevronLeft size={16} /> Back to My Stalls
+    <div className={isLocationStep ? "p-6 flex flex-col gap-5 h-full" : "p-6 flex flex-col gap-5 max-w-3xl"}>
+      <button onClick={() => navigate(managementMode ? backPath : "/vendor/stalls")} style={{ display: "flex", alignItems: "center", gap: "4px", background: "none", border: "none", cursor: "pointer", color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "14px" }}>
+        <ChevronLeft size={16} /> Back to Stalls
       </button>
 
       <div>
-        <h1 style={{ fontFamily: "Poppins, sans-serif", fontSize: "26px", fontWeight: 700, color: "var(--brand-text-dark)" }}>Register New Stall</h1>
+        <h1 style={{ fontFamily: "Poppins, sans-serif", fontSize: "26px", fontWeight: 700, color: "var(--brand-text-dark)" }}>{editing ? "Update Stall" : "Register New Stall"}</h1>
         <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginTop: "4px" }}>Set up your stall details, pin your location, and pick menu items.</p>
       </div>
 
@@ -340,7 +548,42 @@ export function StallCreatePage() {
         {step === 0 && (
           <>
             <h2 style={{ fontFamily: "Poppins, sans-serif", fontSize: "17px", fontWeight: 600, color: "var(--brand-text-dark)", marginBottom: "20px" }}>Stall Information</h2>
-            <StallInfoForm form={form} onChange={setForm} fieldErrors={fieldErrors} clearFieldError={clearFieldError} />
+            {managementMode && !editing && (
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                <div>
+                  <label className="block mb-1 text-[13px] font-medium text-[#0b1c30]">Vendor Owner *</label>
+                  <select value={ownerId} onChange={(event) => {
+                    setOwnerId(event.target.value);
+                    setForm((current) => ({ ...current, menuItemIds: [] }));
+                    clearFieldError("ownerId");
+                  }} className="w-full border border-[#bccbb9] rounded px-3 py-2 text-[13px] bg-white">
+                    <option value="">Select vendor...</option>
+                    {(managementOptions?.vendors || []).map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name} ({vendor.email})</option>)}
+                  </select>
+                  {fieldErrors.ownerId && <p className="mt-1 text-[12px] text-red-600">{fieldErrors.ownerId}</p>}
+                </div>
+                <div>
+                  <label className="block mb-1 text-[13px] font-medium text-[#0b1c30]">Category *</label>
+                  <select value={categoryId} onChange={(event) => {
+                    setCategoryId(event.target.value);
+                    clearFieldError("categoryId");
+                    const category = managementOptions?.categories.find((item) => item.id === event.target.value);
+                    if (category) setForm((current) => ({ ...current, category: category.name as StallCategory }));
+                  }} className="w-full border border-[#bccbb9] rounded px-3 py-2 text-[13px] bg-white">
+                    <option value="">Select category...</option>
+                    {(managementOptions?.categories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                  </select>
+                  {fieldErrors.categoryId && <p className="mt-1 text-[12px] text-red-600">{fieldErrors.categoryId}</p>}
+                </div>
+              </div>
+            )}
+            <StallInfoForm
+              form={form}
+              onChange={setForm}
+              fieldErrors={fieldErrors}
+              clearFieldError={clearFieldError}
+              categories={managementMode ? (managementOptions?.categories || []).map((category) => category.name) : undefined}
+            />
           </>
         )}
 
@@ -348,18 +591,20 @@ export function StallCreatePage() {
           <>
             <h2 style={{ fontFamily: "Poppins, sans-serif", fontSize: "17px", fontWeight: 600, color: "var(--brand-text-dark)", marginBottom: "6px" }}>Select Menu Items</h2>
             <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginBottom: "20px" }}>Choose items for your stall. You can change these anytime.</p>
-            <MenuItemSelector selectedIds={form.menuItemIds} onToggle={toggleItem} />
+            <MenuItemSelector selectedIds={form.menuItemIds} onToggle={toggleItem} items={allItems} />
           </>
         )}
 
         {step === 2 && (
-          <>
+          <div className="flex flex-col flex-1 min-h-0">
             <h2 style={{ fontFamily: "Poppins, sans-serif", fontSize: "17px", fontWeight: 600, color: "var(--brand-text-dark)", marginBottom: "6px" }}>Set Stall Location</h2>
             <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-muted)", marginBottom: "16px" }}>
               Pin your stall on the map. Existing stalls shown as grey dots.
             </p>
-            <LocationStep form={form} onChange={setForm} />
-          </>
+            <div className="flex-1 min-h-0">
+              <LocationStep form={form} onChange={setForm} stalls={allStalls} managementMode={managementMode} />
+            </div>
+          </div>
         )}
 
         {step === 3 && (
@@ -392,7 +637,7 @@ export function StallCreatePage() {
       </div>
 
       <div className="flex justify-between">
-        <button style={btnOutline} onClick={() => step === 0 ? navigate("/vendor/stalls") : setStep(step - 1)}>
+        <button style={btnOutline} onClick={() => { if (step === 0) { sessionStorage.removeItem(sessionKey); navigate(managementMode ? backPath : "/vendor/stalls"); } else { setStep(step - 1); } }}>
           {step === 0 ? "Cancel" : "Back"}
         </button>
         {step < 3 ? (
@@ -404,18 +649,18 @@ export function StallCreatePage() {
           </button>
         ) : (
           <button style={{ ...btnPrimary, display: "flex", alignItems: "center", gap: "8px" }} onClick={handleConfirm} disabled={loading}>
-            <Check size={16} /> {loading ? "Registering..." : "Confirm & Register Stall"}
+            <Check size={16} /> {loading ? "Saving..." : editing ? "Confirm & Update Stall" : "Confirm & Register Stall"}
           </button>
         )}
       </div>
 
       {showSuccess && (
         <SuccessModal
-          message={`"${form.name}" registered successfully!`}
+          message={`"${form.name}" ${editing ? "updated" : "registered"} successfully!`}
           onContinue={() => { setShowSuccess(false); setForm(EMPTY); setStep(0); }}
-          onGoBack={() => navigate("/vendor/stalls")}
-          backLabel="Go to My Stalls"
-          continueLabel="Register Another"
+          onGoBack={() => navigate(managementMode ? backPath : "/vendor/stalls")}
+          backLabel="Go to Stalls"
+          continueLabel={editing ? "Continue Editing" : "Register Another"}
         />
       )}
     </div>

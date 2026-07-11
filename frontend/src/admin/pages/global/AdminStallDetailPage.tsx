@@ -152,6 +152,11 @@ function MenuItemModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.name.trim()) { toast.error("Item name is required."); return; }
+    const priceTrimmed = form.price.trim();
+    if (!priceTrimmed) { toast.error("Price is required."); return; }
+    if (!/^\d+(\.\d{1,2})?$/.test(priceTrimmed)) { toast.error("Enter a valid price (e.g. 12.50)."); return; }
+    if (parseFloat(priceTrimmed) > 99999.99) { toast.error("Price must be between 0 and 99,999.99."); return; }
     setSaving(true);
     await onSave(form);
     setSaving(false);
@@ -307,7 +312,7 @@ export default function AdminStallDetailPage() {
   const confirmDeleteItem = async () => {
     if (!deleteItemTarget) return;
     try {
-      await api.delete(`/admin/stalls/menu-items/${deleteItemTarget.id}`);
+      await api.delete(`/admin/stalls/menu-items/${deleteItemTarget.id}`, { params: { placeId: stallId } });
       toast.success(`"${deleteItemTarget.name}" deleted.`);
       setDeleteItemTarget(null);
       await loadData();
@@ -319,7 +324,7 @@ export default function AdminStallDetailPage() {
 
   const handleToggleItem = async (item: AdminMenuItemRow) => {
     try {
-      await api.patch(`/admin/menu-items/${item.id}`, { isAvailable: !item.isAvailable });
+      await api.patch(`/admin/menu-items/${item.id}`, { isAvailable: !item.isAvailable, placeId: stallId });
       toast.success(`"${item.name}" is now ${item.isAvailable ? "unavailable" : "available"}.`);
       await loadData();
     } catch (err) {
@@ -425,7 +430,7 @@ export default function AdminStallDetailPage() {
                 <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6 space-y-5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[16px] font-bold text-[#0b1c30]">Basic Information</h3>
-                    <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#475569] text-[12px] font-medium hover:bg-[#e2e8f0]">
+                    <button onClick={() => navigate(portalPath(portalBase, vendorId ? `/vendors/${vendorId}/stall/${stallId}/edit` : `/stalls/stall/${stallId}/edit`))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#475569] text-[12px] font-medium hover:bg-[#e2e8f0]">
                       <Edit size={13} /> Edit
                     </button>
                   </div>
@@ -604,6 +609,16 @@ export default function AdminStallDetailPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteItemTarget)}
+        title="Remove menu item from stall?"
+        description="The shared menu item remains in the vendor catalog and in any other stalls that reference it."
+        itemName={deleteItemTarget?.name}
+        confirmLabel="Remove Item"
+        onConfirm={confirmDeleteItem}
+        onCancel={() => setDeleteItemTarget(null)}
+      />
 
       {successMsg && (
         <SuccessModal

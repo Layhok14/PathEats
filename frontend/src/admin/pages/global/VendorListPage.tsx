@@ -73,7 +73,7 @@ export default function VendorListPage() {
   const loadRows = async () => {
     try {
       setLoading(true);
-      const all = await getAdminUserManagementOverview();
+      const all = await getAdminUserManagementOverview("", "VENDOR");
       setRows(all.filter((r) => r.user.details?.role_scope === "VENDOR"));
     } catch (err) {
       toast.error("Could not load vendors.");

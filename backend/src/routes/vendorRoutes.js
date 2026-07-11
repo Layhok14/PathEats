@@ -23,6 +23,9 @@ router.post("/change-password", vendorController.changePassword);
 // Dashboard
 router.get("/dashboard", vendorController.getDashboard);
 
+// Proximity check — MUST be before /stalls/:id to avoid matching "nearby" as :id
+router.get("/stalls/nearby", vendorController.checkNearbyStalls);
+
 // Stalls
 router.get("/stalls", vendorController.getStalls);
 router.post("/stalls", vendorController.createStall);

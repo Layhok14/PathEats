@@ -47,7 +47,7 @@ export interface Vendor {
   storage_image?: StorageImage | null;
   description: string;
   open_now: boolean;
-  hours: string;
+  hours: OperatingSchedule | string;
   address: string;
   menu: MenuItem[];
   /** Distance from vendor to route (metres) — computed server-side via PostGIS */

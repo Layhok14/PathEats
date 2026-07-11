@@ -2,6 +2,8 @@ import type { RouteObject } from "react-router";
 import DeveloperLayout from "../layouts/DeveloperLayout";
 import DeveloperDashboard from "../pages/developer/DeveloperDashboard";
 import BackupManagerPage from "../pages/developer/BackupManagerPage";
+import DeveloperToolsPage from "../pages/developer/DeveloperToolsPage";
+import DeveloperActivityPage from "../pages/developer/DeveloperActivityPage";
 import DeveloperUserManagementPage from "../pages/developer/DeveloperUserManagementPage";
 import DeveloperVendorManagementPage from "../pages/developer/DeveloperVendorManagementPage";
 import DeveloperVendorDetailPage from "../pages/developer/DeveloperVendorDetailPage";
@@ -25,6 +27,22 @@ const developerRoutes: RouteObject = {
       element: (
         <AuthGuard requiredRole="DEVELOPER_ADMIN">
           <BackupManagerPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "tools",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperToolsPage />
+        </AuthGuard>
+      ),
+    },
+    {
+      path: "activity",
+      element: (
+        <AuthGuard requiredRole="DEVELOPER_ADMIN">
+          <DeveloperActivityPage />
         </AuthGuard>
       ),
     },

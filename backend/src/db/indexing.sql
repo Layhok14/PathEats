@@ -38,8 +38,11 @@ CREATE INDEX IF NOT EXISTS idx_place_hours_open_lookup
   ON place_hours(place_id, day_of_week, is_closed);
 
 -- Menu items
-CREATE INDEX IF NOT EXISTS idx_menu_items_place ON menu_items(place_id);
+CREATE INDEX IF NOT EXISTS idx_menu_items_owner ON menu_items(owner_id);
 CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category);
+CREATE INDEX IF NOT EXISTS idx_place_menu_items_item ON place_menu_items(menu_item_id);
+CREATE INDEX IF NOT EXISTS idx_place_menu_items_available
+  ON place_menu_items(place_id, is_available);
 
 -- User data
 CREATE INDEX IF NOT EXISTS idx_routes_user ON routes(user_id);

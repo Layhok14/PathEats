@@ -85,31 +85,40 @@ export const getPlaceCategories = async () => {
   return adminRepository.findPlaceCategories();
 };
 
-export const approveVendor = async (id, approved) => {
-  return adminRepository.approveVendor(id, approved);
+export const approveVendor = async (id, approved, adminId = null, roleScope = null) => {
+  const result = await adminRepository.approveVendor(id, approved);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "approve_vendor", "users", id, { approved }, roleScope);
+  }
+  return result;
 };
 
 export const getStallManagementOptions = async () => {
   return adminRepository.getStallManagementOptions();
 };
 
-export const createStall = async (payload) => {
+export const createStall = async (payload, adminId = null, roleScope = null) => {
   const name = String(payload.name ?? "").trim();
   if (!name) throw new AppError("Stall name is required", 400);
   if (!payload.ownerId) throw new AppError("Vendor owner is required", 400);
   if (!payload.categoryId) throw new AppError("Stall category is required", 400);
 
-  return adminRepository.createStall({
-    ...payload,
-    name,
-  });
+  const stall = await adminRepository.createStall({ ...payload, name });
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_stall", "stalls", stall?.id, { name, ownerId: payload.ownerId }, roleScope);
+  }
+  return stall;
 };
 
-export const deleteStall = async (id) => {
-  return adminRepository.deleteStall(id);
+export const deleteStall = async (id, adminId = null, roleScope = null) => {
+  const result = await adminRepository.deleteStall(id);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "delete_stall", "stalls", id, null, roleScope);
+  }
+  return result;
 };
 
-export const createStallMenuItem = async (placeId, payload) => {
+export const createStallMenuItem = async (placeId, payload, adminId = null, roleScope = null) => {
   const stall = await adminRepository.findStallById(placeId);
   if (!stall) throw new AppError("Stall not found", 404);
 
@@ -121,39 +130,67 @@ export const createStallMenuItem = async (placeId, payload) => {
     throw new AppError("Menu item price must be a valid number", 400);
   }
 
-  return adminRepository.createStallMenuItem(placeId, {
-    ...payload,
-    name,
-    price,
-  });
+  const item = await adminRepository.createStallMenuItem(placeId, { ...payload, name, price });
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_menu_item", "menu_items", item?.id, { name, placeId }, roleScope);
+  }
+  return item;
 };
 
-export const deleteStallMenuItem = async (id) => {
-  return adminRepository.deleteStallMenuItem(id);
+export const deleteStallMenuItem = async (id, placeId = null, adminId = null, roleScope = null) => {
+  const result = await adminRepository.deleteStallMenuItem(id, placeId);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "delete_menu_item", "menu_items", id, null, roleScope);
+  }
+  return result;
 };
 
-export const createStallCategory = async (payload) => {
-  return adminRepository.createStallCategory(payload);
+export const createStallCategory = async (payload, adminId = null, roleScope = null) => {
+  const result = await adminRepository.createStallCategory(payload);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_category", "place_categories", result?.id, payload, roleScope);
+  }
+  return result;
 };
 
-export const deleteStallCategory = async (id) => {
-  return adminRepository.deleteStallCategory(id);
+export const deleteStallCategory = async (id, adminId = null, roleScope = null) => {
+  const result = await adminRepository.deleteStallCategory(id);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "delete_category", "place_categories", id, null, roleScope);
+  }
+  return result;
 };
 
-export const createStallPlaceHour = async (placeId, payload) => {
-  return adminRepository.createStallPlaceHour(placeId, payload);
+export const createStallPlaceHour = async (placeId, payload, adminId = null, roleScope = null) => {
+  const result = await adminRepository.createStallPlaceHour(placeId, payload);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_place_hour", "place_hours", result?.id, { placeId, ...payload }, roleScope);
+  }
+  return result;
 };
 
-export const deleteStallPlaceHour = async (id) => {
-  return adminRepository.deleteStallPlaceHour(id);
+export const deleteStallPlaceHour = async (id, adminId = null, roleScope = null) => {
+  const result = await adminRepository.deleteStallPlaceHour(id);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "delete_place_hour", "place_hours", id, null, roleScope);
+  }
+  return result;
 };
 
-export const createStallReview = async (placeId, payload) => {
-  return adminRepository.createStallReview(placeId, payload);
+export const createStallReview = async (placeId, payload, adminId = null, roleScope = null) => {
+  const result = await adminRepository.createStallReview(placeId, payload);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "create_review", "reviews", result?.id, { placeId }, roleScope);
+  }
+  return result;
 };
 
-export const deleteStallReview = async (id) => {
-  return adminRepository.deleteStallReview(id);
+export const deleteStallReview = async (id, adminId = null, roleScope = null) => {
+  const result = await adminRepository.deleteStallReview(id);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "delete_review", "reviews", id, null, roleScope);
+  }
+  return result;
 };
 
 export const createRole = async (roleData, adminId = null, roleScope = null) => {
@@ -204,33 +241,41 @@ export const getAllStalls = async (page = 1, limit = 50) => {
   return adminRepository.findAllStalls(page, limit);
 };
 
-export const getStallsByOwner = async (ownerId) => {
-  return adminRepository.findStallsByOwner(ownerId);
+export const getStallsByOwner = async (ownerId, limit = 1000) => {
+  return adminRepository.findStallsByOwner(ownerId, limit);
 };
 
 export const getStallById = async (id) => {
   return adminRepository.findStallById(id);
 };
 
-export const editStall = async (id, payload) => {
+export const editStall = async (id, payload, adminId = null, roleScope = null) => {
   if (payload.ownerId !== undefined && !payload.ownerId) {
     throw new AppError("Vendor owner is required", 400);
   }
 
-  return adminRepository.updateStall(id, payload);
+  const result = await adminRepository.updateStall(id, payload);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "update_stall", "stalls", id, payload, roleScope);
+  }
+  return result;
 };
 
-export const toggleStallStatus = async (id) => {
+export const toggleStallStatus = async (id, adminId = null, roleScope = null) => {
   const stall = await adminRepository.findStallById(id);
   if (!stall) return null;
-  return adminRepository.updateStallStatus(id, !stall.isOpen);
+  const result = await adminRepository.updateStallStatus(id, !stall.isOpen);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "toggle_stall_status", "stalls", id, { isOpen: !stall.isOpen }, roleScope);
+  }
+  return result;
 };
 
 export const getAuditActivity = async () => {
   return adminRepository.getAuditActivity();
 };
 
-export const getAllReviews = async (limit = 100, offset = 0) => {
+export const getAllReviews = async (limit = 2000, offset = 0) => {
   return adminRepository.getAllReviews(limit, offset);
 };
 
@@ -238,12 +283,16 @@ export const getReviewsByPlaceId = async (placeId) => {
   return adminRepository.getReviewsByPlaceId(placeId);
 };
 
-export const getAllMenuItems = async (placeId = null) => {
-  return adminRepository.findAllMenuItems(placeId);
+export const getAllMenuItems = async (placeId = null, ownerId = null) => {
+  return adminRepository.findAllMenuItems(placeId, ownerId);
 };
 
-export const editMenuItem = async (id, payload) => {
-  return adminRepository.updateMenuItem(id, payload);
+export const editMenuItem = async (id, payload, adminId = null, roleScope = null) => {
+  const result = await adminRepository.updateMenuItem(id, payload);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "update_menu_item", "menu_items", id, payload, roleScope);
+  }
+  return result;
 };
 
 // ── New: Audit Logs ────────────────────────────────────────────────────
@@ -292,7 +341,7 @@ export const getOnboardingConfig = async () => {
   return adminRepository.getOnboardingConfig();
 };
 
-export const updateOnboardingConfig = async (data) => {
+export const updateOnboardingConfig = async (data, adminId = null, roleScope = null) => {
   const telegramLink = data?.telegramLink;
 
   if (telegramLink) {
@@ -308,31 +357,44 @@ export const updateOnboardingConfig = async (data) => {
     }
   }
 
-  return adminRepository.updateOnboardingConfig(data);
+  const result = await adminRepository.updateOnboardingConfig(data);
+  if (adminId) {
+    await adminRepository.logAuditAction(adminId, "update_onboarding", "onboarding_config", null, { telegramLink: data?.telegramLink }, roleScope);
+  }
+  return result;
 };
 
 // ── Review Moderation ─────────────────────────────────────────────────
 
-export const flagReview = async (id) => {
+export const flagReview = async (id, adminId = null, roleScope = null) => {
   const review = await adminRepository.flagReview(id);
   if (review) {
     await adminRepository.refreshPlaceRating(review.place_id);
+    if (adminId) {
+      await adminRepository.logAuditAction(adminId, "flag_review", "reviews", id, { placeId: review.place_id }, roleScope);
+    }
   }
   return review;
 };
 
-export const unflagReview = async (id) => {
+export const unflagReview = async (id, adminId = null, roleScope = null) => {
   const review = await adminRepository.unflagReview(id);
   if (review) {
     await adminRepository.refreshPlaceRating(review.place_id);
+    if (adminId) {
+      await adminRepository.logAuditAction(adminId, "unflag_review", "reviews", id, { placeId: review.place_id }, roleScope);
+    }
   }
   return review;
 };
 
-export const removeReview = async (id) => {
+export const removeReview = async (id, adminId = null, roleScope = null) => {
   const review = await adminRepository.removeReview(id);
   if (review) {
     await adminRepository.refreshPlaceRating(review.place_id);
+    if (adminId) {
+      await adminRepository.logAuditAction(adminId, "remove_review", "reviews", id, { placeId: review.place_id }, roleScope);
+    }
   }
   return review;
 };

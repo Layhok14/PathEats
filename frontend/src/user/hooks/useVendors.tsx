@@ -59,7 +59,7 @@ export function useVendors({
         maxPrice: filterMaxPrice,
         openNow: filterOpenNow,
         search: vendorSearch || undefined,
-        limit: 100,
+        limit: 1000,
         offset: 0,
       });
       const result = data?.data;

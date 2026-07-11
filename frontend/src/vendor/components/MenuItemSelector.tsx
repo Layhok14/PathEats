@@ -2,16 +2,18 @@ import { useState } from "react";
 import { MenuItemCard } from "../../shared/components/MenuItemCard";
 import { useMenuItems } from "../../shared/hooks/useMenuItems";
 import { MENU_CATEGORIES } from "../../shared/constants/categories";
-import type { MenuCategory } from "../../shared/types";
+import type { MenuCategory, VendorMenuItem } from "../../shared/types";
 
 interface MenuItemSelectorProps {
   selectedIds: string[];
   onToggle: (id: string) => void;
+  items?: VendorMenuItem[];
 }
 
-export function MenuItemSelector({ selectedIds, onToggle }: MenuItemSelectorProps) {
+export function MenuItemSelector({ selectedIds, onToggle, items: providedItems }: MenuItemSelectorProps) {
   const [activeCategory, setActiveCategory] = useState<MenuCategory>("All");
-  const { items } = useMenuItems(activeCategory);
+  const { items: vendorItems } = useMenuItems(activeCategory, { disabled: Boolean(providedItems) });
+  const items = (providedItems ?? vendorItems).filter((item) => activeCategory === "All" || item.category === activeCategory);
 
   return (
     <div className="flex flex-col gap-4">

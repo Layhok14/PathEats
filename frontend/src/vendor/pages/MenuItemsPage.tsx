@@ -46,9 +46,12 @@ function ItemFormModal({
   function validate(): boolean {
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = "Item name is required";
-    const priceNum = parseFloat(form.price);
-    if (!form.price.trim()) errs.price = "Price is required";
-    else if (isNaN(priceNum) || priceNum < 0) errs.price = "Enter a valid price";
+    const priceTrimmed = form.price.trim();
+    const priceNum = parseFloat(priceTrimmed);
+    const isNumeric = /^\d+(\.\d{1,2})?$/.test(priceTrimmed);
+    if (!priceTrimmed) errs.price = "Price is required";
+    else if (!isNumeric || isNaN(priceNum)) errs.price = "Enter a valid price (e.g. 12.50)";
+    else if (priceNum < 0 || priceNum > 99999.99) errs.price = "Price must be between 0 and 99,999.99";
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -61,7 +64,7 @@ function ItemFormModal({
       await onSave({
         name: form.name,
         description: form.description,
-        price: priceNum,
+        price: parseFloat(form.price),
         imageUrl: form.imageUrl,
         storageImage: form.storageImage,
         category: form.category,

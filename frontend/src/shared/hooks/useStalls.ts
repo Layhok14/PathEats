@@ -2,15 +2,19 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../services/axiosService";
 import type { Stall, StallFormData } from "../types";
 
-export function useStalls() {
+export function useStalls(options: { disabled?: boolean } = {}) {
   const [stalls, setStalls] = useState<Stall[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Fetch stalls from backend on mount
   useEffect(() => {
+    if (options.disabled) {
+      setLoading(false);
+      return;
+    }
     fetchStalls();
-  }, []);
+  }, [options.disabled]);
 
   const fetchStalls = async () => {
     setLoading(true);
@@ -42,6 +46,7 @@ export function useStalls() {
         longitude: formData.location.longitude,
         status: formData.status === "open" ? "open" : "closed",
         is_open: formData.status === "open",
+        operatingHours: formData.operatingHours,
         menu_item_ids: formData.menuItemIds,
       });
       const newStall = data.data;
@@ -71,6 +76,7 @@ export function useStalls() {
         status: formData.status,
         is_open: formData.status !== undefined ? formData.status === "open" : undefined,
         price_range: (formData as any).price_range,
+        operatingHours: formData.operatingHours,
       };
       Object.keys(body).forEach((k) => (body as any)[k] === undefined && delete (body as any)[k]);
       const { data } = await api.put(`/vendor/stalls/${id}`, body);

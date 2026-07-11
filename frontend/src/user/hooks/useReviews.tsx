@@ -54,5 +54,18 @@ export function useReviews(vendorId: string | number) {
     }
   }
 
-  return { reviews, submit, submitting, loading, error };
+  async function updateReview(reviewId: string, payload: { rating?: number; body?: string }) {
+    const { data } = await api.patch(`/places/${vendorId}/reviews/${reviewId}`, payload);
+    setReviews((prev) =>
+      prev.map((r) => (r.id === reviewId ? { ...r, ...data.data } : r))
+    );
+    return data.data;
+  }
+
+  async function deleteReview(reviewId: string) {
+    await api.delete(`/places/${vendorId}/reviews/${reviewId}`);
+    setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+  }
+
+  return { reviews, submit, updateReview, deleteReview, submitting, loading, error };
 }

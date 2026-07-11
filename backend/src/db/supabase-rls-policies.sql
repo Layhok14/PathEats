@@ -10,6 +10,7 @@ ALTER TABLE search_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE place_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE menu_item_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE place_menu_items ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS user_preferences_owner_all ON user_preferences;
 CREATE POLICY user_preferences_owner_all ON user_preferences
@@ -92,6 +93,32 @@ CREATE POLICY menu_item_images_public_read ON menu_item_images
   FOR SELECT
   USING (true);
 
+DROP POLICY IF EXISTS place_menu_items_public_read ON place_menu_items;
+CREATE POLICY place_menu_items_public_read ON place_menu_items
+  FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS place_menu_items_owner_write ON place_menu_items;
+CREATE POLICY place_menu_items_owner_write ON place_menu_items
+  FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM places p
+      WHERE p.id = place_menu_items.place_id
+        AND p.owner_id = (SELECT auth.uid())
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM places p
+      JOIN menu_items mi ON mi.id = place_menu_items.menu_item_id
+      WHERE p.id = place_menu_items.place_id
+        AND p.owner_id = (SELECT auth.uid())
+        AND mi.owner_id = p.owner_id
+    )
+  );
+
 DROP POLICY IF EXISTS menu_item_images_owner_write ON menu_item_images;
 CREATE POLICY menu_item_images_owner_write ON menu_item_images
   FOR ALL
@@ -99,17 +126,15 @@ CREATE POLICY menu_item_images_owner_write ON menu_item_images
     EXISTS (
       SELECT 1
       FROM menu_items mi
-      JOIN places p ON p.id = mi.place_id
       WHERE mi.id = menu_item_images.menu_item_id
-        AND p.owner_id = (SELECT auth.uid())
+        AND mi.owner_id = (SELECT auth.uid())
     )
   )
   WITH CHECK (
     EXISTS (
       SELECT 1
       FROM menu_items mi
-      JOIN places p ON p.id = mi.place_id
       WHERE mi.id = menu_item_images.menu_item_id
-        AND p.owner_id = (SELECT auth.uid())
+        AND mi.owner_id = (SELECT auth.uid())
     )
   );

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import maplibregl from "maplibre-gl";
@@ -36,6 +37,7 @@ export function LocationPinpointPage() {
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const otherMarkersRef = useRef<maplibregl.Marker[]>([]);
   const detachRecoveryRef = useRef<(() => void) | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const [coords, setCoords] = useState({ lat: initialLat, lng: initialLng });
   const [mapRecovering, setMapRecovering] = useState(false);
@@ -53,6 +55,9 @@ export function LocationPinpointPage() {
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
 
+    resizeObserverRef.current = new ResizeObserver(() => map.resize());
+    resizeObserverRef.current.observe(mapDivRef.current);
+
     detachRecoveryRef.current = attachMapContextRecovery(map, {
       onLost: () => setMapRecovering(true),
       onRestored: () => setMapRecovering(false),
@@ -61,6 +66,8 @@ export function LocationPinpointPage() {
     map.on("load", () => {
       setMapRecovering(false);
       map.resize();
+      requestAnimationFrame(() => map.resize());
+      setTimeout(() => map.resize(), 150);
       const el = document.createElement("div");
       el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
       el.style.cursor = "grab";
@@ -88,6 +95,8 @@ export function LocationPinpointPage() {
     return () => {
       detachRecoveryRef.current?.();
       detachRecoveryRef.current = null;
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
       removeMarkersSafely(otherMarkersRef);
       removeMapSafely(mapRef);
       markerRef.current = null;
@@ -172,8 +181,8 @@ export function LocationPinpointPage() {
     navigate(-1);
   }
 
-  return (
-    <div className="relative overflow-hidden" style={{ height: "100%" }}>
+  return createPortal((
+    <div className="fixed inset-0 z-50 bg-white">
       {mapRecovering && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
           <LoadingSpinner message="Recovering map view..." />
@@ -263,5 +272,5 @@ export function LocationPinpointPage() {
         />
       )}
     </div>
-  );
+  ), document.body);
 }

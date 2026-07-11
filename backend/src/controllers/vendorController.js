@@ -8,6 +8,14 @@ import AppError from "../utils/AppError.js";
 import { catchAsync } from "../utils/catchAsync.js";
 
 const userRepo = new UserRepository();
+
+function validatePrice(price) {
+  if (price === undefined || price === null || price === "") return;
+  const n = Number(price);
+  if (!Number.isFinite(n) || n < 0 || n > 99999.99 || !String(price).match(/^\d+(\.\d{1,2})?$/)) {
+    throw new AppError("Invalid price. Must be a number between 0 and 99,999.99 with at most 2 decimal places.", 400);
+  }
+}
 const vendorService = new VendorService();
 
 export const MAX_VENDOR_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -122,11 +130,13 @@ export const getAllMenuItems = catchAsync(async (req, res) => {
 });
 
 export const createMenuItemGlobal = catchAsync(async (req, res) => {
+  validatePrice(req.body.price);
   const item = await vendorService.createMenuItemGlobal(req.user.sub, req.body);
   res.status(201).json({ success: true, data: item });
 });
 
 export const updateMenuItemGlobal = catchAsync(async (req, res) => {
+  validatePrice(req.body.price);
   const item = await vendorService.updateMenuItemGlobal(req.user.sub, req.params.itemId, req.body);
   res.json({ success: true, data: item });
 });
@@ -151,11 +161,13 @@ export const getStallMenuItems = catchAsync(async (req, res) => {
 });
 
 export const createStallMenuItem = catchAsync(async (req, res) => {
+  validatePrice(req.body.price);
   const item = await vendorService.createMenuItem(req.user.sub, req.params.id, req.body);
   res.status(201).json({ success: true, data: item });
 });
 
 export const updateStallMenuItem = catchAsync(async (req, res) => {
+  validatePrice(req.body.price);
   const item = await vendorService.updateMenuItem(req.user.sub, req.params.id, req.params.itemId, req.body);
   res.json({ success: true, data: item });
 });
@@ -163,4 +175,17 @@ export const updateStallMenuItem = catchAsync(async (req, res) => {
 export const deleteStallMenuItem = catchAsync(async (req, res) => {
   await vendorService.deleteMenuItem(req.user.sub, req.params.id, req.params.itemId);
   res.json({ success: true, data: { message: "Menu item deleted" } });
+});
+
+export const checkNearbyStalls = catchAsync(async (req, res) => {
+  const { latitude, longitude } = req.query;
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.json({ success: true, data: [] });
+  }
+  const vendorRepo = (await import("../repositories/VendorRepository.js")).default;
+  const repo = new vendorRepo();
+  const nearby = await repo.findNearbyStalls(lat, lng, req.user.sub);
+  res.json({ success: true, data: nearby });
 });

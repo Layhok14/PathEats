@@ -2,7 +2,7 @@
 // Auth-gates the submission form; unauthenticated users see a sign-in prompt.
 
 import { useState, memo } from "react";
-import { Star, Send } from "lucide-react";
+import { Star, Send, Pencil, Trash2, X, Check } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
 import { timeAgo } from "../../shared/utils/formatters";
@@ -20,6 +20,8 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
   const {
     reviews,
     submit,
+    updateReview,
+    deleteReview,
     submitting,
     loading,
     error: reviewLoadError,
@@ -30,6 +32,13 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editStars, setEditStars] = useState(0);
+  const [editHover, setEditHover] = useState(0);
+  const [editBody, setEditBody] = useState("");
+  const [editError, setEditError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const storedRating = Number(vendor.rating) || 0;
   const avg =
@@ -67,6 +76,48 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
       setTimeout(() => setSubmitted(false), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit review.");
+    }
+  }
+
+  function startEditing(review) {
+    setEditingId(review.id);
+    setEditStars(review.stars);
+    setEditBody(review.body || "");
+    setEditError("");
+    setEditHover(0);
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditStars(0);
+    setEditBody("");
+    setEditError("");
+  }
+
+  async function handleEditSubmit(reviewId) {
+    if (editStars === 0) {
+      setEditError("Please select a rating.");
+      return;
+    }
+    if (!editBody.trim()) {
+      setEditError("Please write something.");
+      return;
+    }
+    setEditError("");
+    try {
+      await updateReview(reviewId, { rating: editStars, body: editBody });
+      cancelEditing();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Could not update review.");
+    }
+  }
+
+  async function handleDeleteConfirm(reviewId) {
+    try {
+      await deleteReview(reviewId);
+      setDeletingId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete review.");
     }
   }
 
@@ -170,57 +221,171 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
           </div>
         )}
 
-        {!loading && !reviewLoadError && reviews.map((r, i) => (
-          <div
-            key={r.id ?? i}
-            className="rounded-xl p-3.5"
-            style={{
-              background: c.surface,
-              borderWidth: 1,
-              borderStyle: "solid",
-              borderColor: c.scoreCardBorder,
-            }}
-          >
-            <div className="flex items-center gap-2.5 mb-2">
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
-                style={{ background: AVATAR_COLORS[i % 4] }}
-              >
-                {r.user_name?.[0] ?? "?"}
-              </div>
-              <div className="flex-1">
-                <div
-                  className="text-[12px] font-semibold"
-                  style={{ color: c.text }}
-                >
-                  {r.user_name}
-                </div>
-                <div className="flex gap-0.5 mt-0.5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      size={9}
-                      className={
-                        s <= r.stars
-                          ? "fill-amber-400 text-amber-400"
-                          : "text-gray-400"
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-              <span className="text-[10px]" style={{ color: c.textDim }}>
-                {timeAgo(r.created_at)}
-              </span>
-            </div>
-            <p
-              className="text-[12px] leading-relaxed"
-              style={{ color: c.textMid }}
+        {!loading && !reviewLoadError && reviews.map((r, i) => {
+          const isOwnReview = isLoggedIn && user?.id && String(r.user_id) === String(user.id);
+          const isEditing = editingId === r.id;
+          const isDeleting = deletingId === r.id;
+
+          return (
+            <div
+              key={r.id ?? i}
+              className="rounded-xl p-3.5"
+              style={{
+                background: c.surface,
+                borderWidth: 1,
+                borderStyle: "solid",
+                borderColor: isOwnReview ? "rgba(34,197,94,0.3)" : c.scoreCardBorder,
+              }}
             >
-              {r.body}
-            </p>
-          </div>
-        ))}
+              <div className="flex items-center gap-2.5 mb-2">
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
+                  style={{ background: AVATAR_COLORS[i % 4] }}
+                >
+                  {r.user_name?.[0] ?? "?"}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="text-[12px] font-semibold"
+                      style={{ color: c.text }}
+                    >
+                      {r.user_name}
+                    </div>
+                    {isOwnReview && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: "rgba(34,197,94,0.15)", color: "#22C55E" }}>
+                        You
+                      </span>
+                    )}
+                  </div>
+                  {isEditing ? (
+                    <div className="flex gap-1 mt-1">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onMouseEnter={() => setEditHover(s)}
+                          onMouseLeave={() => setEditHover(0)}
+                          onClick={() => setEditStars(s)}
+                        >
+                          <Star
+                            size={14}
+                            className={
+                              (editHover || editStars) >= s
+                                ? "fill-amber-400 text-amber-400"
+                                : "text-gray-400"
+                            }
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex gap-0.5 mt-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={9}
+                          className={
+                            s <= r.stars
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-gray-400"
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px]" style={{ color: c.textDim }}>
+                  {timeAgo(r.created_at)}
+                </span>
+              </div>
+
+              {isEditing ? (
+                <div className="space-y-2">
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg text-[12px] resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
+                    style={{
+                      background: tm.inputBg,
+                      borderWidth: 1,
+                      borderStyle: "solid",
+                      borderColor: tm.inputBorder,
+                      color: tm.text1,
+                    }}
+                  />
+                  {editError && <p className="text-[11px] text-red-400">{editError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEditSubmit(r.id)}
+                      className="flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all hover:brightness-110"
+                      style={{ background: tm.primary, color: tm.primaryText }}
+                    >
+                      <Check size={11} /> Save
+                    </button>
+                    <button
+                      onClick={cancelEditing}
+                      className="flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-medium transition-all hover:brightness-110"
+                      style={{ background: c.scoreCard, color: c.textMid, borderWidth: 1, borderStyle: "solid", borderColor: c.scoreCardBorder }}
+                    >
+                      <X size={11} /> Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : isDeleting ? (
+                <div className="space-y-2">
+                  <p className="text-[12px]" style={{ color: c.textMid }}>
+                    Delete your review? This cannot be undone.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleDeleteConfirm(r.id)}
+                      className="flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all hover:brightness-110"
+                      style={{ background: "#ef4444", color: "white" }}
+                    >
+                      <Trash2 size={11} /> Delete
+                    </button>
+                    <button
+                      onClick={() => setDeletingId(null)}
+                      className="flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-medium transition-all hover:brightness-110"
+                      style={{ background: c.scoreCard, color: c.textMid, borderWidth: 1, borderStyle: "solid", borderColor: c.scoreCardBorder }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p
+                    className="text-[12px] leading-relaxed"
+                    style={{ color: c.textMid }}
+                  >
+                    {r.body}
+                  </p>
+                  {isOwnReview && (
+                    <div className="flex gap-2 mt-2 pt-2" style={{ borderTop: `1px solid ${c.scoreCardBorder}` }}>
+                      <button
+                        onClick={() => startEditing(r)}
+                        className="flex items-center gap-1 text-[10px] font-medium transition-all hover:brightness-110"
+                        style={{ color: c.textDim }}
+                      >
+                        <Pencil size={10} /> Edit
+                      </button>
+                      <button
+                        onClick={() => { setDeletingId(r.id); setError(""); }}
+                        className="flex items-center gap-1 text-[10px] font-medium transition-all hover:brightness-110"
+                        style={{ color: "#ef4444" }}
+                      >
+                        <Trash2 size={10} /> Delete
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Write a review */}
@@ -249,7 +414,7 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
               borderColor: "rgba(16,185,129,0.2)",
             }}
           >
-            ✓ Review submitted — thank you!
+            Review submitted — thank you!
           </div>
         ) : (
           <form
@@ -290,7 +455,7 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
-              placeholder="Share your experience…"
+              placeholder="Share your experience..."
               className="w-full px-3 py-2.5 rounded-xl text-[13px] resize-none focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
               style={{
                 background: tm.inputBg,
@@ -307,7 +472,7 @@ export const VendorReviews = memo(function VendorReviews({ vendor, colors: c, on
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
               style={{ background: tm.primary, color: tm.primaryText }}
             >
-              <Send size={13} /> {submitting ? "Submitting…" : "Submit Review"}
+              <Send size={13} /> {submitting ? "Submitting..." : "Submit Review"}
             </button>
           </form>
         )}

@@ -15,6 +15,12 @@ const PAGE_SIZE = 6;
 
 export default function AdminManagementPage() {
   const [activeTab, setActiveTab] = useState<"role" | "user">("role");
+  const [userRoleFilter, setUserRoleFilter] = useState<string | null>(null);
+
+  const handleRoleUserCountClick = (roleName: string) => {
+    setUserRoleFilter(roleName);
+    setActiveTab("user");
+  };
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
@@ -31,13 +37,15 @@ export default function AdminManagementPage() {
         </div>
       </div>
       <div className="flex-1 p-8 pt-6">
-        {activeTab === "role" ? <RoleManagementSection /> : <UserManagementSection />}
+        {activeTab === "role"
+          ? <RoleManagementSection onUserCountClick={handleRoleUserCountClick} />
+          : <UserManagementSection initialRoleFilter={userRoleFilter} onClearRoleFilter={() => setUserRoleFilter(null)} />}
       </div>
     </div>
   );
 }
 
-function RoleManagementSection() {
+function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleName: string) => void }) {
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -88,7 +96,7 @@ function RoleManagementSection() {
         <MetricCard label="Total Roles" value={String(roles.length)} sub="Live from role table" subVariant="green" topBorderColor="#22c55e" icon={<ShieldCheck size={18} />} accent="#22c55e" />
         <MetricCard label="Tables Covered" value={String(allTables.size)} sub="Database access scope" subVariant="green" topBorderColor="#22c55e" icon={<Table2 size={18} />} accent="#22c55e" />
         <MetricCard label="Grant Option" value={String(grantable)} sub="Can grant permissions" subVariant="green" topBorderColor="#22c55e" icon={<Unlock size={18} />} accent="#22c55e" />
-        <MetricCard label="Total Privileges" value={String(roles.reduce((s, r) => s + Object.values(r.tablePrivileges).flat().length, 0))} sub="Assigned permissions" subVariant="green" topBorderColor="#22c55e" icon={<KeyRound size={18} />} accent="#22c55e" />
+        <MetricCard label="Total Users" value={String(roles.reduce((s, r) => s + (r.userCount ?? 0), 0))} sub="Across all roles" subVariant="green" topBorderColor="#22c55e" icon={<Users size={18} />} accent="#22c55e" />
       </div>
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
@@ -110,9 +118,9 @@ function RoleManagementSection() {
                   </div>
                 </td>
                 <td className="px-6 py-3">
-                  <span className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full ${(role.userCount ?? 0) > 0 ? "bg-blue-50 text-[#005ac2]" : "bg-gray-50 text-[#94a3b8]"}`}>
+                  <button onClick={() => onUserCountClick(role.name)} className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full transition-colors ${(role.userCount ?? 0) > 0 ? "bg-blue-50 text-[#005ac2] hover:bg-blue-100" : "bg-gray-50 text-[#94a3b8] hover:bg-gray-100"}`}>
                     {role.userCount ?? 0}
-                  </span>
+                  </button>
                 </td>
                 <td className="px-6 py-3">
                   <button onClick={() => setPrivilegesRole(role)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#dcfce7] text-[#006e2f] hover:bg-[#bbf7d0] transition-colors">
@@ -217,16 +225,20 @@ function RoleManagementSection() {
   );
 }
 
-function UserManagementSection() {
+function UserManagementSection({ initialRoleFilter, onClearRoleFilter }: { initialRoleFilter?: string | null; onClearRoleFilter?: () => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [query, setQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState("All");
+  const [roleFilter, setRoleFilter] = useState(initialRoleFilter ?? "All");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<AdminUser | null>(null);
+
+  useEffect(() => {
+    if (initialRoleFilter) setRoleFilter(initialRoleFilter);
+  }, [initialRoleFilter]);
 
   const loadUsers = async () => {
     try {
@@ -290,7 +302,7 @@ function UserManagementSection() {
           <h2 className="text-[16px] font-semibold text-[#0b1c30]">Users</h2>
           <select
             value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); if (e.target.value === "All") onClearRoleFilter?.(); }}
             className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-[#e2e8f0] bg-white text-[#374151] outline-none focus:border-[#006e2f]"
           >
             <option value="All">All Roles</option>
