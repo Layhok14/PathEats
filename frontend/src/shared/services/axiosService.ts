@@ -52,10 +52,22 @@ function processQueue(error: unknown, token: string | null = null) {
   pendingQueue = [];
 }
 
-function prefixForUrl(url?: string): "consumer" | "vendor" | "admin" {
+function portalPrefixForCurrentPath(): "consumer" | "vendor" | "admin" | "developer" | "business" {
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/developer")) return "developer";
+  if (pathname.startsWith("/business")) return "business";
+  if (pathname.startsWith("/admin")) return "admin";
+  if (pathname.startsWith("/vendor")) return "vendor";
+  return "consumer";
+}
+
+function prefixForUrl(url?: string): "consumer" | "vendor" | "admin" | "developer" | "business" {
   if (!url) return "consumer";
   if (url.startsWith("/vendor") || url.startsWith("vendor")) return "vendor";
-  if (url.startsWith("/admin") || url.startsWith("admin")) return "admin";
+  if (url.startsWith("/admin") || url.startsWith("admin")) return portalPrefixForCurrentPath();
+  if (url.startsWith("/dev") || url.startsWith("dev")) return portalPrefixForCurrentPath();
+  if (url.startsWith("/business") || url.startsWith("business")) return "business";
+  if (url.startsWith("/developer") || url.startsWith("developer")) return "developer";
   return "consumer";
 }
 

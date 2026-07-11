@@ -1,26 +1,30 @@
 const SESSION_NOTICE_KEY = "patheats_session_notice";
 
-export type AuthArea = "user" | "vendor" | "admin";
+export type AuthArea = "user" | "vendor" | "admin" | "developer" | "business";
 
 const AUTH_KEYS = {
-  consumer: { token: "consumer_token", refresh: "consumer_refresh_token", user: "consumer_user" },
+  user:      { token: "consumer_token",  refresh: "consumer_refresh_token",  user: "consumer_user" },
   vendor:    { token: "vendor_token",    refresh: "vendor_refresh_token",    user: "vendor_user" },
   admin:     { token: "admin_token",     refresh: "admin_refresh_token",     user: "admin_user" },
+  developer: { token: "developer_token", refresh: "developer_refresh_token", user: "developer_user" },
+  business:  { token: "business_token",  refresh: "business_refresh_token",  user: "business_user" },
 } as const;
 
 export function getAuthKeys(area: AuthArea) {
-  if (area === "vendor") return AUTH_KEYS.vendor;
-  if (area === "admin") return AUTH_KEYS.admin;
-  return AUTH_KEYS.consumer;
+  return AUTH_KEYS[area];
 }
 
 export function authAreaFromPath(pathname = window.location.pathname): AuthArea {
+  if (pathname.startsWith("/developer")) return "developer";
+  if (pathname.startsWith("/business")) return "business";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/vendor")) return "vendor";
   return "user";
 }
 
 export function loginPathForArea(area: AuthArea): string {
+  if (area === "developer") return "/developer/login";
+  if (area === "business") return "/business/login";
   if (area === "admin") return "/admin/login";
   if (area === "vendor") return "/vendor/login";
   return "/user/login";

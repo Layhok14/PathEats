@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Flag, Trash2, AlertTriangle, Search, RotateCcw, ShieldAlert, Download } from "lucide-react";
+import { Flag, Trash2, Search, RotateCcw, ShieldAlert, Download } from "lucide-react";
 import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
 import { toast } from "sonner";
@@ -77,6 +77,19 @@ export default function ReviewModerationPage() {
 
   const handleRemove = async (id: string, placeName: string) => {
     setConfirmTarget({ id, placeName });
+  };
+
+  const confirmRemove = async () => {
+    if (!confirmTarget) return;
+    try {
+      await removeAdminReview(confirmTarget.id);
+      toast.success("Review removed.");
+      await loadReviews();
+    } catch {
+      toast.error("Could not remove review.");
+    } finally {
+      setConfirmTarget(null);
+    }
   };
 
   function exportReviews() {
@@ -276,6 +289,16 @@ export default function ReviewModerationPage() {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="Remove Review"
+        description="Remove this review and recalculate the stall rating?"
+        itemName={confirmTarget?.placeName}
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 }

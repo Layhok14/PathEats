@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  RefreshCw, Activity, Search, AlertTriangle, Terminal,
-  Zap, Square, Clock, Server, Wifi, CheckCircle, XCircle, LogIn, Database, Bug, Globe
+  RefreshCw, Search, Terminal,
+  CheckCircle, XCircle, LogIn, Bug, Database, Pencil, Trash2, Plus
 } from "lucide-react";
-import { toast } from "sonner";
 import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
-import { getAdminAuditActivity, postAdminKillQuery, type AuditActivityRow } from "../../services/adminDashboardService";
-import { getDevHealth, getDevQueryHistory, getDevActivityLog, type DevHealth, type QueryHistoryEntry, type ActivityLogEntry } from "../../services/developerService";
+import { getAdminAuditLogs, type AuditLogEntry } from "../../services/adminDashboardService";
+import { getDevQueryHistory, getDevActivityLog, type QueryHistoryEntry, type ActivityLogEntry } from "../../services/developerService";
 
-type MainFilter = "all" | "live" | "queries" | "logins" | "errors";
+type MainFilter = "all" | "crud" | "queries" | "logins" | "errors";
 type NestedFilter = string;
 
 function formatTimeAgo(dateStr: string): string {
@@ -24,69 +23,48 @@ function formatTimeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-function getStateColor(state: string): string {
-  if (state === "active") return "bg-green-50 text-[#006e2f] border-[#bbf7d0]";
-  if (state?.includes("idle")) return "bg-yellow-50 text-[#92400e] border-[#fde68a]";
-  if (state?.includes("waiting") || state?.includes("lock")) return "bg-red-50 text-[#ba1a1a] border-[#fecaca]";
-  return "bg-gray-50 text-[#64748b] border-[#e2e8f0]";
+function getCrudActionLabel(action: string): { label: string; color: string; icon: typeof Plus } {
+  if (action.startsWith("create")) return { label: "CREATE", color: "bg-green-50 text-[#006e2f]", icon: Plus };
+  if (action.startsWith("update")) return { label: "UPDATE", color: "bg-blue-50 text-[#005ac2]", icon: Pencil };
+  if (action.startsWith("delete")) return { label: "DELETE", color: "bg-red-50 text-[#ba1a1a]", icon: Trash2 };
+  return { label: action.toUpperCase(), color: "bg-gray-50 text-[#64748b]", icon: Database };
 }
 
-function getStateDot(state: string): string {
-  if (state === "active") return "bg-[#006e2f]";
-  if (state?.includes("idle")) return "bg-[#f59e0b]";
-  if (state?.includes("waiting") || state?.includes("lock")) return "bg-[#ba1a1a]";
-  return "bg-[#94a3b8]";
+function formatActionVerb(action: string): string {
+  return action.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function truncateQuery(q: string, max = 120): string {
-  if (!q) return "";
-  return q.length > max ? q.slice(0, max) + "..." : q;
-}
-
-const MAIN_FILTERS: { key: MainFilter; label: string; icon: typeof Activity }[] = [
-  { key: "all", label: "All Activities", icon: Globe },
-  { key: "live", label: "Live Connections", icon: Zap },
-  { key: "queries", label: "Query Executions", icon: Terminal },
-  { key: "logins", label: "Login Events", icon: LogIn },
-  { key: "errors", label: "System Errors", icon: Bug },
+const MAIN_FILTERS: { key: MainFilter; label: string }[] = [
+  { key: "all", label: "All Activities" },
+  { key: "crud", label: "CRUD Operations" },
+  { key: "queries", label: "Query Executions" },
+  { key: "logins", label: "Login Events" },
+  { key: "errors", label: "System Errors" },
 ];
 
 export default function AdminAuditPage() {
   const [mainFilter, setMainFilter] = useState<MainFilter>("all");
   const [nestedFilter, setNestedFilter] = useState<NestedFilter>("all");
-
-  // Live connections
-  const [rows, setRows] = useState<AuditActivityRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
-  const [health, setHealth] = useState<DevHealth | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [killingPid, setKillingPid] = useState<number | null>(null);
 
-  // Activity log
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [crudLogs, setCrudLogs] = useState<AuditLogEntry[]>([]);
+  const [crudLoading, setCrudLoading] = useState(false);
+
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
-  // Query history
   const [history, setHistory] = useState<QueryHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const loadLiveData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError("");
+  const loadCrudLogs = useCallback(async () => {
+    setCrudLoading(true);
     try {
-      const [data, h] = await Promise.all([
-        getAdminAuditActivity(),
-        getDevHealth().catch(() => null),
-      ]);
-      setRows(data);
-      setHealth(h);
-    } catch {
-      setError("Could not load live connections.");
-      toast.error("Could not load live connections.");
-    } finally { setLoading(false); setRefreshing(false); }
+      const data = await getAdminAuditLogs(200);
+      setCrudLogs(data);
+    } catch { setCrudLogs([]); }
+    finally { setCrudLoading(false); }
   }, []);
 
   const loadActivityLog = useCallback(async () => {
@@ -108,56 +86,44 @@ export default function AdminAuditPage() {
   }, []);
 
   useEffect(() => {
-    loadLiveData();
-    const interval = setInterval(() => loadLiveData(true), 15000);
-    return () => clearInterval(interval);
-  }, [loadLiveData]);
-
-  useEffect(() => {
+    if (mainFilter === "all" || mainFilter === "crud") loadCrudLogs();
     if (mainFilter === "all" || mainFilter === "queries") loadQueryHistory();
     if (mainFilter === "all" || mainFilter === "logins" || mainFilter === "errors") loadActivityLog();
-  }, [mainFilter, loadQueryHistory, loadActivityLog]);
+  }, [mainFilter, loadCrudLogs, loadQueryHistory, loadActivityLog]);
 
-  // ── Nested filter options ──
   const nestedOptions = useMemo(() => {
-    if (mainFilter === "live") return ["all", ...new Set(rows.map((r) => r.state))];
+    if (mainFilter === "crud") return ["all", "create", "update", "delete"];
     if (mainFilter === "queries") return ["all", "success", "error"];
     if (mainFilter === "logins") return ["all", "login_success", "login_failed"];
     if (mainFilter === "errors") return ["all", "high", "medium", "low"];
-    return ["all", "live", "queries", "logins", "errors"];
-  }, [mainFilter, rows]);
+    return ["all", "crud", "queries", "logins", "errors"];
+  }, [mainFilter]);
 
   const handleRefresh = () => {
-    loadLiveData(true);
-    if (mainFilter === "all" || mainFilter === "queries") loadQueryHistory();
-    if (mainFilter === "all" || mainFilter === "logins" || mainFilter === "errors") loadActivityLog();
+    setRefreshing(true);
+    Promise.all([
+      loadCrudLogs(),
+      loadQueryHistory(),
+      loadActivityLog(),
+    ]).finally(() => setRefreshing(false));
   };
 
-  const handleKillQuery = async (pid: number) => {
-    if (!confirm(`Cancel query on PID ${pid}?`)) return;
-    setKillingPid(pid);
-    try {
-      const res = await postAdminKillQuery(pid);
-      toast.success(res.message);
-      await loadLiveData();
-    } catch { toast.error(`Failed to cancel PID ${pid}.`); }
-    finally { setKillingPid(null); }
-  };
-
-  // ── Filtered data ──
-  const filteredLive = useMemo(() => {
-    let result = rows;
-    if (nestedFilter !== "all") result = result.filter((r) => r.state === nestedFilter);
+  const filteredCrud = useMemo(() => {
+    let result = crudLogs;
+    if (nestedFilter === "create") result = result.filter((r) => r.action.startsWith("create"));
+    if (nestedFilter === "update") result = result.filter((r) => r.action.startsWith("update"));
+    if (nestedFilter === "delete") result = result.filter((r) => r.action.startsWith("delete"));
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
-        (r) => r.query?.toLowerCase().includes(q) ||
-          r.username?.toLowerCase().includes(q) ||
-          r.application_name?.toLowerCase().includes(q)
+        (r) => r.action?.toLowerCase().includes(q) ||
+          r.targetType?.toLowerCase().includes(q) ||
+          r.targetId?.toLowerCase().includes(q) ||
+          JSON.stringify(r.details)?.toLowerCase().includes(q)
       );
     }
     return result;
-  }, [rows, nestedFilter, searchQuery]);
+  }, [crudLogs, nestedFilter, searchQuery]);
 
   const filteredHistory = useMemo(() => {
     let result = history;
@@ -179,13 +145,7 @@ export default function AdminAuditPage() {
     return result;
   }, [activityLog, nestedFilter, mainFilter]);
 
-  const stateCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    rows.forEach((r) => { counts[r.state] = (counts[r.state] || 0) + 1; });
-    return counts;
-  }, [rows]);
-
-  const overallLoading = loading || activityLoading || historyLoading;
+  const overallLoading = crudLoading || activityLoading || historyLoading;
 
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
@@ -204,40 +164,42 @@ export default function AdminAuditPage() {
           </button>
         </div>
 
-        {/* Health cards */}
-        {health && (
-          <div className="grid grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <Server size={16} className={health.status === "healthy" ? "text-[#006e2f]" : "text-[#ba1a1a]"} />
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">System</p>
-              </div>
-              <p className={`text-[20px] font-bold mt-1 ${health.status === "healthy" ? "text-[#006e2f]" : "text-[#ba1a1a]"}`}>{health.status}</p>
+        {/* Summary cards */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Database size={16} className="text-[#006e2f]" />
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">CRUD Operations</p>
             </div>
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <Database size={16} className={health.dbConnected ? "text-[#006e2f]" : "text-[#ba1a1a]"} />
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">Database</p>
-              </div>
-              <p className={`text-[20px] font-bold mt-1 ${health.dbConnected ? "text-[#006e2f]" : "text-[#ba1a1a]"}`}>{health.dbConnected ? "Connected" : "Disconnected"}</p>
-              <p className="text-[11px] text-[#64748b] mt-0.5">{health.dbLatency}ms latency</p>
-            </div>
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity size={16} className="text-[#005ac2]" />
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">Live Connections</p>
-              </div>
-              <p className="text-[20px] font-bold text-[#0b1c30] mt-1">{rows.length}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <Zap size={16} className="text-[#b45309]" />
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">Active Queries</p>
-              </div>
-              <p className="text-[20px] font-bold text-[#0b1c30] mt-1">{rows.filter((r) => r.state === "active").length}</p>
-            </div>
+            <p className="text-[20px] font-bold text-[#0b1c30] mt-1">{crudLogs.length}</p>
+            <p className="text-[11px] text-[#64748b] mt-0.5">
+              {crudLogs.filter((r) => r.action.startsWith("create")).length} created &middot;{" "}
+              {crudLogs.filter((r) => r.action.startsWith("update")).length} updated &middot;{" "}
+              {crudLogs.filter((r) => r.action.startsWith("delete")).length} deleted
+            </p>
           </div>
-        )}
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <LogIn size={16} className="text-[#005ac2]" />
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">Login Events</p>
+            </div>
+            <p className="text-[20px] font-bold text-[#0b1c30] mt-1">{activityLog.length}</p>
+            <p className="text-[11px] text-[#64748b] mt-0.5">
+              {activityLog.filter((a) => a.event_type === "login_success").length} success &middot;{" "}
+              {activityLog.filter((a) => a.event_type === "login_failed").length} failed
+            </p>
+          </div>
+          <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Terminal size={16} className="text-[#b45309]" />
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#64748b]">Query Executions</p>
+            </div>
+            <p className="text-[20px] font-bold text-[#0b1c30] mt-1">{history.length}</p>
+            <p className="text-[11px] text-[#64748b] mt-0.5">
+              {history.filter((h) => (h.payload ?? "").toUpperCase().includes("ERROR")).length} errors
+            </p>
+          </div>
+        </div>
 
         {/* Main filter dropdown */}
         <div className="flex items-center gap-3">
@@ -270,12 +232,12 @@ export default function AdminAuditPage() {
                     : opt === "low" ? "Low Severity"
                     : opt === "error" ? "Errors"
                     : opt === "success" ? "Success"
+                    : opt === "crud" ? "CRUD"
                     : opt.charAt(0).toUpperCase() + opt.slice(1)}
                 </option>
               ))}
             </select>
           </div>
-          {error && <span className="text-[12px] text-[#ba1a1a]">{error}</span>}
         </div>
 
         {/* Search */}
@@ -283,99 +245,68 @@ export default function AdminAuditPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
           <input
             type="text"
-            placeholder="Search by query, user, or payload..."
+            placeholder="Search by action, target, or details..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
           />
         </div>
 
-        {/* ── Live Connections table ── */}
-        {(mainFilter === "all" || mainFilter === "live") && (
+        {/* ── CRUD Operations table ── */}
+        {(mainFilter === "all" || mainFilter === "crud") && (
           <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-[#f1f5f9] flex items-center gap-2">
-              <Zap size={14} className="text-[#b45309]" />
-              <span className="text-[13px] font-semibold text-[#0b1c30]">Live Connections</span>
-              <span className="text-[11px] text-[#94a3b8]">({filteredLive.length})</span>
+              <Database size={14} className="text-[#006e2f]" />
+              <span className="text-[13px] font-semibold text-[#0b1c30]">CRUD Operations</span>
+              <span className="text-[11px] text-[#94a3b8]">({filteredCrud.length})</span>
             </div>
-            {loading && rows.length === 0 ? (
-              <div className="p-10 text-center">
-                <LoadingSpinner />
-              </div>
+            {crudLoading ? (
+              <div className="p-10 text-center"><LoadingSpinner /></div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px]">
+                <table className="w-full min-w-[800px]">
                   <thead>
                     <tr className="bg-[#f8fafc]">
-                      {["PID", "User", "Application", "State", "Query", "Duration", "Wait Event", ""].map((h) => (
+                      {["Time", "Action", "Target", "Details", "Actor"].map((h) => (
                         <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLive.map((row) => (
-                      <tr key={row.pid} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
-                        <td className="px-5 py-3 text-[12px] font-mono text-[#0b1c30]">{row.pid}</td>
-                        <td className="px-5 py-3 text-[12px] text-[#64748b]">{row.username}</td>
-                        <td className="px-5 py-3 text-[12px] text-[#64748b]">{row.application_name || "—"}</td>
+                    {filteredCrud.map((entry) => {
+                      const { label, color, icon: ActionIcon } = getCrudActionLabel(entry.action);
+                      return (
+                      <tr key={entry.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
+                        <td className="px-5 py-3 text-[11px] text-[#64748b] whitespace-nowrap">{formatTimeAgo(entry.createdAt)}</td>
                         <td className="px-5 py-3">
-                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${getStateColor(row.state)}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${getStateDot(row.state)}`} />
-                            {row.state}
+                          <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 rounded-full ${color}`}>
+                            <ActionIcon size={10} />
+                            {label}
                           </span>
+                          <p className="text-[10px] text-[#94a3b8] mt-0.5">{formatActionVerb(entry.action)}</p>
                         </td>
-                        <td className="px-5 py-3 max-w-[400px]">
-                          <div className="flex items-start gap-1.5">
-                            <Terminal size={12} className="mt-1 text-[#94a3b8] shrink-0" />
-                            <p className="text-[11px] font-mono text-[#0b1c30] leading-relaxed" title={row.query}>
-                              {truncateQuery(row.query)}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-[12px] text-[#64748b] whitespace-nowrap">
-                          {row.query_start ? (
-                            <span className="flex items-center gap-1">
-                              <Clock size={12} /> {formatTimeAgo(row.query_start)}
-                            </span>
-                          ) : "—"}
-                        </td>
-                        <td className="px-5 py-3 text-[12px] text-[#64748b]">
-                          {row.wait_event ? (
-                            <span className="flex items-center gap-1">
-                              <AlertTriangle size={12} className="text-[#b45309]" />
-                              {row.wait_event_type || ""} {row.wait_event}
-                            </span>
-                          ) : "—"}
-                        </td>
-                        <td className="px-5 py-3">
-                          {row.state === "active" && (
-                            <button
-                              onClick={() => handleKillQuery(row.pid)}
-                              disabled={killingPid === row.pid}
-                              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded bg-red-50 text-[#ba1a1a] hover:bg-red-100 disabled:opacity-50 uppercase tracking-wider"
-                            >
-                              <Square size={10} /> {killingPid === row.pid ? "..." : "Cancel"}
-                            </button>
+                        <td className="px-5 py-3 text-[12px] text-[#374151]">
+                          <span className="font-medium">{entry.targetType || "—"}</span>
+                          {entry.targetId && (
+                            <p className="text-[10px] text-[#94a3b8] font-mono truncate max-w-[200px]" title={entry.targetId}>{entry.targetId}</p>
                           )}
                         </td>
+                        <td className="px-5 py-3 max-w-[300px]">
+                          <p className="text-[11px] text-[#64748b] truncate" title={JSON.stringify(entry.details ?? {})}>
+                            {entry.details ? Object.entries(entry.details).map(([k, v]) => `${k}: ${String(v)}`).join(", ") : "—"}
+                          </p>
+                        </td>
+                        <td className="px-5 py-3 text-[12px] text-[#64748b] font-mono truncate max-w-[200px]" title={entry.adminId || ""}>
+                          {entry.adminId ? entry.adminId.slice(0, 8) + "…" : "System"}
+                        </td>
                       </tr>
-                    ))}
-                    {filteredLive.length === 0 && (
-                      <tr><td colSpan={8} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">
-                        {searchQuery || nestedFilter !== "all" ? "No matches" : "No active connections"}
-                      </td></tr>
+                      );
+                    })}
+                    {filteredCrud.length === 0 && (
+                      <tr><td colSpan={5} className="px-5 py-10 text-center text-[13px] text-[#94a3b8]">No CRUD operations found.</td></tr>
                     )}
                   </tbody>
                 </table>
-              </div>
-            )}
-            {rows.length > 0 && (
-              <div className="px-5 py-3 border-t border-[#f1f5f9] flex items-center gap-4 text-[12px] text-[#94a3b8]">
-                <span className="flex items-center gap-1"><Activity size={14} /> {filteredLive.length} / {rows.length}</span>
-                <span className="flex items-center gap-1"><Zap size={14} /> {rows.filter((r) => r.state === "active").length} active</span>
-                {rows.some((r) => r.wait_event) && (
-                  <span className="flex items-center gap-1"><AlertTriangle size={14} className="text-[#b45309]" /> {rows.filter((r) => r.wait_event).length} waiting</span>
-                )}
               </div>
             )}
           </div>
@@ -390,9 +321,7 @@ export default function AdminAuditPage() {
               <span className="text-[11px] text-[#94a3b8]">({filteredHistory.length})</span>
             </div>
             {historyLoading ? (
-              <div className="p-10 text-center">
-                <LoadingSpinner />
-              </div>
+              <div className="p-10 text-center"><LoadingSpinner /></div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[900px]">
@@ -453,9 +382,7 @@ export default function AdminAuditPage() {
               <span className="text-[11px] text-[#94a3b8]">({filteredActivity.length})</span>
             </div>
             {activityLoading ? (
-              <div className="p-10 text-center">
-                <LoadingSpinner />
-              </div>
+              <div className="p-10 text-center"><LoadingSpinner /></div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[700px]">

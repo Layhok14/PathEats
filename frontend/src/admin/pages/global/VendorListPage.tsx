@@ -15,6 +15,7 @@ import {
 } from "../../services/adminDashboardService";
 import { DetailModal } from "../developer/devShared";
 import { exportXlsx } from "../../../shared/utils/exportXlsx";
+import { portalPath, useManagementPortalBase } from "../../utils/portalPath";
 
 const PAGE_SIZE = 10;
 
@@ -52,6 +53,7 @@ function exportVendors(rows: AdminUserOverviewRow[]) {
 
 export default function VendorListPage() {
   const navigate = useNavigate();
+  const portalBase = useManagementPortalBase();
   const [rows, setRows] = useState<AdminUserOverviewRow[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -71,11 +73,8 @@ export default function VendorListPage() {
   const loadRows = async () => {
     try {
       setLoading(true);
-      const all = await getAdminUserManagementOverview();
-      setRows(all.filter((r) => {
-        const details = r.user.details as Record<string, unknown> | null;
-        return details?.role_scope === "VENDOR";
-      }));
+      const vendors = await getAdminUserManagementOverview("", "VENDOR");
+      setRows(vendors);
     } catch (err) {
       toast.error("Could not load vendors.");
     } finally {
@@ -195,7 +194,7 @@ export default function VendorListPage() {
                           </button>
                         </td>
                         <td className="px-5 py-3">
-                          <button onClick={() => navigate(`/admin/vendors/${r.id}`)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
+                          <button onClick={() => navigate(portalPath(portalBase, `/vendors/${r.id}`))} className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
                             <Store size={14} /> Manage Stall
                           </button>
                         </td>

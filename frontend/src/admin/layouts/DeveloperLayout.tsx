@@ -1,43 +1,18 @@
-import { Outlet, NavLink, useNavigate } from "react-router";
-import { useAuth } from "../../shared/hooks/useAuth";
+import AdminSidebar from "../../shared/components/AdminSidebar";
+import type { NavSection } from "../../shared/components/AdminSidebar";
 
-const navItems = [
-  { label: "Dashboard", path: "/developer", icon: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" },
-  { label: "Backup & Recovery", path: "/developer/backup", icon: "M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" },
-  { label: "User Management", path: "/developer/users", icon: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" },
-  { label: "Vendor Management", path: "/developer/vendors", icon: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6zm0 4h8v2H6zm10 0h2v2h-2zm-6-4h8v2h-8z" },
+const sections: NavSection[] = [
+  {
+    title: "Developer",
+    subtitle: "System operations & technical tasks",
+    items: [
+      { label: "Developer Dashboard", path: "/developer", icon: "M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z", badge: false, description: "System metrics, analytics & performance" },
+      { label: "Backup & Recovery", path: "/developer/backups", icon: "M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z", badge: false, description: "Database backups, scheduling & restore operations" },
+      { label: "Database Tools", path: "/developer/tools", icon: "M12 2C8.13 2 5 4.69 5 8c0 1.64.81 3.09 2.08 4.1-.08.29-.08.6-.08.9 0 3.31 3.13 6 7 6s7-2.69 7-6c0-.3-.01-.61-.08-.9C18.19 11.09 19 9.64 19 8c0-3.31-3.13-6-7-6zm0 2c2.7 0 5 1.31 5 3s-2.3 3-5 3-5-1.31-5-3 2.3-3 5-3zm0 14c-2.7 0-5-1.31-5-3 0-.19.02-.37.05-.55.22.14.47.27.73.37l.12.06C8.49 16.28 10.21 17 12 17s3.51-.72 4.1-2.12l.12-.06c.26-.1.51-.23.73-.37.03.18.05.36.05.55 0 1.69-2.3 3-5 3zm0-4c-1.76 0-3.38-.51-4.61-1.31C8.55 11.95 10.18 12 12 12s3.45-.05 4.61-1.31C15.38 11.49 13.76 12 12 12z", badge: false, description: "SQL query runner, DB maintenance, and bug tracking" },
+    ],
+  },
 ];
 
 export default function DeveloperLayout() {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-  return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: "#f8fafc" }}>
-      <aside className="w-[240px] flex flex-col h-full shrink-0" style={{ background: "#004b1e" }}>
-        <div className="flex items-center gap-2 px-4 py-4" style={{ borderBottom: "1px solid rgba(188,203,185,0.15)" }}>
-          <img src="/logo-to-use.png" alt="PathEats" className="w-8 h-8 rounded-full object-cover shrink-0" />
-          <div><p className="text-white font-bold text-[15px] leading-tight">PathEats</p><p className="text-[10px] uppercase tracking-widest" style={{ color: "#bec6e0" }}>Developer Portal</p></div>
-        </div>
-        <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto">
-          {navItems.map((item) => (
-            <NavLink key={item.path} to={item.path} end={item.path === "/developer"}
-              className={({ isActive }) => `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] font-medium transition-all ${isActive ? "bg-[#006e2f] text-white" : "text-[#bec6e0] hover:bg-white/10 hover:text-white"}`}>
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d={item.icon} /></svg>
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="px-3 pb-3" style={{ borderTop: "1px solid rgba(188,203,185,0.15)" }}>
-          <div className="flex items-center gap-2 px-3 py-2.5 mt-2">
-            <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-[11px] font-bold shrink-0">AU</div>
-            <div className="flex-1 min-w-0"><p className="text-white text-[11px] font-medium truncate">Admin User</p><p className="text-[10px] truncate" style={{ color: "#bec6e0" }}>DEVELOPER_ADMIN</p></div>
-            <button onClick={async () => { await logout(); navigate("/admin/login", { replace: true }); }} title="Logout" className="shrink-0 transition-colors hover:text-white" style={{ color: "#bec6e0" }}>
-              <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" /></svg>
-            </button>
-          </div>
-        </div>
-      </aside>
-      <main className="flex-1 overflow-auto relative"><div className="mx-auto max-w-7xl w-full"><Outlet /></div></main>
-    </div>
-  );
+  return <AdminSidebar sections={sections} portalSubtitle="Developer Portal" logoutRedirect="/developer/login" />;
 }

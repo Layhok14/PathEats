@@ -5,6 +5,7 @@ import { catchAsync } from "../utils/catchAsync.js";
 import AppError from "../utils/AppError.js";
 import * as adminController from "../controllers/adminController.js";
 import db, { pool } from "../config/db.js";
+import { normalizeRoleScope } from "../utils/roles.js";
 
 const router = Router();
 
@@ -31,6 +32,55 @@ router.use(devAdminBypass);
 router.use(restrictToRoles("GLOBAL_ADMIN", "BUSINESS_ASSISTANCE"));
 
 const globalAdminOnly = restrictToRoles("GLOBAL_ADMIN");
+const businessOrGlobal = restrictToRoles("GLOBAL_ADMIN", "BUSINESS_ASSISTANCE");
+
+const activeRole = (req) => normalizeRoleScope(req.user?.role_scope, "");
+const isGlobalAdmin = (req) => activeRole(req) === "GLOBAL_ADMIN";
+const isBusinessAssistant = (req) => activeRole(req) === "BUSINESS_ASSISTANCE";
+const requestedRole = (value) => normalizeRoleScope(value, "");
+
+const forbidden = (message = "You do not have permission to do that.") =>
+  new AppError(message, 403, {
+    code: "ROLE_FORBIDDEN",
+    safeMessage: "You do not have permission to do that.",
+    severity: "warning",
+  });
+
+const vendorListOrGlobalAdmin = (req, _res, next) => {
+  if (isGlobalAdmin(req)) return next();
+  if (isBusinessAssistant(req) && requestedRole(req.query.role_scope || req.query.role) === "VENDOR") return next();
+  return next(forbidden("Business assistants can only list vendor accounts."));
+};
+
+const vendorCreateOrGlobalAdmin = (req, _res, next) => {
+  if (isGlobalAdmin(req)) return next();
+  if (isBusinessAssistant(req) && requestedRole(req.body.role_scope || req.body.role) === "VENDOR") return next();
+  return next(forbidden("Business assistants can only create vendor accounts."));
+};
+
+const vendorAccountOrGlobalAdmin = async (req, _res, next) => {
+  try {
+    if (isGlobalAdmin(req)) return next();
+    if (!isBusinessAssistant(req)) return next(forbidden());
+
+    const bodyRole = req.body.role_scope || req.body.role;
+    if (bodyRole && requestedRole(bodyRole) !== "VENDOR") {
+      return next(forbidden("Business assistants cannot change accounts out of the vendor role."));
+    }
+
+    const { rows } = await db.query(
+      "SELECT role_scope FROM users WHERE id::text = $1 LIMIT 1",
+      [req.params.id]
+    );
+    if (!rows.length) return next(new AppError("User not found", 404));
+    if (requestedRole(rows[0].role_scope) !== "VENDOR") {
+      return next(forbidden("Business assistants can only manage vendor accounts."));
+    }
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
 
 /**
  * @swagger
@@ -168,8 +218,8 @@ router.delete("/roles/:id", globalAdminOnly, catchAsync(adminController.deleteRo
  *       201:
  *         description: User created
  */
-router.get("/users", globalAdminOnly, catchAsync(adminController.getUsers));
-router.post("/users", globalAdminOnly, catchAsync(adminController.createUser));
+router.get("/users", vendorListOrGlobalAdmin, catchAsync(adminController.getUsers));
+router.post("/users", vendorCreateOrGlobalAdmin, catchAsync(adminController.createUser));
 
 /**
  * @swagger
@@ -186,7 +236,7 @@ router.post("/users", globalAdminOnly, catchAsync(adminController.createUser));
  *       200:
  *         description: Overview rows
  */
-router.get("/user-management/overview", globalAdminOnly, catchAsync(adminController.getUserManagementOverview));
+router.get("/user-management/overview", vendorListOrGlobalAdmin, catchAsync(adminController.getUserManagementOverview));
 
 /**
  * @swagger
@@ -238,7 +288,7 @@ router.patch("/users/:id/role", globalAdminOnly, catchAsync(adminController.upda
  *       200:
  *         description: Status updated
  */
-router.patch("/users/:id/status", globalAdminOnly, catchAsync(adminController.updateStatus));
+router.patch("/users/:id/status", vendorAccountOrGlobalAdmin, catchAsync(adminController.updateStatus));
 
 /**
  * @swagger
@@ -323,8 +373,8 @@ router.post("/users/:id/ban", globalAdminOnly, catchAsync(async (req, res, next)
  *         description: User deleted
  */
 router.get("/users/:id", globalAdminOnly, catchAsync(adminController.getUserById));
-router.patch("/users/:id", globalAdminOnly, catchAsync(adminController.updateUser));
-router.delete("/users/:id", globalAdminOnly, catchAsync(adminController.deleteUser));
+router.patch("/users/:id", vendorAccountOrGlobalAdmin, catchAsync(adminController.updateUser));
+router.delete("/users/:id", vendorAccountOrGlobalAdmin, catchAsync(adminController.deleteUser));
 
 /**
  * @swagger
@@ -530,7 +580,7 @@ router.get("/stalls/:id", catchAsync(adminController.getStallById));
  *       201:
  *         description: Stall created
  */
-router.post("/stalls", globalAdminOnly, catchAsync(adminController.createStall));
+router.post("/stalls", businessOrGlobal, catchAsync(adminController.createStall));
 
 /**
  * @swagger
@@ -597,7 +647,7 @@ router.patch("/stalls/:id", catchAsync(adminController.editStall));
  *         description: Stall status toggled
  */
 router.patch("/stalls/:id/toggle", catchAsync(adminController.toggleStallStatus));
-router.delete("/stalls/:id", globalAdminOnly, catchAsync(adminController.deleteStall));
+router.delete("/stalls/:id", businessOrGlobal, catchAsync(adminController.deleteStall));
 
 /**
  * @swagger
@@ -688,7 +738,7 @@ router.post("/stalls/:placeId/menu-items", catchAsync(adminController.createStal
  *       200:
  *         description: Menu item deleted
  */
-router.delete("/stalls/menu-items/:id", globalAdminOnly, catchAsync(adminController.deleteStallMenuItem));
+router.delete("/stalls/menu-items/:id", businessOrGlobal, catchAsync(adminController.deleteStallMenuItem));
 
 /**
  * @swagger
@@ -902,11 +952,38 @@ router.post("/audit/kill-query", globalAdminOnly, catchAsync(async (req, res) =>
 
 // ── Onboarding Config ──────────────────────────────────────────────────
 router.get("/onboarding", catchAsync(adminController.getOnboardingConfig));
-router.put("/onboarding", globalAdminOnly, catchAsync(adminController.updateOnboardingConfig));
+router.put("/onboarding", businessOrGlobal, catchAsync(adminController.updateOnboardingConfig));
 
 // ── Review Moderation ──────────────────────────────────────────────────
 router.patch("/stalls/reviews/:id/flag", catchAsync(adminController.flagReview));
 router.patch("/stalls/reviews/:id/unflag", catchAsync(adminController.unflagReview));
-router.delete("/stalls/reviews/:id/remove", globalAdminOnly, catchAsync(adminController.removeReview));
+router.delete("/stalls/reviews/:id/remove", businessOrGlobal, catchAsync(adminController.removeReview));
+
+// ── Profile ────────────────────────────────────────────────────────────
+router.get("/profile", catchAsync(async (req, res) => {
+  const result = await pool.query(
+    `SELECT id::text, email, first_name, last_name, phone_number, role_scope, is_banned, created_at, updated_at
+     FROM users WHERE id = $1`,
+    [req.user.sub]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  }
+  const row = result.rows[0];
+  res.json({
+    success: true,
+    data: {
+      id: row.id,
+      email: row.email,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      phone: row.phone_number,
+      roleScope: row.role_scope,
+      isBanned: row.is_banned,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+  });
+}));
 
 export default router;

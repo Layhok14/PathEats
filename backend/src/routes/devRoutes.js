@@ -1190,4 +1190,33 @@ router.get("/vendor-management/overview", catchAsync(async (req, res) => {
   res.json({ success: true, data: rows });
 }));
 
+// ── Profile ─────────────────────────────────────────────────────────────────
+
+router.get("/profile", catchAsync(async (req, res) => {
+  const db = (await import("../config/db.js")).default;
+  const result = await db.query(
+    `SELECT id::text, email, first_name, last_name, phone_number, role_scope, is_banned, created_at, updated_at
+     FROM users WHERE id = $1`,
+    [req.user.sub]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  }
+  const row = result.rows[0];
+  res.json({
+    success: true,
+    data: {
+      id: row.id,
+      email: row.email,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      phone: row.phone_number,
+      roleScope: row.role_scope,
+      isBanned: row.is_banned,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+  });
+}));
+
 export default router;

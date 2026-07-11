@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation } from "react-router";
 import api from "../services/axiosService";
-import { authAreaFromPath, getAuthKeys } from "../utils/authRedirect";
-import { getApiErrorMessage } from "../utils/apiError";
+import { authAreaFromPath, getAuthKeys, type AuthArea } from "../utils/authRedirect";
 
 interface AuthUser {
   id: string;
@@ -33,27 +32,34 @@ function readUserFromStorage(key: string): AuthUser | null {
   return null;
 }
 
-function setUserStateForRole(role: string | null, value: AuthUser | null, setters: Record<string, (v: AuthUser | null) => void>) {
-  if (!role) return;
-  const upper = role.toUpperCase();
-  if (upper === "CONSUMER") setters.consumer(value);
-  else if (upper === "VENDOR") setters.vendor(value);
-  else setters.admin(value);
+function authAreaForRole(role: string | null): AuthArea {
+  const upper = String(role || "").toUpperCase();
+  if (upper === "CONSUMER") return "user";
+  if (upper === "VENDOR") return "vendor";
+  return "admin";
+}
+
+function setUserStateForArea(area: AuthArea, value: AuthUser | null, setters: Record<AuthArea, (v: AuthUser | null) => void>) {
+  setters[area](value);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [consumerUser, setConsumerUser] = useState<AuthUser | null>(() => readUserFromStorage("consumer_user"));
   const [vendorUser, setVendorUser] = useState<AuthUser | null>(() => readUserFromStorage("vendor_user"));
   const [adminUser, setAdminUser] = useState<AuthUser | null>(() => readUserFromStorage("admin_user"));
+  const [developerUser, setDeveloperUser] = useState<AuthUser | null>(() => readUserFromStorage("developer_user"));
+  const [businessUser, setBusinessUser] = useState<AuthUser | null>(() => readUserFromStorage("business_user"));
 
   const location = useLocation();
   const area = authAreaFromPath(location.pathname);
 
   const user = useMemo(() => {
     if (area === "vendor") return vendorUser;
+    if (area === "developer") return developerUser;
+    if (area === "business") return businessUser;
     if (area === "admin") return adminUser;
     return consumerUser;
-  }, [area, consumerUser, vendorUser, adminUser]);
+  }, [area, consumerUser, vendorUser, adminUser, developerUser, businessUser]);
 
   const isLoggedIn = !!user;
   const isGuest = area === "user" && !consumerUser;
@@ -63,23 +69,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setConsumerUser(readUserFromStorage("consumer_user"));
       setVendorUser(readUserFromStorage("vendor_user"));
       setAdminUser(readUserFromStorage("admin_user"));
+      setDeveloperUser(readUserFromStorage("developer_user"));
+      setBusinessUser(readUserFromStorage("business_user"));
     };
 
     window.addEventListener("patheats:auth-cleared", handleAuthCleared);
     return () => window.removeEventListener("patheats:auth-cleared", handleAuthCleared);
   }, []);
 
-  const saveSession = useCallback((session: { user: AuthUser; accessToken: string; refreshToken: string }) => {
-    const role = session.user?.role_scope ?? "";
-    const prefix = role === "CONSUMER" ? "consumer" : role === "VENDOR" ? "vendor" : "admin";
-    const keys = getAuthKeys(prefix === "consumer" ? "user" : prefix === "vendor" ? "vendor" : "admin");
+  const saveSession = useCallback((session: { user: AuthUser; accessToken: string; refreshToken: string }, targetArea?: AuthArea) => {
+    const sessionArea = targetArea ?? authAreaForRole(session.user?.role_scope);
+    const keys = getAuthKeys(sessionArea);
 
     localStorage.setItem(keys.token, session.accessToken);
     localStorage.setItem(keys.refresh, session.refreshToken);
     localStorage.setItem(keys.user, JSON.stringify(session.user));
 
-    const setters = { consumer: setConsumerUser, vendor: setVendorUser, admin: setAdminUser };
-    setUserStateForRole(role, session.user, setters);
+    const setters = {
+      user: setConsumerUser,
+      vendor: setVendorUser,
+      admin: setAdminUser,
+      developer: setDeveloperUser,
+      business: setBusinessUser,
+    };
+    setUserStateForArea(sessionArea, session.user, setters);
   }, []);
 
   const login = useCallback(async (email: string, password: string, expectedRoles?: string | string[]) => {
@@ -88,18 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       password,
       expectedRoles,
     });
-    saveSession(data.data);
+    saveSession(data.data, authAreaFromPath(window.location.pathname));
     return data.data;
   }, [saveSession]);
 
   const signup = useCallback(async (reg: { email: string; password: string; firstName: string; lastName: string }) => {
     const { data } = await api.post("/auth/register", { ...reg, roleScope: "CONSUMER" });
-    saveSession(data.data);
+    saveSession(data.data, "user");
   }, [saveSession]);
 
   const vendorSignup = useCallback(async (reg: { email: string; password: string; firstName: string; lastName: string }) => {
     const { data } = await api.post("/auth/register", { ...reg, roleScope: "VENDOR" });
-    saveSession(data.data);
+    saveSession(data.data, "vendor");
   }, [saveSession]);
 
   const logout = useCallback(async () => {
@@ -119,6 +132,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setConsumerUser(null);
     } else if (currentArea === "vendor") {
       setVendorUser(null);
+    } else if (currentArea === "developer") {
+      setDeveloperUser(null);
+    } else if (currentArea === "business") {
+      setBusinessUser(null);
     } else {
       setAdminUser(null);
     }

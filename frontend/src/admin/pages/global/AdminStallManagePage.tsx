@@ -20,6 +20,7 @@ import {
   removeMapSafely,
   removeMarkersSafely,
 } from "../../../shared/utils/maplibreLifecycle";
+import { portalPath, useManagementPortalBase } from "../../utils/portalPath";
 
 type ViewMode = "list" | "map";
 
@@ -174,6 +175,7 @@ function StallMap({
 
 export default function AdminStallManagePage() {
   const navigate = useNavigate();
+  const portalBase = useManagementPortalBase();
   const { vendorId } = useParams<{ vendorId: string }>();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
 
@@ -245,7 +247,7 @@ export default function AdminStallManagePage() {
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="flex-1 p-6 flex flex-col gap-5">
         {vendorId && (
-          <button onClick={() => navigate("/admin/vendors")} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30] w-fit">
+          <button onClick={() => navigate(portalPath(portalBase, "/vendors"))} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30] w-fit">
             <ArrowLeft size={14} /> Back to Vendors
           </button>
         )}
@@ -279,7 +281,7 @@ export default function AdminStallManagePage() {
           <StallMap
             stalls={filteredStalls}
             loading={loadingStalls}
-            onPinClick={(stall) => navigate(vendorId ? `/admin/vendors/${vendorId}/stall/${stall.id}` : `/admin/stalls/stall/${stall.id}`)}
+            onPinClick={(stall) => navigate(vendorId ? portalPath(portalBase, `/vendors/${vendorId}/stall/${stall.id}`) : portalPath(portalBase, `/stalls/stall/${stall.id}`))}
           />
         )}
 
@@ -320,7 +322,7 @@ export default function AdminStallManagePage() {
                           </td>
                           <td className="px-5 py-3">
                             <button
-                              onClick={() => navigate(vendorId ? `/admin/vendors/${vendorId}/stall/${stall.id}` : `/admin/stalls/stall/${stall.id}`)}
+                              onClick={() => navigate(vendorId ? portalPath(portalBase, `/vendors/${vendorId}/stall/${stall.id}`) : portalPath(portalBase, `/stalls/stall/${stall.id}`))}
                               className="inline-flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]"
                             >
                               <Info size={14} /> Stall Info

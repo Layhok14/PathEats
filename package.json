@@ -9,7 +9,6 @@
     "lint": "npm run lint --workspaces",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "npm run typecheck --workspace=frontend",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "husky"

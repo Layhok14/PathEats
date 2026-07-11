@@ -19,6 +19,7 @@ import {
   attachMapContextRecovery,
   removeMapSafely,
 } from "../../../shared/utils/maplibreLifecycle";
+import { portalPath, useManagementPortalBase } from "../../utils/portalPath";
 
 type Tab = "info" | "menu" | "reviews";
 
@@ -33,16 +34,31 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
   const handleFullscreen = () => {
     const container = containerRef.current;
     if (!container || !mapRef.current) return;
-    
     if (!document.fullscreenElement) {
-      container.requestFullscreen().catch((err) => {
-        console.error("Fullscreen error:", err);
+      container.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+        requestAnimationFrame(() => mapRef.current?.resize());
+      }).catch((err) => {
+        if (err.name !== "AbortError") console.error("Fullscreen error:", err);
       });
     } else {
       document.exitFullscreen();
-      setIsFullscreen(false);
     }
   };
+
+  useEffect(() => {
+    const handler = () => {
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreen(isFs);
+      if (isFs && mapRef.current) {
+        requestAnimationFrame(() => mapRef.current?.resize());
+      } else if (!isFs && mapRef.current) {
+        setTimeout(() => mapRef.current?.resize(), 100);
+      }
+    };
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
 
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return;
@@ -193,6 +209,7 @@ function MenuItemModal({
 export default function AdminStallDetailPage() {
   const { vendorId, stallId } = useParams<{ vendorId: string; stallId: string }>();
   const navigate = useNavigate();
+  const portalBase = useManagementPortalBase();
   const [tab, setTab] = useState<Tab>("info");
   const [stall, setStall] = useState<AdminStallRow | null>(null);
   const [menuItems, setMenuItems] = useState<AdminMenuItemRow[]>([]);
@@ -265,7 +282,7 @@ export default function AdminStallDetailPage() {
     try {
       await api.delete(`/admin/stalls/${stallId}`);
       toast.success("Stall deleted.");
-      navigate(`/admin/vendors/${vendorId}`);
+      navigate(portalPath(portalBase, vendorId ? `/vendors/${vendorId}` : "/stalls"));
     } catch (err) {
       toast.error("Could not delete stall.");
     }
@@ -318,7 +335,7 @@ export default function AdminStallDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
         <p className="text-[13px] text-[#94a3b8]">Stall not found.</p>
-        <button onClick={() => navigate(`/admin/vendors/${vendorId}`)} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white">Back to Stalls</button>
+        <button onClick={() => navigate(portalPath(portalBase, vendorId ? `/vendors/${vendorId}` : "/stalls"))} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white">Back to Stalls</button>
       </div>
     );
   }
@@ -326,7 +343,7 @@ export default function AdminStallDetailPage() {
   return (
     <div className="flex flex-col min-h-full bg-[#f8fafc]">
       <div className="h-14 bg-white border-b border-[#e2e8f0] flex items-center px-8 gap-4 shrink-0">
-        <button onClick={() => navigate(`/admin/vendors/${vendorId}`)} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30]">
+        <button onClick={() => navigate(portalPath(portalBase, vendorId ? `/vendors/${vendorId}` : "/stalls"))} className="flex items-center gap-1.5 text-[12px] font-medium text-[#64748b] hover:text-[#0b1c30]">
           <ArrowLeft size={14} /> Back
         </button>
         <div className="w-px h-6 bg-[#e2e8f0]" />

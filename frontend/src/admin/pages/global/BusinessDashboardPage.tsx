@@ -11,9 +11,11 @@ import {
   type AdminUser,
   type AdminReview,
 } from "../../services/adminDashboardService";
+import { portalPath, useManagementPortalBase } from "../../utils/portalPath";
 
 export default function BusinessDashboardPage() {
   const navigate = useNavigate();
+  const portalBase = useManagementPortalBase();
   const [vendors, setVendors] = useState<AdminUser[]>([]);
   const [stalls, setStalls] = useState<AdminStallRow[]>([]);
   const [reviews, setReviews] = useState<AdminReview[]>([]);
@@ -46,7 +48,7 @@ export default function BusinessDashboardPage() {
       sub: "Vendor accounts",
       color: "#006e2f",
       icon: Store,
-      link: "/admin/vendors",
+      link: portalPath(portalBase, "/vendors"),
     },
     {
       label: "Total Stalls",
@@ -54,7 +56,7 @@ export default function BusinessDashboardPage() {
       sub: "Database stall records",
       color: "#005ac2",
       icon: Store,
-      link: "/admin/stalls",
+      link: portalPath(portalBase, "/stalls"),
     },
     {
       label: "Open Stalls",
@@ -62,7 +64,7 @@ export default function BusinessDashboardPage() {
       sub: "Visible as currently open",
       color: "#f59e0b",
       icon: TrendingUp,
-      link: "/admin/stalls",
+      link: portalPath(portalBase, "/stalls"),
     },
     {
       label: "Flagged Reviews",
@@ -70,7 +72,7 @@ export default function BusinessDashboardPage() {
       sub: "Awaiting moderation",
       color: "#ef4444",
       icon: ShieldAlert,
-      link: "/admin/vendors/moderation",
+      link: portalPath(portalBase, "/vendors/moderation"),
     },
   ];
 
@@ -112,10 +114,10 @@ export default function BusinessDashboardPage() {
           </div>
           <div className="p-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
-              { label: "Manage Vendors", desc: "View, create, and edit vendor accounts", path: "/admin/vendors", icon: Store },
-              { label: "Manage Stalls", desc: "Inspect stall records, locations, and menu data", path: "/admin/stalls", icon: Store },
-              { label: "Onboarding Settings", desc: "Configure Telegram link and onboarding message", path: "/admin/vendors/onboarding", icon: UserPlus },
-              { label: "Review Moderation", desc: "Flag or remove inappropriate reviews", path: "/admin/vendors/moderation", icon: ShieldAlert },
+              { label: "Manage Vendors", desc: "View, create, and edit vendor accounts", path: portalPath(portalBase, "/vendors"), icon: Store },
+              { label: "Manage Stalls", desc: "Inspect stall records, locations, and menu data", path: portalPath(portalBase, "/stalls"), icon: Store },
+              { label: "Onboarding Settings", desc: "Configure Telegram link and onboarding message", path: portalPath(portalBase, "/vendors/onboarding"), icon: UserPlus },
+              { label: "Review Moderation", desc: "Flag or remove inappropriate reviews", path: portalPath(portalBase, "/vendors/moderation"), icon: ShieldAlert },
             ].map((action) => {
               const Icon = action.icon;
               return (

@@ -1,0 +1,1 @@
+function f(t,i="Something went wrong. Please try again."){var a,s;if(t&&typeof t=="object"){const e=t.response,g=((a=e==null?void 0:e.data)==null?void 0:a.safeMessage)||((s=e==null?void 0:e.data)==null?void 0:s.message);if(g)return g;const n=t.message;if(n)return n}return i}export{f as g};

@@ -1,0 +1,22 @@
+import AdminSidebar from "../../shared/components/AdminSidebar";
+import type { NavSection } from "../../shared/components/AdminSidebar";
+
+const sections: NavSection[] = [
+  {
+    title: "Business Assistance",
+    subtitle: "Vendor support & business tools",
+    items: [
+      { label: "Dashboard", path: "/business", icon: "M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z", badge: false, description: "Business assistance overview & vendor activity" },
+      { label: "Vendor Management", path: "/business/vendors", icon: "M18.06 22.99h1.66c.84 0 1.53-.64 1.63-1.46L23 5.05h-5V1h-1.97v4.05h-4.97l.3 2.34c1.71.47 3.31 1.32 4.27 2.26 1.44 1.42 2.43 2.89 2.43 5.29v8.05zM1 21.99V21h15.03v.99c0 .55-.45 1-1.01 1H2.01c-.56 0-1.01-.45-1.01-1zm15.03-7c0-3.5-3.37-5.99-7.52-5.99S1 11.49 1 14.99v1h15.03v-1z", badge: false, description: "Manage all stalls, menu items, reviews & vendors" },
+      { label: "Vendor Onboarding", path: "/business/vendors/onboarding", icon: "M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.33-8 4v2h16v-2c0-2.67-5.33-4-8-4z", badge: false, description: "Onboard vendors via Telegram connection & scam prevention" },
+      { label: "Review Moderation", path: "/business/vendors/moderation", icon: "M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z", badge: false, description: "Flag or remove spam/inappropriate reviews, update stall ratings" },
+      { label: "Stalls", path: "/business/stalls", icon: "M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6zm0 4h8v2H6zm10 0h2v2h-2zm-6-4h8v2h-8z", badge: false, description: "Manage stalls & stall details" },
+      { label: "Activity Log", path: "/business/activity-log", icon: "M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z", badge: false, description: "Track business assistance actions" },
+      { label: "My Profile", path: "/business/profile", icon: "M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.33-8 4v2h16v-2c0-2.67-5.33-4-8-4z", badge: false, description: "View your account info" },
+    ],
+  },
+];
+
+export default function BusinessLayout() {
+  return <AdminSidebar sections={sections} portalSubtitle="Business Portal" logoutRedirect="/business/login" />;
+}

@@ -463,3 +463,28 @@ export async function unflagAdminReview(id: string): Promise<void> {
 export async function removeAdminReview(id: string): Promise<void> {
   await api.delete(`/admin/stalls/reviews/${id}/remove`);
 }
+
+// ── Profile ─────────────────────────────────────────────────────────────
+
+export interface AdminProfile {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  roleScope: string;
+  isBanned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAdminProfile(): Promise<AdminProfile> {
+  const isDevPortal = window.location.pathname.startsWith("/developer");
+  const url = isDevPortal ? "/dev/profile" : "/admin/profile";
+  const response = await api.get<{ success: boolean; data: AdminProfile }>(url);
+  return response.data.data;
+}
+
+export async function changeAdminPassword(currentPassword: string, newPassword: string): Promise<void> {
+  await api.post("/auth/change-password", { currentPassword, newPassword });
+}

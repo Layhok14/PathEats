@@ -8,7 +8,7 @@
 | Bundler | Vite 6 (esbuild transpilation — no `tsc`) |
 | Styling | Tailwind CSS 4 + CSS custom properties + inline styles |
 | Map | Maplibre GL JS 4 (vector tiles from MapTiler) |
-| Charts | Recharts 2 (admin dashboard only) |
+| Charts | Lucide icons + MetricCard components (no charting library used) |
 | Backend runtime | Node.js + Express 4 (ESM, `"type": "module"`) |
 | Database | PostgreSQL + PostGIS (via `pg` driver) |
 | Auth | JWT (jsonwebtoken) + bcryptjs |
@@ -83,11 +83,11 @@ HTTP Request
 
 ```
 UserSearchPage
-  → useVendors (mock: filters ALL_VENDORS by criteria)
+  → useVendors (real API: POST /places/search)
   → useMaplibreMap (creates map, draws route + markers)
   → routeService.getRoute() (calls OSRM API or falls back to interpolation)
   → useAuth (login/signup via real API /api/auth/*)
-  → useReviews (in-memory, no API)
+  → useReviews (real API: GET/POST /places/:id/reviews)
 ```
 
 ## Authentication Flow
@@ -105,13 +105,6 @@ Frontend stores token in localStorage.patheat_user
   → 401 response → clear localStorage → redirect to /user
 ```
 
-### JWT Secret Mismatch (Gotcha)
-
-- `authMiddleware.js` reads `process.env.JWT_SECRET`
-- `AuthService._signToken()` reads `process.env.JWT_ACCESS_SECRET`
-
-Both default to `"dev-secret-change-in-production"` so they match in dev. In production, set both env vars to the same value.
-
 ## File-by-File Reference
 
 ### Backend Key Files
@@ -127,9 +120,9 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 | `backend/src/routes/api.js` | Mounts all sub-routers at `/api` | ✅ |
 | `backend/src/routes/authRoutes.js` | 5 endpoints — login, register, forgot-pwd, verify-otp, reset-pwd | ✅ |
 | `backend/src/routes/vendorRoutes.js` | 4 endpoints — dashboard, stalls CRUD | ✅ |
-| `backend/src/routes/userRoutes.js` | 7 endpoints — ALL STUBS | 🟡 |
-| `backend/src/routes/adminRoutes.js` | 9 endpoints — ALL STUBS | 🟡 |
-| `backend/src/routes/devRoutes.js` | 7 endpoints — ALL STUBS | 🟡 |
+| `backend/src/routes/userRoutes.js` | 7 endpoints — consumer profile, bookmarks, saved routes, search history | ✅ |
+| `backend/src/routes/adminRoutes.js` | ~40 endpoints — user/vendor/stall/role CRUD, audit, telemetry, moderation, onboarding | ✅ |
+| `backend/src/routes/devRoutes.js` | ~25 endpoints — health, DB stats, query runner, backups, recovery, logs | ✅ |
 | `backend/src/services/AuthService.js` | Auth logic (register, login, OTP, password reset) | ✅ |
 | `backend/src/services/VendorService.js` | Stall CRUD + dashboard | ✅ |
 | `backend/src/services/emailService.js` | Send OTP via SMTP | ✅ |
@@ -138,7 +131,7 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 | `backend/src/repositories/VendorRepository.js` | Stall DB queries (has `update` but no route/service calls it) | ✅ |
 | `backend/src/repositories/OtpRepository.js` | OTP store/verify/invalidate | ✅ |
 | `backend/src/models/vendorModel.js` | Stall validation + serialization | ✅ |
-| `backend/src/utils/AppError.js` | Custom error class | ✅ (missing `isOperational`) |
+| `backend/src/utils/AppError.js` | Custom error class | ✅ |
 | `backend/src/utils/catchAsync.js` | Async handler wrapper | ✅ |
 | `backend/db/seed-data.sql` | Full DDL + seed data | ✅ |
 
@@ -152,14 +145,12 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 | `shared/hooks/useAuth.tsx` | Auth context + real API calls | ✅ |
 | `shared/hooks/useTheme.tsx` | Dark/light theme context | ✅ |
 | `shared/hooks/useStalls.ts` | Vendor stall CRUD (real API) | ✅ |
-| `shared/hooks/useMenuItems.ts` | Menu items CRUD (mock, no API) | 🟡 |
-| `user/hooks/useVendors.tsx` | Vendor filter + score (mock) | 🟡 |
+| `shared/hooks/useMenuItems.ts` | Menu items CRUD (real API) | ✅ |
+| `user/hooks/useVendors.tsx` | Vendor filter + score (real API: POST /places/search) | ✅ |
 | `user/hooks/useMaplibreMap.tsx` | Map lifecycle + markers + route | ✅ |
-| `user/hooks/useReviews.tsx` | Reviews CRUD (in-memory) | 🟡 |
-| `user/services/vendorService.js` | Mock vendor search | 🟡 |
-| `user/services/reviewService.js` | Mock review CRUD | 🟡 |
-| `vendor/services/stallService.ts` | Mock stall CRUD (UNUSED — useStalls hook used instead) | ❌ |
-| `shared/constants/vendorData.ts` | 30 mock vendors | 🟡 |
+| `user/hooks/useReviews.tsx` | Reviews CRUD (real API) | ✅ |
+| `user/services/vendorService.js` | Fetches vendor by ID (/places/:id) | ✅ |
+| `user/services/reviewService.js` | Review CRUD service | ✅ |
 
 ## Database Schema
 
@@ -170,12 +161,6 @@ Both default to `"dev-secret-change-in-production"` so they match in dev. In pro
 - **place_categories** — id, slug, name
 - **places** — id, owner_id, category_id, name, description, address, photo_url, price_range, location (GEOGRAPHY), status, is_open, is_approved, rating, created_at, updated_at
 - **reviews** — id, place_id, user_id, rating, text, created_at
-
-## Known Bugs
-
-1. **AppError.isOperational missing** — `AppError` doesn't set `this.isOperational = true`. The error handler checks `err.isOperational` — since it's `undefined` (falsy), all `throw new AppError(...)` become "500 Internal Server Error" instead of their intended status/message. Fix: add `this.isOperational = true` in AppError constructor.
-
-2. **JWT env var mismatch** — `authMiddleware.js` reads `JWT_SECRET`, `AuthService._signToken()` reads `JWT_ACCESS_SECRET`. Same fallback value masks this in dev.
 
 ## Code Conventions
 

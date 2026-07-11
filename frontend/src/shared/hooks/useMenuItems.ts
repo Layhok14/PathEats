@@ -4,14 +4,6 @@ import type { VendorMenuItem as MenuItem, MenuCategory } from "../types";
 
 export type MenuItemFormData = Omit<MenuItem, "id">;
 
-export function getMenuItemById(_id: string): MenuItem | undefined {
-  return undefined;
-}
-
-export function getAllMenuItems(): MenuItem[] {
-  return [];
-}
-
 export function useMenuItems(filterCategory?: MenuCategory) {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
