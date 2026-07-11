@@ -1190,6 +1190,19 @@ router.get("/vendor-management/overview", catchAsync(async (req, res) => {
   res.json({ success: true, data: rows });
 }));
 
+// ── Audit Logs by Role ────────────────────────────────────────────────────
+
+router.get("/audit/by-role", catchAsync(async (req, res) => {
+  const roleScope = req.query.role_scope;
+  const limit = Number(req.query.limit || 100);
+  if (!roleScope || !["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE"].includes(roleScope)) {
+    return res.status(400).json({ success: false, message: "Valid role_scope is required (GLOBAL_ADMIN, DEVELOPER_ADMIN, BUSINESS_ASSISTANCE)" });
+  }
+  const { getAuditLogsByRoleScope } = await import("../services/AdminService.js");
+  const logs = await getAuditLogsByRoleScope(roleScope, limit);
+  res.json({ success: true, data: logs });
+}));
+
 // ── Profile ─────────────────────────────────────────────────────────────────
 
 router.get("/profile", catchAsync(async (req, res) => {

@@ -197,12 +197,12 @@ const getPublicTableNames = async () => {
   return rows.map((row) => row.table_name);
 };
 
-export const logAuditAction = async (adminId, action, targetType, targetId, details = null) => {
+export const logAuditAction = async (adminId, action, targetType, targetId, details = null, roleScope = null) => {
   try {
     await pool.query(
       `
-      INSERT INTO audit_log (admin_id, actor_id, action, target_type, target_id, details)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO audit_log (admin_id, actor_id, action, target_type, target_id, details, role_scope)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       `,
       [
         adminId,
@@ -211,6 +211,7 @@ export const logAuditAction = async (adminId, action, targetType, targetId, deta
         targetType,
         targetId,
         details ? JSON.stringify(details) : "{}",
+        roleScope || null,
       ]
     );
   } catch (err) {
@@ -352,14 +353,22 @@ export const createUser = async (userData) => {
     false,
   ];
   const placeholders = values.map((_, index) => `$${index + 1}`);
-  const result = await pool.query(
-    `
-    INSERT INTO users (${columnNames.map(quoteIdent).join(", ")})
-    VALUES (${placeholders.join(", ")})
-    RETURNING id::text, email, first_name, last_name, role_scope, is_banned, created_at
-    `,
-    values
-  );
+  let result;
+  try {
+    result = await pool.query(
+      `
+      INSERT INTO users (${columnNames.map(quoteIdent).join(", ")})
+      VALUES (${placeholders.join(", ")})
+      RETURNING id::text, email, first_name, last_name, role_scope, is_banned, created_at
+      `,
+      values
+    );
+  } catch (err) {
+    if (err.code === "23505" && err.constraint === "users_email_key") {
+      throw new AppError("A user with this email already exists", 409);
+    }
+    throw err;
+  }
 
   const user = result.rows[0];
   return {
@@ -420,19 +429,30 @@ export const updateStatus = async (id, status) => {
 
 export const countUsers = async () => countRows("users");
 
-export const getUserManagementOverview = async (search = "") => {
+export const getUserManagementOverview = async (search = "", roleScope = null) => {
   const searchText = String(search ?? "").trim();
-  const whereClause = searchText
-    ? `
-      WHERE (
-        u.first_name ILIKE $1 OR
-        u.last_name ILIKE $1 OR
-        u.email ILIKE $1 OR
-        u.role_scope ILIKE $1
-      )
-    `
-    : "";
-  const params = searchText ? [`%${searchText}%`] : [];
+  const conditions = [];
+  const params = [];
+  let idx = 1;
+
+  if (searchText) {
+    conditions.push(`(
+      u.first_name ILIKE $${idx} OR
+      u.last_name ILIKE $${idx} OR
+      u.email ILIKE $${idx} OR
+      u.role_scope ILIKE $${idx}
+    )`);
+    params.push(`%${searchText}%`);
+    idx++;
+  }
+
+  if (roleScope) {
+    conditions.push(`u.role_scope = $${idx}`);
+    params.push(roleScope);
+    idx++;
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const rows = await optionalRows(
     `
@@ -1001,13 +1021,19 @@ export const findAllRoles = async () => {
   const rows = await optionalRows(
     `
     SELECT
-      id::text,
-      name,
-      table_privileges,
-      grant_option,
-      created_at
-    FROM "${tableName}"
-    ORDER BY created_at DESC
+      r.id::text,
+      r.name,
+      r.table_privileges,
+      r.grant_option,
+      r.created_at,
+      COALESCE(u.user_count, 0)::int AS user_count
+    FROM "${tableName}" r
+    LEFT JOIN (
+      SELECT role_scope, COUNT(*) AS user_count
+      FROM users
+      GROUP BY role_scope
+    ) u ON u.role_scope = r.name
+    ORDER BY r.created_at DESC
     `
   );
 
@@ -1016,6 +1042,7 @@ export const findAllRoles = async () => {
     name: role.name,
     tablePrivileges: role.table_privileges ?? {},
     grantOption: Boolean(role.grant_option),
+    userCount: role.user_count,
     createdAt: role.created_at,
   }));
 };
@@ -1066,6 +1093,32 @@ export const updateRoleRecord = async (id, { name, tablePrivileges, grantOption 
     id: role.id,
     name: role.name,
     tablePrivileges: role.table_privileges ?? {},
+    grantOption: Boolean(role.grant_option),
+    createdAt: role.created_at,
+  };
+};
+
+export const countUsersByRoleScope = async (roleScope) => {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM users WHERE role_scope = $1`,
+    [roleScope]
+  );
+  return result.rows[0].count;
+};
+
+export const getRoleRecordById = async (id) => {
+  const tableName = await getRoleTableName();
+  await ensureRoleTable();
+  const result = await pool.query(
+    `SELECT id::text, name, table_privileges, grant_option, created_at FROM "${tableName}" WHERE id = $1`,
+    [id]
+  );
+  if (!result.rows[0]) return null;
+  const role = result.rows[0];
+  return {
+    id: role.id,
+    name: role.name,
+    tablePrivileges: role.table_privileges,
     grantOption: Boolean(role.grant_option),
     createdAt: role.created_at,
   };
@@ -1533,6 +1586,7 @@ export const getAuditLogs = async (limit = 50) => {
       target_type,
       target_id,
       details,
+      role_scope,
       created_at
     FROM audit_log
     ORDER BY created_at DESC
@@ -1548,6 +1602,49 @@ export const getAuditLogs = async (limit = 50) => {
     targetType: row.target_type,
     targetId: row.target_id,
     details: row.details,
+    roleScope: row.role_scope,
+    createdAt: row.created_at,
+  }));
+};
+
+export const getAuditLogsByRoleScope = async (roleScope, limit = 100) => {
+  await ensureAuditLogTable();
+  const rows = await optionalRows(
+    `
+    SELECT
+      al.id::text,
+      al.admin_id,
+      al.actor_id,
+      al.action,
+      al.target_type,
+      al.target_id,
+      al.details,
+      al.role_scope,
+      al.created_at,
+      u.email AS actor_email,
+      u.first_name AS actor_first_name,
+      u.last_name AS actor_last_name
+    FROM audit_log al
+    LEFT JOIN users u ON u.id = al.actor_id
+    WHERE al.role_scope = $1
+    ORDER BY al.created_at DESC
+    LIMIT $2
+    `,
+    [roleScope, limit],
+    []
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    adminId: row.admin_id,
+    actorId: row.actor_id,
+    actorEmail: row.actor_email,
+    actorFirstName: row.actor_first_name,
+    actorLastName: row.actor_last_name,
+    action: row.action,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    details: row.details,
+    roleScope: row.role_scope,
     createdAt: row.created_at,
   }));
 };
@@ -1588,12 +1685,13 @@ export const getUserById = async (id) => {
   };
 };
 
-export const updateUser = async (id, { firstName, lastName, email, role }) => {
+export const updateUser = async (id, { firstName, lastName, email, role, role_scope }) => {
   const sets = [];
   const params = [];
   let idx = 1;
 
-  if (role !== undefined && role !== "VENDOR") {
+  const roleScopeValue = role_scope ?? role;
+  if (roleScopeValue !== undefined && roleScopeValue !== "VENDOR") {
     const ownedPlaceCount = await getOwnedPlaceCount(id);
     if (ownedPlaceCount > 0) {
       throw new AppError(
@@ -1615,9 +1713,9 @@ export const updateUser = async (id, { firstName, lastName, email, role }) => {
     sets.push(`email = $${idx++}`);
     params.push(email);
   }
-  if (role !== undefined) {
+  if (roleScopeValue !== undefined) {
     sets.push(`role_scope = $${idx++}`);
-    params.push(role);
+    params.push(roleScopeValue);
   }
 
   if (sets.length === 0) return null;

@@ -73,8 +73,8 @@ export default function VendorListPage() {
   const loadRows = async () => {
     try {
       setLoading(true);
-      const vendors = await getAdminUserManagementOverview("", "VENDOR");
-      setRows(vendors);
+      const all = await getAdminUserManagementOverview();
+      setRows(all.filter((r) => r.user.details?.role_scope === "VENDOR"));
     } catch (err) {
       toast.error("Could not load vendors.");
     } finally {
@@ -97,7 +97,7 @@ export default function VendorListPage() {
       return;
     }
     try {
-      await createAdminUser({ name: form.name, email: form.email, password: form.password, role: "VENDOR" });
+      await createAdminUser({ name: form.name, email: form.email, password: form.password, role_scope: "VENDOR" });
       setShowCreate(false);
       setForm({ name: "", email: "", password: "" });
       await loadRows();

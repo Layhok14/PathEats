@@ -45,6 +45,7 @@ function RoleManagementSection() {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [editingRole, setEditingRole] = useState<AdminRole | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<AdminRole | null>(null);
+  const [privilegesRole, setPrivilegesRole] = useState<AdminRole | null>(null);
 
   const loadRoles = async () => {
     try {
@@ -98,7 +99,7 @@ function RoleManagementSection() {
           </div>
         </div>
         <table className="w-full">
-          <thead><tr className="bg-[#f8fafc]">{["ROLE", "TABLE PRIVILEGES", "GRANT", "CREATED", "ACTIONS"].map(h => <th key={h} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>)}</tr></thead>
+          <thead><tr className="bg-[#f8fafc]">{["ROLE", "USERS", "TABLE PRIVILEGES", "GRANT", "CREATED", "ACTIONS"].map(h => <th key={h} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">{h}</th>)}</tr></thead>
           <tbody>
             {visible.map((role) => (
               <tr key={role.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
@@ -109,16 +110,21 @@ function RoleManagementSection() {
                   </div>
                 </td>
                 <td className="px-6 py-3">
-                  <div className="flex flex-wrap gap-1.5 max-w-[400px]">
-                    {Object.entries(role.tablePrivileges).length > 0 ? Object.entries(role.tablePrivileges).map(([t, p]) => p.length > 0 ? <span key={t} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#f1f5f9] text-[#475569]">{t}: {p.join(",")}</span> : null) : <span className="text-[12px] text-[#94a3b8]">None</span>}
-                  </div>
+                  <span className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full ${(role.userCount ?? 0) > 0 ? "bg-blue-50 text-[#005ac2]" : "bg-gray-50 text-[#94a3b8]"}`}>
+                    {role.userCount ?? 0}
+                  </span>
+                </td>
+                <td className="px-6 py-3">
+                  <button onClick={() => setPrivilegesRole(role)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#dcfce7] text-[#006e2f] hover:bg-[#bbf7d0] transition-colors">
+                    <Table2 size={12} /> View
+                  </button>
                 </td>
                 <td className="px-6 py-3"><span className={`text-[12px] font-semibold ${role.grantOption ? "text-[#006e2f]" : "text-[#64748b]"}`}>{role.grantOption ? "Yes" : "No"}</span></td>
                 <td className="px-6 py-3 text-[13px] text-[#64748b]">{formatDate(role.createdAt, true)}</td>
                 <td className="px-6 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingRole(role); setShowRoleModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
-                    <button onClick={() => handleDeleteRole(role)} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50"><Trash2 size={15} /></button>
+                    <button onClick={() => handleDeleteRole(role)} disabled={(role.userCount ?? 0) > 0} title={(role.userCount ?? 0) > 0 ? "Reassign users first" : "Delete role"} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 size={15} /></button>
                   </div>
                 </td>
               </tr>
@@ -139,7 +145,11 @@ function RoleManagementSection() {
       <ConfirmDialog
         open={confirmTarget !== null}
         title="Delete Role"
-        description="Are you sure you want to delete this role? This cannot be undone."
+        description={
+          (confirmTarget?.userCount ?? 0) > 0
+            ? `This role has ${confirmTarget?.userCount} user${(confirmTarget?.userCount ?? 0) === 1 ? "" : "s"} assigned. You must reassign them before deleting.`
+            : "Are you sure you want to delete this role? This cannot be undone."
+        }
         itemName={confirmTarget?.name}
         confirmLabel="Delete"
         variant="danger"
@@ -150,12 +160,59 @@ function RoleManagementSection() {
             toast.success(`Role "${confirmTarget.name}" deleted.`);
             await loadRoles();
           } catch (err) {
-            toast.error("Could not delete role.");
+            const msg = err && typeof err === "object" && "response" in err
+              ? (err as any).response?.data?.message : undefined;
+            toast.error(msg || "Could not delete role.");
           }
           setConfirmTarget(null);
         }}
         onCancel={() => setConfirmTarget(null)}
       />
+      {privilegesRole && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPrivilegesRole(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
+              <div>
+                <h2 className="text-[16px] font-bold text-[#0b1c30]">Table Privileges</h2>
+                <p className="text-[12px] text-[#64748b] mt-0.5">Role: {privilegesRole.name}</p>
+              </div>
+              <button onClick={() => setPrivilegesRole(null)} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
+            </div>
+            <div className="p-6 max-h-[400px] overflow-y-auto">
+              {Object.entries(privilegesRole.tablePrivileges).length === 0 ? (
+                <p className="text-[13px] text-[#94a3b8]">No table privileges assigned.</p>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-[#f8fafc]">
+                      <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Table</th>
+                      <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Privileges</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(privilegesRole.tablePrivileges).map(([table, privs]) => (
+                      <tr key={table} className="border-t border-[#f1f5f9]">
+                        <td className="px-4 py-2.5 text-[13px] font-medium text-[#0b1c30]">{table}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(privs as string[]).map((p) => (
+                              <span key={p} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#dcfce7] text-[#006e2f]">{p}</span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div className="mt-4 flex items-center gap-2 text-[12px] text-[#64748b]">
+                <KeyRound size={13} />
+                <span>Grant option: <span className={`font-semibold ${privilegesRole.grantOption ? "text-[#006e2f]" : "text-[#64748b]"}`}>{privilegesRole.grantOption ? "Yes" : "No"}</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -185,8 +242,6 @@ function UserManagementSection() {
   };
 
   useEffect(() => { loadUsers(); }, []);
-
-  const ROLES = ["All", "GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE", "CONSUMER", "VENDOR"];
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
@@ -233,13 +288,16 @@ function UserManagementSection() {
       <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 px-6 pt-4 pb-3 border-b border-[#f1f5f9]">
           <h2 className="text-[16px] font-semibold text-[#0b1c30]">Users</h2>
-          <div className="flex gap-1 flex-wrap">
-            {ROLES.map((r) => (
-              <button key={r} onClick={() => { setRoleFilter(r); setPage(1); }} className={`px-2.5 py-1 text-[11px] font-medium rounded-lg transition-colors ${roleFilter === r ? "bg-[#006e2f] text-white" : "bg-[#f1f5f9] text-[#64748b] hover:bg-[#e2e8f0]"}`}>
-                {r === "All" ? "All" : r}
-              </button>
+          <select
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+            className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-[#e2e8f0] bg-white text-[#374151] outline-none focus:border-[#006e2f]"
+          >
+            <option value="All">All Roles</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.name}>{r.name}</option>
             ))}
-          </div>
+          </select>
           <div className="relative ml-auto">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
             <input type="text" placeholder="Search users..." value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} className="pl-8 pr-3 py-1.5 text-[12px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white w-[200px]" />
@@ -339,7 +397,7 @@ function UserFormModal({
     const errs: Record<string, string> = {};
     if (!form.name.trim()) errs.name = "Name is required";
     if (!form.email.trim()) errs.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = "Enter a valid email";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Enter a valid email address";
     if (!form.role) errs.role = "Role is required";
     if (!isEditing) {
       if (!form.password) errs.password = "Password is required";
@@ -358,10 +416,10 @@ function UserFormModal({
     setSaving(true);
     try {
       if (isEditing && user) {
-        await updateAdminUser(user.id, { firstName: form.name, email: form.email, role: form.role });
+        await updateAdminUser(user.id, { firstName: form.name, email: form.email, role_scope: form.role });
         toast.success(`User "${form.name}" updated.`);
       } else {
-        await createAdminUser({ name: form.name, email: form.email, role: form.role, password: form.password });
+        await createAdminUser({ name: form.name, email: form.email, role_scope: form.role, password: form.password });
         toast.success(`User "${form.name}" created.`);
       }
       onClose();
@@ -369,7 +427,11 @@ function UserFormModal({
     } catch (err) {
       const msg = err && typeof err === "object" && "response" in err
         ? (err as any).response?.data?.message : undefined;
-      toast.error(msg || `${isEditing ? "Update" : "Create"} user failed.`);
+      if (msg && msg.toLowerCase().includes("email")) {
+        setFieldErrors((prev) => ({ ...prev, email: msg }));
+      } else {
+        toast.error(msg || `${isEditing ? "Update" : "Create"} user failed.`);
+      }
     } finally {
       setSaving(false);
     }

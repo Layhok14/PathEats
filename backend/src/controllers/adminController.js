@@ -40,7 +40,7 @@ class AdminController {
 
   getUserManagementOverview = async (req, res, next) => {
     try {
-      const rows = await this.service.getUserManagementOverview(req.query.search);
+      const rows = await this.service.getUserManagementOverview(req.query.search, req.query.role_scope);
       res.status(200).json({ success: true, data: rows });
     } catch (error) {
       next(error);
@@ -58,7 +58,7 @@ class AdminController {
 
   createUser = async (req, res, next) => {
     try {
-      const user = await this.service.createUser(req.body, req.user?.sub);
+      const user = await this.service.createUser(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -67,7 +67,7 @@ class AdminController {
 
   updateRole = async (req, res, next) => {
     try {
-      const user = await this.service.updateRole(req.params.id, req.body.role, req.user?.sub);
+      const user = await this.service.updateRole(req.params.id, req.body.role, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -76,7 +76,7 @@ class AdminController {
 
   updateStatus = async (req, res, next) => {
     try {
-      const user = await this.service.updateStatus(req.params.id, req.body.status, req.user?.sub);
+      const user = await this.service.updateStatus(req.params.id, req.body.status, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -218,7 +218,7 @@ class AdminController {
 
   createRole = async (req, res, next) => {
     try {
-      const role = await this.service.createRole(req.body, req.user?.sub);
+      const role = await this.service.createRole(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       res.status(201).json({
         success: true,
         message: "Role created successfully",
@@ -240,7 +240,7 @@ class AdminController {
 
   updateRoleRecord = async (req, res, next) => {
     try {
-      const role = await this.service.updateRoleRecord(req.params.id, req.body, req.user?.sub);
+      const role = await this.service.updateRoleRecord(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!role) {
         return res.status(404).json({ success: false, message: "Role not found" });
       }
@@ -252,7 +252,7 @@ class AdminController {
 
   deleteRoleRecord = async (req, res, next) => {
     try {
-      const role = await this.service.deleteRoleRecord(req.params.id, req.user?.sub);
+      const role = await this.service.deleteRoleRecord(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!role) {
         return res.status(404).json({ success: false, message: "Role not found" });
       }
@@ -373,6 +373,20 @@ class AdminController {
     }
   };
 
+  getAuditLogsByRoleScope = async (req, res, next) => {
+    try {
+      const roleScope = req.query.role_scope;
+      const limit = Number(req.query.limit || 100);
+      if (!roleScope || !["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE"].includes(roleScope)) {
+        return res.status(400).json({ success: false, message: "Valid role_scope is required (GLOBAL_ADMIN, DEVELOPER_ADMIN, BUSINESS_ASSISTANCE)" });
+      }
+      const logs = await this.service.getAuditLogsByRoleScope(roleScope, limit);
+      res.json({ success: true, data: logs });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // ── New: User CRUD ────────────────────────────────────────────────
 
   getUserById = async (req, res, next) => {
@@ -387,7 +401,7 @@ class AdminController {
 
   updateUser = async (req, res, next) => {
     try {
-      const user = await this.service.updateUser(req.params.id, req.body, req.user?.sub);
+      const user = await this.service.updateUser(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!user) return res.status(404).json({ success: false, message: "User not found" });
       res.json({ success: true, data: user });
     } catch (error) {
@@ -397,7 +411,7 @@ class AdminController {
 
   deleteUser = async (req, res, next) => {
     try {
-      const user = await this.service.deleteUser(req.params.id, req.user?.sub);
+      const user = await this.service.deleteUser(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
       if (!user) return res.status(404).json({ success: false, message: "User not found" });
       res.json({ success: true, message: "User deleted successfully", data: user });
     } catch (error) {
@@ -511,6 +525,7 @@ export const getAllReviews = adminController.getAllReviews;
 export const getReviewsByPlaceId = adminController.getReviewsByPlaceId;
 
 export const getAuditLogs = adminController.getAuditLogs;
+export const getAuditLogsByRoleScope = adminController.getAuditLogsByRoleScope;
 export const getUserById = adminController.getUserById;
 export const updateUser = adminController.updateUser;
 export const deleteUser = adminController.deleteUser;

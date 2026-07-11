@@ -87,7 +87,7 @@ export default function ConsumerManagementPage() {
       return;
     }
     try {
-      await createAdminUser({ name: form.name, email: form.email, password: form.password, role: "CONSUMER" });
+      await createAdminUser({ name: form.name, email: form.email, password: form.password, role_scope: "CONSUMER" });
       setShowCreate(false);
       setForm({ name: "", email: "", password: "" });
       await loadRows();

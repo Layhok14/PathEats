@@ -36,8 +36,7 @@ CREATE TABLE users (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   phone_number TEXT,
-  role_scope TEXT NOT NULL DEFAULT 'CONSUMER'
-    CHECK (role_scope IN ('CONSUMER', 'VENDOR', 'GLOBAL_ADMIN', 'DEVELOPER_ADMIN', 'BUSINESS_ASSISTANCE')),
+  role_scope TEXT NOT NULL DEFAULT 'CONSUMER',
   is_banned BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -66,6 +65,7 @@ CREATE TABLE audit_log (
   target_type TEXT,
   target_id TEXT,
   details JSONB DEFAULT '{}'::jsonb,
+  role_scope VARCHAR(30),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

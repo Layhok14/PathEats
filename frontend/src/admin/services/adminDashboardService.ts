@@ -83,6 +83,7 @@ export interface AdminRole {
   name: string;
   tablePrivileges: Record<string, string[]>;
   grantOption: boolean;
+  userCount?: number;
   createdAt: string;
 }
 
@@ -104,9 +105,9 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
   return response.data.data.users;
 }
 
-export async function getAdminUserManagementOverview(search = ""): Promise<AdminUserOverviewRow[]> {
+export async function getAdminUserManagementOverview(search = "", roleScope?: string): Promise<AdminUserOverviewRow[]> {
   const response = await api.get<{ success: boolean; data: AdminUserOverviewRow[] }>("/admin/user-management/overview", {
-    params: search ? { search } : undefined,
+    params: { ...(search ? { search } : {}), ...(roleScope ? { role_scope: roleScope } : {}) },
   });
   return response.data.data;
 }
@@ -194,7 +195,8 @@ export async function deleteAdminStallReview(id: string): Promise<void> {
 export async function createAdminUser(user: {
   name: string;
   email: string;
-  role: string;
+  role_scope?: string;
+  role?: string;
   password?: string;
 }): Promise<AdminUser> {
   const response = await api.post<{ success: boolean; data: AdminUser }>("/admin/users", user);
@@ -358,16 +360,30 @@ export async function getAdminAuditActivity(): Promise<AuditActivityRow[]> {
 export interface AuditLogEntry {
   id: string;
   adminId: string | null;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  actorFirstName?: string | null;
+  actorLastName?: string | null;
   action: string;
   targetType: string | null;
   targetId: string | null;
   details: Record<string, unknown> | null;
+  roleScope?: string | null;
   createdAt: string;
 }
 
 export async function getAdminAuditLogs(limit = 50): Promise<AuditLogEntry[]> {
   const response = await api.get<{ success: boolean; data: AuditLogEntry[] }>("/admin/audit/logs", {
     params: { limit },
+  });
+  return response.data.data;
+}
+
+export async function getAuditLogsByRole(roleScope: string, limit = 100): Promise<AuditLogEntry[]> {
+  const isDevPortal = window.location.pathname.startsWith("/developer");
+  const url = isDevPortal ? "/dev/audit/by-role" : "/admin/audit/logs/by-role";
+  const response = await api.get<{ success: boolean; data: AuditLogEntry[] }>(url, {
+    params: { role_scope: roleScope, limit },
   });
   return response.data.data;
 }
@@ -394,7 +410,7 @@ export async function getAdminUserById(id: string): Promise<AdminUserDetail> {
 
 export async function updateAdminUser(
   id: string,
-  data: { firstName?: string; lastName?: string; email?: string; role?: string }
+  data: { firstName?: string; lastName?: string; email?: string; role?: string; role_scope?: string }
 ): Promise<AdminUserDetail> {
   const response = await api.patch<{ success: boolean; data: AdminUserDetail }>(`/admin/users/${id}`, data);
   return response.data.data;

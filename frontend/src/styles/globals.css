@@ -44,6 +44,19 @@
   --brand-score-low:    #f97316;
 }
 
+/* ── Global cursor for interactive elements ──────────────────────────── */
+button,
+a,
+select,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"]:disabled {
+  cursor: not-allowed;
+}
+
 /* ── Global focus-visible ring for all interactive elements ────────────── */
 button:focus-visible,
 a:focus-visible,

@@ -5,6 +5,7 @@ import { AuthGuard } from "../../shared/components/AuthGuard";
 import { useAuth } from "../../shared/hooks/useAuth";
 
 const AdminMainLayout = lazy(() => import("../layouts/AdminMainLayout"));
+const AdminDashboardPage = lazy(() => import("../pages/global/AdminDashboardPage"));
 const AdminManagementPage = lazy(() => import("../pages/global/AdminManagementPage"));
 const ConsumerManagementPage = lazy(() => import("../pages/global/ConsumerManagementPage"));
 const VendorListPage = lazy(() => import("../pages/global/VendorListPage"));
@@ -32,7 +33,7 @@ function AdminHomeRoute() {
     return <Navigate to="/admin/developer/dashboard" replace />;
   }
 
-  return <AdminManagementPage />;
+  return <AdminDashboardPage />;
 }
 
 const globalAdmin = (page: ReactNode) => (
@@ -56,6 +57,7 @@ const adminRoutes: RouteObject = {
   element: <AdminMainLayout />,
   children: [
     { index: true, element: <AuthGuard requiredRole={ADMIN_ROLES}><AdminHomeRoute /></AuthGuard> },
+    { path: "manage", element: globalAdmin(<AdminManagementPage />) },
     { path: "users", element: globalAdmin(<ConsumerManagementPage />) },
     { path: "business", element: businessOrGlobal(<BusinessDashboardPage />) },
     { path: "stalls", element: businessOrGlobal(<AdminStallManagePage />) },
@@ -65,7 +67,6 @@ const adminRoutes: RouteObject = {
     { path: "vendors/moderation", element: businessOrGlobal(<ReviewModerationPage />) },
     { path: "vendors/:vendorId", element: businessOrGlobal(<AdminStallManagePage />) },
     { path: "vendors/:vendorId/stall/:stallId", element: businessOrGlobal(<AdminStallDetailPage />) },
-    { path: "dashboard", element: globalAdmin(<Navigate to="/admin/audit" replace />) },
     { path: "backups", element: devOrGlobal(<BackupManagerPage />) },
     { path: "developer/dashboard", element: devOrGlobal(<DeveloperDashboard />) },
     { path: "developer/users", element: devOrGlobal(<Navigate to="/admin/users" replace />) },

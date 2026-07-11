@@ -20,6 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
 CREATE INDEX IF NOT EXISTS idx_audit_log_admin ON audit_log(admin_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_role_scope ON audit_log(role_scope);
 CREATE INDEX IF NOT EXISTS idx_session_events_user_created
   ON session_events(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_session_events_family ON session_events(family_id);

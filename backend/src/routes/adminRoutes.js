@@ -490,6 +490,27 @@ router.get("/audit/logs", globalAdminOnly, catchAsync(adminController.getAuditLo
 
 /**
  * @swagger
+ * /api/admin/audit/logs/by-role:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Get audit logs filtered by role scope
+ *     security: [{ BearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: role_scope
+ *         required: true
+ *         schema: { type: string, enum: [GLOBAL_ADMIN, DEVELOPER_ADMIN, BUSINESS_ASSISTANCE] }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 100 }
+ *     responses:
+ *       200:
+ *         description: Array of audit log entries for the specified role
+ */
+router.get("/audit/logs/by-role", businessOrGlobal, catchAsync(adminController.getAuditLogsByRoleScope));
+
+/**
+ * @swagger
  * /api/admin/tables:
  *   get:
  *     tags: [Admin]
