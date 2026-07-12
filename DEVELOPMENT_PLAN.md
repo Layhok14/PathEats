@@ -64,6 +64,8 @@ PathEats will retain useful behavior from `origin/database` while keeping the cu
 - Files remain on the user's local machine; no logical JSON format or database selector.
 - Generate and download the first backup immediately when a profile is created.
 - Run full recovery in a single PostgreSQL transaction without requiring session-termination privileges; a failed restore must commit no changes.
+- For Supabase/PostGIS, remove only the `SCHEMA public` restore-list entry before `pg_restore --clean`; preserve the managed schema while restoring its application objects.
+- The PostgreSQL report's `pg_dumpall`/`psql` plain-SQL workflow is treated as a local PostgreSQL reference. PathEats remains a single Supabase database, so custom-format `pg_dump`/`pg_restore` is the safer matching format.
 - Restore strict TOC inspection, dangerous-object rejection, real full/partial detection, file/signature/table/column validation, typed confirmation, a pre-restore safety dump, single-flight recovery, and safe audit logging.
 - Never expose credentials or local server paths to the client.
 

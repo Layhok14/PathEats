@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inspectPostgresToc } from "./backupToc.js";
+import { filterManagedSchemaRestoreList, inspectPostgresToc } from "./backupToc.js";
 
 const fullArchive = `
 5; 2615 2200 SCHEMA - public postgres
@@ -37,5 +37,17 @@ describe("PostgreSQL dump TOC inspection", () => {
   it("rejects PostGIS-owned spatial reference data", () => {
     expect(() => inspectPostgresToc("10; 0 1 TABLE DATA public spatial_ref_sys postgres", ["users"]))
       .toThrow("spatial_ref_sys");
+  });
+
+  it("removes only the managed public schema entry from a restore list", () => {
+    expect(filterManagedSchemaRestoreList(fullArchive)).toEqual([
+      "10; 0 1 TABLE DATA public users postgres",
+      "11; 0 2 TABLE DATA public role postgres",
+      "12; 0 3 TABLE DATA public place_categories postgres",
+      "13; 0 4 TABLE DATA public places postgres",
+      "14; 0 5 TABLE DATA public menu_items postgres",
+      "15; 0 6 TABLE DATA public place_menu_items postgres",
+      "16; 0 7 TABLE DATA public reviews postgres",
+    ]);
   });
 });

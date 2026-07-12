@@ -165,6 +165,7 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
               <select value={selectedSchema} onChange={(e) => setSelectedSchema(e.target.value)} className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
                 {DB_SCHEMAS.map((s) => (<option key={s} value={s}>{s}</option>))}
               </select>
+              <p className="mt-1 text-[11px] text-[#64748b]">Creates a PostgreSQL custom backup of the current database public schema. It can be restored with the PostgreSQL Dump recovery option.</p>
             </div>
           )}
 

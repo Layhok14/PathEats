@@ -14,6 +14,13 @@ const CORE_APPLICATION_TABLES = [
   "reviews",
 ];
 
+export function filterManagedSchemaRestoreList(listOutput) {
+  return String(listOutput || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith(";") && !/\bSCHEMA\s+-\s+public\b/i.test(line));
+}
+
 export function inspectPostgresToc(listOutput, currentTables = []) {
   const lines = String(listOutput || "")
     .split(/\r?\n/)

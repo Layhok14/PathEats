@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "fs/promises";
 import { spawn } from "child_process";
 import os from "os";
 import path from "path";
@@ -6,7 +6,7 @@ import path from "path";
 import { pool } from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import { getPublicTableNames, postgresToolConfig } from "./backupService.js";
-import { inspectPostgresToc } from "../utils/backupToc.js";
+import { filterManagedSchemaRestoreList, inspectPostgresToc } from "../utils/backupToc.js";
 import { parseCsv } from "../utils/csv.js";
 
 const quoteIdent = (identifier) => `"${String(identifier).replace(/"/g, '""')}"`;
@@ -89,18 +89,39 @@ function runPostgresTool(command, args, options = {}) {
   });
 }
 
+async function createManagedSchemaRestoreList(dumpFilePath) {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-restore-list-"));
+  const listPath = path.join(tempDir, "restore.list");
+  try {
+    const { stdout } = await runPostgresTool("pg_restore", ["--list", dumpFilePath]);
+    const entries = filterManagedSchemaRestoreList(stdout);
+    await writeFile(listPath, `${entries.join("\n")}\n`, "utf-8");
+    return { tempDir, listPath };
+  } catch (error) {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+}
+
 async function restoreDumpOverDatabase(dumpFilePath) {
-  await runPostgresTool("pg_restore", [
-    "--clean",
-    "--if-exists",
-    "--exit-on-error",
-    "--single-transaction",
-    "--no-owner",
-    "--no-privileges",
-    "--dbname",
-    postgresToolConfig().databaseName,
-    dumpFilePath,
-  ]);
+  const restoreList = await createManagedSchemaRestoreList(dumpFilePath);
+  try {
+    await runPostgresTool("pg_restore", [
+      "--clean",
+      "--if-exists",
+      "--exit-on-error",
+      "--single-transaction",
+      "--no-owner",
+      "--no-privileges",
+      "--use-list",
+      restoreList.listPath,
+      "--dbname",
+      postgresToolConfig().databaseName,
+      dumpFilePath,
+    ]);
+  } finally {
+    await rm(restoreList.tempDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 async function createPreRestoreSafetyDump() {
@@ -161,18 +182,25 @@ export async function restoreTableDump(dumpFilePath, targetTable, options = {}) 
     }
   }
 
-  await runPostgresTool("pg_restore", [
-    "--clean",
-    "--if-exists",
-    "--exit-on-error",
-    "--single-transaction",
-    "--no-owner",
-    "--no-privileges",
-    tableArg,
-    "--dbname",
-    postgresToolConfig().databaseName,
-    dumpFilePath,
-  ]);
+  const restoreList = await createManagedSchemaRestoreList(dumpFilePath);
+  try {
+    await runPostgresTool("pg_restore", [
+      "--clean",
+      "--if-exists",
+      "--exit-on-error",
+      "--single-transaction",
+      "--no-owner",
+      "--no-privileges",
+      tableArg,
+      "--use-list",
+      restoreList.listPath,
+      "--dbname",
+      postgresToolConfig().databaseName,
+      dumpFilePath,
+    ]);
+  } finally {
+    await rm(restoreList.tempDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 export async function restoreCsvFile(csvFilePath, targetTable) {
