@@ -1,0 +1,358 @@
+// Route input panel — origin/dest autocomplete, range slider, recent saved routes.
+
+import {
+  AlertCircle,
+  Search,
+  Navigation2,
+  Clock,
+  ChevronRight,
+} from "lucide-react";
+import { useTheme } from "../../shared/hooks/useTheme";
+import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
+import {
+  PLACES,
+  VENDOR_RANGE_MIN,
+  VENDOR_RANGE_MAX,
+} from "../../shared/constants/appConfig";
+
+/**
+ * @param {{ originText:string, setOriginText:(v:string)=>void,
+ *           destText:string, setDestText:(v:string)=>void,
+ *           originPlace:object, setOriginPlace:(p:object)=>void,
+ *           destPlace:object, setDestPlace:(p:object)=>void,
+ *           originFocus:boolean, setOriginFocus:(v:boolean)=>void,
+ *           destFocus:boolean, setDestFocus:(v:boolean)=>void,
+ *           vendorRange:number, setVendorRange:(v:number)=>void,
+ *           savedRoutes:object[], loadingRoute?:boolean, routeError?:string,
+ *           routeFallbackWarning?:string, onLoadRoute:(r:object)=>void,
+ *           onViewMoreHistory:()=>void, onFindRoute:()=>void }} props
+ */
+function findPlaceByName(name) {
+  return PLACES.find((p) => p.name.toLowerCase() === name.toLowerCase());
+}
+
+function isCurrentLocationAlias(value) {
+  const normalized = value.trim().toLowerCase();
+  return ["you", "me", "my place", "my location", "current location", "your location"].includes(normalized);
+}
+
+export function RouteInputPanel({
+  originText,
+  setOriginText,
+  destText,
+  setDestText,
+  originPlace,
+  setOriginPlace,
+  destPlace,
+  setDestPlace,
+  originFocus,
+  setOriginFocus,
+  destFocus,
+  setDestFocus,
+  vendorRange,
+  setVendorRange,
+  savedRoutes,
+  loadingRoute,
+  routeError,
+  routeFallbackWarning = "",
+  currentLocation,
+  currentLocationLoading = false,
+  currentLocationError = "",
+  onUseCurrentLocation,
+  onLoadRoute,
+  onViewMoreHistory,
+  onFindRoute,
+}) {
+  const { tm } = useTheme();
+  const canUseCurrentLocation = Boolean(currentLocation);
+  const originUsesCurrentLocation =
+    isCurrentLocationAlias(originText) ||
+    originPlace?.name === "Your location" ||
+    originPlace?.name === "My Place";
+  const filteredOrigin = PLACES.filter((p) =>
+    p.name.toLowerCase().includes(originText.toLowerCase()),
+  );
+  const filteredDest = PLACES.filter((p) =>
+    p.name.toLowerCase().includes(destText.toLowerCase()),
+  );
+  const recentRoutes = savedRoutes.slice(0, 5);
+
+  const handleOriginChange = (value) => {
+    setOriginText(value);
+    if (isCurrentLocationAlias(value) && currentLocation) {
+      setOriginPlace(currentLocation);
+      return;
+    }
+    const matched = findPlaceByName(value);
+    if (matched) setOriginPlace(matched);
+  };
+
+  const handleDestChange = (value) => {
+    setDestText(value);
+    const matched = findPlaceByName(value);
+    if (matched) setDestPlace(matched);
+  };
+
+  const handleFindRouteClick = () => {
+    const originMatched = isCurrentLocationAlias(originText)
+      ? currentLocation
+      : findPlaceByName(originText);
+    const destMatched = findPlaceByName(destText);
+    if (originMatched) setOriginPlace(originMatched);
+    if (destMatched) setDestPlace(destMatched);
+    onFindRoute(
+      originMatched ?? { name: originText },
+      destMatched ?? { name: destText },
+    );
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!currentLocation) return;
+    setOriginPlace(currentLocation);
+    setOriginText("Your location");
+    setOriginFocus(false);
+    onUseCurrentLocation?.();
+  };
+
+  const inp = {
+    background: tm.inputBg,
+    border: `1px solid ${tm.inputBorder}`,
+    color: tm.text1,
+  };
+  const drop = {
+    background: tm.dropdown,
+    border: `1px solid ${tm.dropdownBorder}`,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+  };
+
+  return (
+    <div className="shrink-0 px-4 py-4 space-y-3">
+      <div className="flex items-center gap-2.5 mb-1">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: tm.primary }}
+        >
+          <Navigation2 size={13} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-sm font-bold" style={{ color: tm.text1 }}>
+            PathEats
+          </h1>
+          <p className="text-[10px]" style={{ color: tm.text4 }}>
+            Route-aware food discovery
+          </p>
+        </div>
+      </div>
+
+      {/* Origin */}
+      <div className="relative">
+        <div
+          className="w-2 h-2 rounded-full absolute left-3 top-1/2 -translate-y-1/2 shrink-0"
+          style={{ background: originUsesCurrentLocation ? "#f97316" : "#34d399" }}
+        />
+        <input
+          value={originText}
+          onChange={(e) => handleOriginChange(e.target.value)}
+          onFocus={() => setOriginFocus(true)}
+          onBlur={() => setTimeout(() => setOriginFocus(false), 150)}
+          placeholder="From — start point"
+          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
+          style={{
+            ...inp,
+            border: originUsesCurrentLocation ? "1px solid #f97316" : inp.border,
+            boxShadow: originUsesCurrentLocation ? "0 0 0 3px rgba(249,115,22,0.14)" : undefined,
+          }}
+        />
+        {originFocus && (originText || canUseCurrentLocation) && (
+          <div
+            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden max-h-44 overflow-y-auto"
+            style={drop}
+          >
+            <button
+              disabled={!canUseCurrentLocation}
+              onMouseDown={handleUseCurrentLocation}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-white/10 text-left disabled:opacity-50"
+            >
+              <Navigation2 size={11} style={{ color: "#f97316" }} />
+              <div className="min-w-0">
+                <span className="block text-xs truncate font-semibold" style={{ color: canUseCurrentLocation ? "#f97316" : tm.text4 }}>
+                  Use your current location
+                </span>
+                <span className="block text-[10px]" style={{ color: tm.text5 }}>
+                  {currentLocationLoading
+                    ? "Requesting browser location..."
+                    : currentLocationError || "Shown as the orange marker on the map"}
+                </span>
+              </div>
+            </button>
+            {filteredOrigin.map((p) => (
+              <button
+                key={p.name}
+                onMouseDown={() => {
+                  setOriginPlace(p);
+                  setOriginText(p.name);
+                  setOriginFocus(false);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-white/10 text-left"
+              >
+                <Search size={10} style={{ color: tm.text4 }} />
+                <span className="text-xs truncate" style={{ color: tm.text2 }}>
+                  {p.name}
+                </span>
+              </button>
+            ))}
+            {originText && filteredOrigin.length === 0 && !isCurrentLocationAlias(originText) && (
+              <div className="px-3 py-2.5 text-xs" style={{ color: tm.text4 }}>
+                No place found. Choose a suggestion or use your current location.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Destination */}
+      <div className="relative">
+        <div className="w-2 h-2 rounded-full absolute left-3 top-1/2 -translate-y-1/2 shrink-0 bg-red-400" />
+        <input
+          value={destText}
+          onChange={(e) => handleDestChange(e.target.value)}
+          onFocus={() => setDestFocus(true)}
+          onBlur={() => setTimeout(() => setDestFocus(false), 150)}
+          placeholder="To — destination"
+          className="w-full pl-7 pr-3 py-2.5 rounded-xl text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30"
+          style={inp}
+        />
+        {destFocus && destText && filteredDest.length > 0 && (
+          <div
+            className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden max-h-44 overflow-y-auto"
+            style={drop}
+          >
+            {filteredDest.map((p) => (
+              <button
+                key={p.name}
+                onMouseDown={() => {
+                  setDestPlace(p);
+                  setDestText(p.name);
+                  setDestFocus(false);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-white/10 text-left"
+              >
+                <Search size={10} style={{ color: tm.text4 }} />
+                <span className="text-xs truncate" style={{ color: tm.text2 }}>
+                  {p.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button
+        disabled={!originText.trim() || !destText.trim() || loadingRoute}
+        onClick={handleFindRouteClick}
+        className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ background: tm.primary, color: tm.primaryText }}
+      >
+        {loadingRoute ? <LoadingSpinner inline size="sm" message="" /> : <Navigation2 size={14} />}
+        {loadingRoute ? "Routing..." : "Find Route"}
+      </button>
+
+      {routeError && (
+        <div
+          className="flex items-start gap-2 rounded-xl px-3 py-2 text-[12px]"
+          style={{ background: tm.surface1, color: "#ef4444" }}
+        >
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span>{routeError}</span>
+        </div>
+      )}
+
+      {routeFallbackWarning && !routeError && (
+        <div
+          className="flex items-start gap-2 rounded-xl px-3 py-2 text-[12px]"
+          style={{ background: tm.surface1, color: "#f59e0b" }}
+        >
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          <span>{routeFallbackWarning}</span>
+        </div>
+      )}
+
+      {/* Range slider */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span
+            className="text-[10px] uppercase tracking-wider font-semibold"
+            style={{ color: tm.text4 }}
+          >
+            Vendor Range
+          </span>
+          <span className="text-[11px] font-bold" style={{ color: tm.primary }}>
+            {vendorRange} m
+          </span>
+        </div>
+        <input
+          type="range"
+          min={VENDOR_RANGE_MIN}
+          max={VENDOR_RANGE_MAX}
+          step={50}
+          value={vendorRange}
+          onChange={(e) => setVendorRange(Number(e.target.value))}
+          className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+          style={{ accentColor: tm.primary }}
+        />
+        <div className="flex justify-between mt-1">
+          <span className="text-[9px]" style={{ color: tm.text5 }}>
+            {VENDOR_RANGE_MIN} m
+          </span>
+          <span className="text-[9px]" style={{ color: tm.text5 }}>
+            {VENDOR_RANGE_MAX} m
+          </span>
+        </div>
+      </div>
+
+      {/* Recent routes from history */}
+      {recentRoutes.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span
+              className="text-[10px] uppercase tracking-wider font-semibold"
+              style={{ color: tm.text4 }}
+            >
+              Recent
+            </span>
+            <button
+              onClick={onViewMoreHistory}
+              className="flex items-center gap-0.5 text-[10px] font-medium hover:opacity-70"
+              style={{ color: tm.primary }}
+            >
+              View more <ChevronRight size={11} />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {recentRoutes.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => onLoadRoute(r)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all hover:brightness-105"
+                style={{ background: tm.surface1 }}
+              >
+                <Clock size={11} style={{ color: tm.text4 }} />
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-[11px] truncate font-medium"
+                    style={{ color: tm.text2 }}
+                  >
+                    {r.origin} → {r.dest}
+                  </div>
+                  <div className="text-[9px]" style={{ color: tm.text5 }}>
+                    {r.savedAt}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
