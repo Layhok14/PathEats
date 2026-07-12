@@ -40,7 +40,11 @@ app.set("trust proxy", 1);
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(",").map((s) => s.trim())
   : ["http://localhost:5173", "http://localhost:4173"];
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  exposedHeaders: ["Content-Disposition", "X-Backup-Format"],
+}));
 
 const REQUEST_BODY_LIMIT = "2mb";
 app.use(express.json({ limit: REQUEST_BODY_LIMIT }));

@@ -28,3 +28,4 @@ backend/data/backup/
 
 # User-uploaded images (served from frontend public in dev)
 frontend/public/uploads/
+*.mjs

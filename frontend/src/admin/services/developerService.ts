@@ -35,6 +35,47 @@ export interface DevRecovery {
 }
 export interface DevHealth { status: string; uptime: number; dbConnected: boolean; dbLatency: number; timestamp: string; }
 
+function getHeaderValue(headers: Record<string, unknown> | undefined, name: string): string {
+  if (!headers || typeof headers !== "object") return "";
+  const keys = Object.keys(headers);
+  const match = keys.find((key) => key.toLowerCase() === name.toLowerCase());
+  const value = match ? headers[match] : "";
+  return typeof value === "string" ? value : "";
+}
+
+function parseDownloadFilename(headers: Record<string, unknown> | undefined): string | null {
+  const disposition = getHeaderValue(headers, "content-disposition");
+  if (!disposition) return null;
+
+  const encodedMatch = disposition.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    return decodeURIComponent(encodedMatch[1].trim().replace(/^"|"$/g, ""));
+  }
+
+  const basicMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return basicMatch?.[1] ? basicMatch[1] : null;
+}
+
+function inferDownloadExtension(headers: Record<string, unknown> | undefined, fallback: string): string {
+  const format = getHeaderValue(headers, "x-backup-format").toLowerCase();
+  if (format === "csv") return "csv";
+  if (format === "postgres-custom") return "dump";
+
+  const contentType = getHeaderValue(headers, "content-type").toLowerCase();
+  if (contentType.includes("text/csv")) return "csv";
+
+  const filename = parseDownloadFilename(headers);
+  if (filename) {
+    const extMatch = filename.match(/\.([a-z0-9]+)$/i);
+    if (extMatch?.[1]) {
+      const ext = extMatch[1].toLowerCase();
+      if (["csv", "dump", "backup", "pgdump"].includes(ext)) return ext;
+    }
+  }
+
+  return fallback;
+}
+
 export async function getDevHealth(): Promise<DevHealth> {
   const r = await api.get<{ success: boolean; data: DevHealth }>("/dev/health");
   return r.data.data;
@@ -65,12 +106,10 @@ export async function createDevBackup(payload: { profileName: string; method: st
 }
 export async function downloadDevBackup(id: string): Promise<{ blob: Blob; filename: string }> {
   const r = await api.get<Blob>(`/dev/backups/${id}/download`, { responseType: "blob", timeout: 300000 });
-  const disposition = r.headers["content-disposition"] || "";
-  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
-  const extension = r.headers["x-backup-format"] === "csv" ? "csv" : "dump";
+  const filename = parseDownloadFilename(r.headers as Record<string, unknown> | undefined) || `patheats-backup-${id}.${inferDownloadExtension(r.headers as Record<string, unknown> | undefined, "dump")}`;
   return {
     blob: r.data,
-    filename: filenameMatch?.[1] || `patheats-backup-${id}.${extension}`,
+    filename,
   };
 }
 export async function deleteDevBackup(id: string): Promise<void> {
@@ -103,11 +142,10 @@ export async function getScheduledBackups(profileId?: string): Promise<DevSchedu
 }
 export async function downloadScheduledBackup(id: string): Promise<{ blob: Blob; filename: string }> {
   const r = await api.get<Blob>(`/dev/backups/scheduled/${id}/download`, { responseType: "blob", timeout: 120000 });
-  const disposition = r.headers["content-disposition"] || "";
-  const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = parseDownloadFilename(r.headers as Record<string, unknown> | undefined) || `scheduled-backup-${id}.${inferDownloadExtension(r.headers as Record<string, unknown> | undefined, "dump")}`;
   return {
     blob: r.data,
-    filename: filenameMatch?.[1] || `scheduled-backup-${id}.dump`,
+    filename,
   };
 }
 export async function deleteScheduledBackup(id: string): Promise<void> {

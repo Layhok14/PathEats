@@ -339,9 +339,18 @@ export async function createPostgresCsvFile(profile) {
   }
 }
 
-export async function generateBackupForProfile(profile) {
-  const isCsv = profile.method === "Specific Rows";
+function isSpecificRowBackup(profile) {
+  const method = String(profile?.method || "").trim().toLowerCase();
+  const scope = String(profile?.scope || "").trim();
+  if (method === "specific rows") return true;
+  if (method === "specific row") return true;
+  if (scope.startsWith("table:")) return true;
+  if (scope.includes(";condition:")) return true;
+  return false;
+}
 
+export async function generateBackupForProfile(profile) {
+  const isCsv = isSpecificRowBackup(profile);
   const { tempDir, dumpPath, sizeBytes } = isCsv
     ? await createPostgresCsvFile(profile)
     : await createPostgresDumpFile(profile);

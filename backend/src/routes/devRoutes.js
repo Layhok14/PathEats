@@ -102,11 +102,26 @@ function hasPostgresDumpSignature(buffer) {
 }
 
 async function writeRecoveryTempFile(file) {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-pgrestore-"));
-  const dumpPath = path.join(tempDir, "recovery.dump");
-  await writeFile(dumpPath, file.buffer, { flag: "wx" });
-  return { tempDir, dumpPath };
-}
+    const tempDir = await mkdtemp(
+      path.join(os.tmpdir(), "patheats-recovery-")
+    );
+  
+    const extension = path.extname(file.originalname).toLowerCase();
+  
+    const filePath = path.join(
+      tempDir,
+      `recovery${extension}`
+    );
+  
+    await writeFile(filePath, file.buffer, {
+      flag: "wx",
+    });
+  
+    return {
+      tempDir,
+      filePath,
+    };
+  }
 
 const router = Router();
 
@@ -704,7 +719,7 @@ router.get("/backups/:id/download", devOrGlobalAdmin, catchAsync(async (req, res
   stream.on("error", async () => {
     await cleanup();
     if (!res.headersSent) {
-      res.status(500).json({ success: false, message: "Could not stream PostgreSQL dump" });
+      res.status(500).json({ success: false, message: "Could not stream backup file" });
     } else {
       res.destroy();
     }
@@ -930,16 +945,16 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
     try {
       const temp = await writeRecoveryTempFile(req.file);
       tempDir = temp.tempDir;
-      const inspection = await inspectPostgresDumpSafe(temp.dumpPath);
+      const inspection = await inspectPostgresDumpSafe(temp.filePath);
       const tableList = inspection.tableNames;
       if (tableList.length === 0) throw new AppError("No public tables found in the dump", 400);
 
       await withRecoveryLock(async () => {
         if (inspection.isFullDatabase) {
-          await restoreFullDump(temp.dumpPath);
+          await restoreFullDump(temp.filePath);
         } else {
           for (const tableName of tableList) {
-            await restoreTableDump(temp.dumpPath, tableName);
+            await restoreTableDump(temp.filePath, tableName);
           }
         }
       });
@@ -976,7 +991,7 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
     try {
       const temp = await writeRecoveryTempFile(req.file);
       tempDir = temp.tempDir;
-      await withRecoveryLock(() => restoreCsvFile(temp.dumpPath, targetTable));
+      await withRecoveryLock(() => restoreCsvFile(temp.filePath, targetTable));
       const op = await insertOp("COMPLETED", `CSV rows restored into table "${targetTable}".`, `table:${targetTable}`);
       logDevAudit(req, "execute_recovery", "recovery_operations", op.id, { type, fileName, targetTable, status: "COMPLETED" });
       return res.json({ success: true, data: op });
