@@ -100,6 +100,10 @@ export async function getDevBackups(): Promise<DevBackup[]> {
   const r = await api.get<{ success: boolean; data: DevBackup[] }>("/dev/backups");
   return r.data.data;
 }
+export async function getDevBackupTables(): Promise<string[]> {
+  const r = await api.get<{ success: boolean; data: string[] }>("/dev/backups/tables");
+  return r.data.data;
+}
 export async function createDevBackup(payload: { profileName: string; method: string; scope?: string; scheduleInterval?: string; scheduleUnit?: string }): Promise<DevBackup> {
   const r = await api.post<{ success: boolean; data: DevBackup }>("/dev/backups", payload);
   return r.data.data;

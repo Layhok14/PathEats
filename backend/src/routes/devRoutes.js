@@ -14,6 +14,7 @@ import {
   BACKUP_METHODS,
   SCHEDULE_UNITS,
   formatBytes,
+  getPublicTableNames,
   safeDownloadName,
   validateIdentifier,
   validateBackupProfile,
@@ -637,6 +638,16 @@ router.get("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
     FROM backup_profiles ORDER BY created_at DESC
   `);
   res.json({ success: true, data: result.rows });
+}));
+
+router.get("/backups/tables", devOrGlobalAdmin, catchAsync(async (_req, res) => {
+  const client = await pool.connect();
+  try {
+    const tableNames = await getPublicTableNames(client);
+    res.json({ success: true, data: tableNames });
+  } finally {
+    client.release();
+  }
 }));
 
 router.post("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {

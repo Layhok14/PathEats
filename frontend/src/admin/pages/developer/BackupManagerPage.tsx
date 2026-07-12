@@ -3,6 +3,7 @@ import { Search, Upload, Eye, Trash2, CheckCircle, AlertTriangle, X, ShieldAlert
 import { toast } from "sonner";
 import {
   getDevBackups,
+  getDevBackupTables,
   createDevBackup,
   downloadDevBackup,
   deleteDevBackup,
@@ -18,7 +19,6 @@ import {
   type DevBackup,
   type DevScheduledBackup,
   type DevRecovery,
-  type DevTableInfo,
 } from "../../services/developerService";
 import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { DetailModal } from "./devShared";
@@ -44,6 +44,18 @@ function saveBackupFile(blob: Blob, filename: string) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+async function loadBackupTableChoices(): Promise<string[]> {
+  try {
+    const tableNames = await getDevBackupTables();
+    if (tableNames.length > 0) return tableNames;
+  } catch (error) {
+    console.error("[BackupTables] Preferred table source failed:", error);
+  }
+
+  const databaseInfo = await getDevDatabase();
+  return [...new Set(databaseInfo.tables.map((table) => table.name))];
 }
 
 function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onClose: () => void; onCreated: (name: string) => void; tables: string[]; backup?: DevBackup | null }) {
@@ -243,16 +255,15 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [selectedTable, setSelectedTable] = useState("");
-  const [tables, setTables] = useState<DevTableInfo[]>([]);
+  const [tables, setTables] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
-        const dbData = await getDevDatabase();
-        const unique = dbData.tables.filter((t, i, arr) => arr.findIndex((x) => x.name === t.name) === i);
-        setTables(unique);
+        const availableTables = await loadBackupTableChoices();
+        setTables(availableTables);
       } catch (err) {
         console.error("[RecoveryModal] Failed to load tables:", err);
       }
@@ -428,7 +439,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
                 <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Select Target Table</label>
                 <select value={selectedTable} aria-invalid={Boolean(fieldErrors.targetTable)} onChange={(e) => { setSelectedTable(e.target.value); setFieldErrors((current) => ({ ...current, targetTable: "" })); }} className={`w-full px-3 py-2 text-[13px] border rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white ${fieldErrors.targetTable ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`}>
                   <option value="">— Select —</option>
-                  {tables.map((t) => (<option key={t.name} value={t.name}>{t.name}</option>))}
+                  {tables.map((tableName) => (<option key={tableName} value={tableName}>{tableName}</option>))}
                 </select>
                 {fieldErrors.targetTable && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.targetTable}</p>}
               </div>
@@ -527,9 +538,13 @@ function BackupTab() {
   useEffect(() => { loadBackups(); loadScheduled(); }, []);
 
   useEffect(() => {
-    getDevDatabase().then((db) => {
-      setTables([...new Set(db.tables.map((t) => t.name))]);
-    }).catch(() => {});
+    loadBackupTableChoices()
+      .then((tableNames) => {
+        setTables(tableNames);
+      })
+      .catch((error) => {
+        console.error("[BackupTab] Failed to load backup table choices:", error);
+      });
   }, []);
 
   const filtered = useMemo(

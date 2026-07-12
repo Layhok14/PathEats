@@ -1,0 +1,1 @@
+import{s as a}from"./index-BZLszuhU.js";function r(){const{pathname:s}=a();return s.startsWith("/business")?"/business":"/admin"}function e(s,t=""){const n=t.startsWith("/")?t:`/${t}`;return n==="/"?s:`${s}${n}`}export{e as p,r as u};
