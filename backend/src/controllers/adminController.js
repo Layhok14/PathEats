@@ -1,5 +1,4 @@
 import * as adminService from "../services/AdminService.js";
-import AppError from "../utils/AppError.js";
 import { validatePrice } from "../utils/validation.js";
 
 class AdminController {
@@ -60,7 +59,7 @@ class AdminController {
 
   createUser = async (req, res, next) => {
     try {
-      const user = await this.service.createUser(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
+      const user = await this.service.createUser(req.body, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       res.status(201).json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -69,7 +68,7 @@ class AdminController {
 
   updateRole = async (req, res, next) => {
     try {
-      const user = await this.service.updateRole(req.params.id, req.body.role, req.user?.sub, req.user?.role_scope || req.user?.role);
+      const user = await this.service.updateRole(req.params.id, req.body.roleId, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -152,6 +151,22 @@ class AdminController {
     }
   };
 
+  linkExistingStallMenuItem = async (req, res, next) => {
+    try {
+      if (req.body.price !== undefined) validatePrice(req.body.price);
+      const menuItem = await this.service.linkExistingStallMenuItem(
+        req.params.placeId,
+        req.params.itemId,
+        req.body,
+        req.user?.sub,
+        req.user?.role_scope || req.user?.role
+      );
+      res.json({ success: true, data: menuItem });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   deleteStallMenuItem = async (req, res, next) => {
     try {
       const menuItem = await this.service.deleteStallMenuItem(req.params.id, req.query.placeId || null, req.user?.sub, req.user?.role_scope || req.user?.role);
@@ -221,7 +236,7 @@ class AdminController {
 
   createRole = async (req, res, next) => {
     try {
-      const role = await this.service.createRole(req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
+      const role = await this.service.createRole(req.body, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       res.status(201).json({
         success: true,
         message: "Role created successfully",
@@ -243,7 +258,7 @@ class AdminController {
 
   updateRoleRecord = async (req, res, next) => {
     try {
-      const role = await this.service.updateRoleRecord(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
+      const role = await this.service.updateRoleRecord(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       if (!role) {
         return res.status(404).json({ success: false, message: "Role not found" });
       }
@@ -255,7 +270,7 @@ class AdminController {
 
   deleteRoleRecord = async (req, res, next) => {
     try {
-      const role = await this.service.deleteRoleRecord(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
+      const role = await this.service.deleteRoleRecord(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       if (!role) {
         return res.status(404).json({ success: false, message: "Role not found" });
       }
@@ -406,7 +421,7 @@ class AdminController {
 
   updateUser = async (req, res, next) => {
     try {
-      const user = await this.service.updateUser(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
+      const user = await this.service.updateUser(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       if (!user) return res.status(404).json({ success: false, message: "User not found" });
       res.json({ success: true, data: user });
     } catch (error) {
@@ -509,35 +524,6 @@ class AdminController {
 
   // ── BA Assignments ──────────────────────────────────────────────
 
-  assignVendorToAssistant = async (req, res, next) => {
-    try {
-      const assignment = await this.service.assignVendorToAssistant(
-        req.params.assistantId, req.params.vendorId, req.user?.sub
-      );
-      res.status(201).json({ success: true, data: assignment });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  unassignVendorFromAssistant = async (req, res, next) => {
-    try {
-      const result = await this.service.unassignVendorFromAssistant(req.params.assistantId, req.params.vendorId);
-      res.json({ success: true, data: result });
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getAssistantAssignments = async (req, res, next) => {
-    try {
-      const assignments = await this.service.getAssistantAssignments(req.params.assistantId);
-      res.json({ success: true, data: assignments });
-    } catch (error) {
-      next(error);
-    }
-  };
-
   // ── Consumer Categories ─────────────────────────────────────────
 
   getConsumerCategories = async (req, res, next) => {
@@ -568,6 +554,7 @@ export const getStallManagementOptions = adminController.getStallManagementOptio
 export const createStall = adminController.createStall;
 export const deleteStall = adminController.deleteStall;
 export const createStallMenuItem = adminController.createStallMenuItem;
+export const linkExistingStallMenuItem = adminController.linkExistingStallMenuItem;
 export const deleteStallMenuItem = adminController.deleteStallMenuItem;
 export const createStallCategory = adminController.createStallCategory;
 export const deleteStallCategory = adminController.deleteStallCategory;
@@ -604,9 +591,6 @@ export const unflagReview = adminController.unflagReview;
 export const removeReview = adminController.removeReview;
 export const getDeletionImpact = adminController.getDeletionImpact;
 export const getMenuItemLinkCount = adminController.getMenuItemLinkCount;
-export const assignVendorToAssistant = adminController.assignVendorToAssistant;
-export const unassignVendorFromAssistant = adminController.unassignVendorFromAssistant;
-export const getAssistantAssignments = adminController.getAssistantAssignments;
 export const getConsumerCategories = adminController.getConsumerCategories;
 
 export default adminController;

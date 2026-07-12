@@ -25,6 +25,8 @@ export interface AdminUser {
   name: string;
   email: string;
   role: string;
+  roleId: string;
+  roleScope: string;
   status: string;
   avatarInitials?: string;
   avatarColor?: string;
@@ -81,8 +83,11 @@ export interface AdminPlaceCategory {
 export interface AdminRole {
   id: string;
   name: string;
+  baseScope?: string | null;
   tablePrivileges: Record<string, string[]>;
+  systemCapabilities: string[];
   grantOption: boolean;
+  isSystem: boolean;
   userCount?: number;
   createdAt: string;
 }
@@ -200,16 +205,15 @@ export async function deleteAdminStallReview(id: string): Promise<void> {
 export async function createAdminUser(user: {
   name: string;
   email: string;
-  role_scope?: string;
-  role?: string;
+  roleId: string;
   password?: string;
 }): Promise<AdminUser> {
   const response = await api.post<{ success: boolean; data: AdminUser }>("/admin/users", user);
   return response.data.data;
 }
 
-export async function updateAdminUserRole(id: string, role: string): Promise<void> {
-  await api.patch(`/admin/users/${id}/role`, { role });
+export async function updateAdminUserRole(id: string, roleId: string): Promise<void> {
+  await api.patch(`/admin/users/${id}/role`, { roleId });
 }
 
 export async function updateAdminUserStatus(id: string, status: string): Promise<void> {
@@ -238,6 +242,7 @@ export async function getAdminRoles(): Promise<AdminRole[]> {
 export async function createAdminRole(role: {
   name: string;
   tablePrivileges: Record<string, string[]>;
+  systemCapabilities: string[];
   grantOption: boolean;
 }): Promise<AdminRole> {
   const response = await api.post<{ success: boolean; data: AdminRole }>("/admin/roles", role);
@@ -247,8 +252,9 @@ export async function createAdminRole(role: {
 export async function updateAdminRole(
   id: string,
   role: {
-    name: string;
+    name?: string;
     tablePrivileges: Record<string, string[]>;
+    systemCapabilities: string[];
     grantOption: boolean;
   }
 ): Promise<AdminRole> {
@@ -296,8 +302,8 @@ export interface AdminMenuItemRow {
   category: string;
   imageUrl: string | null;
   isAvailable: boolean;
-  placeId: string;
-  placeName: string;
+  placeId?: string | null;
+  placeName?: string | null;
 }
 
 export interface AuditActivityRow {
@@ -408,6 +414,8 @@ export interface AdminUserDetail {
   lastName: string;
   phone: string | null;
   role: string;
+  roleId: string;
+  roleScope: string;
   isBanned: boolean;
   status: string;
   createdAt: string;
@@ -421,7 +429,7 @@ export async function getAdminUserById(id: string): Promise<AdminUserDetail> {
 
 export async function updateAdminUser(
   id: string,
-  data: { firstName?: string; lastName?: string; email?: string; role?: string; role_scope?: string }
+  data: { firstName?: string; lastName?: string; email?: string; roleId?: string }
 ): Promise<AdminUserDetail> {
   const response = await api.patch<{ success: boolean; data: AdminUserDetail }>(`/admin/users/${id}`, data);
   return response.data.data;
@@ -433,8 +441,15 @@ export async function deleteAdminUser(id: string): Promise<void> {
 
 // ── Database Tables ─────────────────────────────────────────────────────
 
-export async function getAdminDatabaseTables(): Promise<string[]> {
-  const response = await api.get<{ success: boolean; data: string[] }>("/admin/tables");
+export interface RolePolicyCatalog {
+  tables: Array<{ name: string; actions: string[] }>;
+  systemCapabilities: string[];
+  basePolicies: Record<string, Record<string, string[]>>;
+  baseSystemCapabilities: Record<string, string[]>;
+}
+
+export async function getAdminDatabaseTables(): Promise<RolePolicyCatalog> {
+  const response = await api.get<{ success: boolean; data: RolePolicyCatalog }>("/admin/tables");
   return response.data.data;
 }
 

@@ -21,32 +21,12 @@ let schedulerTimer = null;
 let running = false;
 
 async function ensureScheduledBackupsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS scheduled_backups (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      profile_id UUID REFERENCES backup_profiles(id) ON DELETE CASCADE,
-      profile_name VARCHAR(255),
-      file_name VARCHAR(255) NOT NULL,
-      file_path TEXT NOT NULL,
-      method VARCHAR(50) NOT NULL,
-      scope TEXT,
-      size VARCHAR(50) DEFAULT 'N/A',
-      status VARCHAR(20) DEFAULT 'COMPLETED',
-      message TEXT,
-      artifact_format VARCHAR(50),
-      completed_at TIMESTAMPTZ,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS last_backup_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS next_backup_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS last_error TEXT`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS run_count INTEGER NOT NULL DEFAULT 0`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS run_started_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
-  await pool.query(`ALTER TABLE scheduled_backups ADD COLUMN IF NOT EXISTS artifact_format VARCHAR(50)`);
-  await pool.query(`ALTER TABLE scheduled_backups ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+  const { rows } = await pool.query(`SELECT to_regclass('public.scheduled_backups') AS exists`);
+  if (!rows[0]?.exists) {
+    console.warn("[backup] scheduled_backups table missing; run database migrations before enabling schedules.");
+    return false;
+  }
+  return true;
 }
 
 function intervalSql(scheduleUnit) {

@@ -243,7 +243,7 @@ export function runPostgresTool(command, args, options = {}) {
 
 export async function postgresDumpArgsForProfile(profile) {
   if (profile.method === "Entire Database") {
-    return ["--schema=public"];
+    return ["--schema=public", "--exclude-table=public.spatial_ref_sys"];
   }
 
   const client = await pool.connect();
@@ -300,27 +300,37 @@ export async function createPostgresCsvFile(profile) {
 
   const condition = validateRowCondition(parts.condition || "");
   const quotedTable = quoteIdent(tableName);
+  const columnResult = await db.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = $1
+       AND is_generated = 'NEVER'
+     ORDER BY ordinal_position`,
+    [tableName]
+  );
+  if (columnResult.rows.length === 0) throw new AppError(`Backup table "${tableName}" does not exist`, 400);
+  const columns = columnResult.rows.map((row) => row.column_name);
+  const selectList = columns
+    .map((column) => `${quoteIdent(column)}::text AS ${quoteIdent(column)}`)
+    .join(", ");
   const selectQuery = condition
-    ? `SELECT * FROM ${quotedTable} ${condition}`
-    : `SELECT * FROM ${quotedTable}`;
+    ? `SELECT ${selectList} FROM ${quotedTable} ${condition}`
+    : `SELECT ${selectList} FROM ${quotedTable}`;
 
   try {
     const result = await db.query(selectQuery);
     const rows = result.rows;
-    if (rows.length === 0) {
-      await writeFile(csvPath, "");
-      return { tempDir, dumpPath: csvPath, sizeBytes: 0 };
-    }
-
-    const headers = Object.keys(rows[0]);
+    const headers = result.fields.map((field) => field.name);
     const csvLines = [headers.map(quoteCsvField).join(",")];
     for (const row of rows) {
       csvLines.push(headers.map((h) => {
         if (row[h] === null || row[h] === undefined) return "\\N";
-        return quoteCsvField(String(row[h]));
+        const value = String(row[h]);
+        return quoteCsvField(value === "\\N" ? "\\\\N" : value);
       }).join(","));
     }
-    await writeFile(csvPath, csvLines.join("\n"), "utf-8");
+    await writeFile(csvPath, `${csvLines.join("\n")}\n`, "utf-8");
     const fileStat = await stat(csvPath);
     return { tempDir, dumpPath: csvPath, sizeBytes: fileStat.size };
   } catch (err) {

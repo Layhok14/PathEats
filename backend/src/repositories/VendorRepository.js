@@ -132,20 +132,35 @@ class VendorRepository {
     if (!Array.isArray(sourceItemIds) || sourceItemIds.length === 0) return;
 
     const existing = await client.query(
-      "SELECT menu_item_id::text, is_available FROM place_menu_items WHERE place_id = $1",
+      "SELECT menu_item_id::text, is_available, price FROM place_menu_items WHERE place_id = $1",
       [placeId]
     );
-    const existingMap = new Map(existing.rows.map((r) => [r.menu_item_id, r.is_available]));
+    const existingAvailability = Object.fromEntries(
+      existing.rows.map((row) => [row.menu_item_id, row.is_available])
+    );
+    const existingPrices = Object.fromEntries(
+      existing.rows.map((row) => [row.menu_item_id, row.price])
+    );
 
     const { rowCount } = await client.query(
-      `INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
-       SELECT $1, mi.id, COALESCE($3::jsonb->>mi.id::text, 'true')::boolean
+      `INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+       SELECT $1,
+              mi.id,
+              COALESCE($3::jsonb->>mi.id::text, 'true')::boolean,
+              COALESCE(($4::jsonb->>mi.id::text)::numeric, mi.default_price)
        FROM menu_items mi
        WHERE mi.owner_id = $2
-         AND mi.id::text = ANY($4::text[])
+         AND mi.id::text = ANY($5::text[])
        ON CONFLICT (place_id, menu_item_id) DO UPDATE
-         SET is_available = EXCLUDED.is_available`,
-      [placeId, ownerId, JSON.stringify(Object.fromEntries(existingMap)), sourceItemIds]
+         SET is_available = EXCLUDED.is_available,
+             price = EXCLUDED.price`,
+      [
+        placeId,
+        ownerId,
+        JSON.stringify(existingAvailability),
+        JSON.stringify(existingPrices),
+        sourceItemIds,
+      ]
     );
     if (rowCount !== sourceItemIds.length) {
       throw new Error("One or more menu items do not belong to this vendor");
@@ -204,9 +219,15 @@ class VendorRepository {
       if (data.menu_item_ids !== undefined || data.menuItemIds !== undefined) {
         const ids = data.menu_item_ids ?? data.menuItemIds ?? [];
         const normalizedIds = [...new Set((Array.isArray(ids) ? ids : []).map(String))];
-        await client.query("DELETE FROM place_menu_items WHERE place_id = $1", [id]);
         if (normalizedIds.length > 0) {
           await this.linkMenuItemsToPlace(client, id, ownerId, normalizedIds);
+          await client.query(
+            `DELETE FROM place_menu_items
+             WHERE place_id = $1 AND NOT (menu_item_id::text = ANY($2::text[]))`,
+            [id, normalizedIds]
+          );
+        } else {
+          await client.query("DELETE FROM place_menu_items WHERE place_id = $1", [id]);
         }
       }
       return rows[0];
@@ -290,6 +311,7 @@ class VendorRepository {
   async getAllMenuItems(ownerId, limit = 200) {
     const { rows } = await db.query(
       `SELECT mi.*,
+              mi.default_price AS price,
               COALESCE((SELECT bool_or(pmi.is_available) FROM place_menu_items pmi WHERE pmi.menu_item_id = mi.id), TRUE) AS is_available,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
@@ -314,6 +336,8 @@ class VendorRepository {
   async getMenuItems(placeId, ownerId) {
     const { rows } = await db.query(
       `SELECT mi.*,
+              mi.default_price,
+              pmi.price,
               pmi.is_available,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
@@ -345,7 +369,7 @@ class VendorRepository {
     const fields = {
       name: data.name,
       description: data.description,
-      price: data.price,
+      default_price: data.price,
       category: data.category !== undefined ? normalizeMenuItemCategory(data.category) : undefined,
     };
     if (image_url !== undefined) fields.image_url = image_url;
@@ -358,8 +382,7 @@ class VendorRepository {
     }
 
     const hasImageUpdate = hasStorageImageInput(data);
-    const hasAvailabilityUpdate = data.is_available !== undefined || data.isAvailable !== undefined;
-    if (setClauses.length === 0 && !hasImageUpdate && !hasAvailabilityUpdate) return null;
+    if (setClauses.length === 0 && !hasImageUpdate) return null;
     values.push(itemId, ownerId);
 
     return db.transaction(async (client) => {
@@ -381,15 +404,8 @@ class VendorRepository {
 
       if (!rows[0]) return null;
 
-      if (hasAvailabilityUpdate) {
-        await client.query(
-          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
-           WHERE menu_item_id = $2`,
-          [data.is_available ?? data.isAvailable, itemId]
-        );
-      }
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata({ ...rows[0], is_available: data.is_available ?? data.isAvailable ?? true }, image);
+      return withMenuImageMetadata({ ...rows[0], price: rows[0].default_price }, image);
     });
   }
 
@@ -409,12 +425,12 @@ class VendorRepository {
         `WITH owned_place AS (
            SELECT id, owner_id FROM places WHERE id = $1 AND owner_id = $7 AND deleted_at IS NULL
          ), created_item AS (
-           INSERT INTO menu_items (owner_id, name, description, price, category, image_url)
+           INSERT INTO menu_items (owner_id, name, description, default_price, category, image_url)
            SELECT owner_id, $2, $3, $4, $5, $6 FROM owned_place
            RETURNING *
          ), linked_item AS (
-           INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
-           SELECT $1, id, $8 FROM created_item
+           INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+           SELECT $1, id, $8, default_price FROM created_item
          )
          SELECT * FROM created_item
          WHERE EXISTS (
@@ -435,7 +451,11 @@ class VendorRepository {
       if (!rows[0]) return null;
 
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata({ ...rows[0], is_available: data.is_available ?? data.isAvailable ?? true }, image);
+      return withMenuImageMetadata({
+        ...rows[0],
+        price: rows[0].default_price,
+        is_available: data.is_available ?? data.isAvailable ?? true,
+      }, image);
     });
   }
 
@@ -443,7 +463,7 @@ class VendorRepository {
     const image_url = imageDisplayUrlFromStorageInput(data, ["image_url", "imageUrl"]);
     return db.transaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO menu_items (owner_id, name, description, price, category, image_url)
+        `INSERT INTO menu_items (owner_id, name, description, default_price, category, image_url)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
         [
@@ -456,7 +476,62 @@ class VendorRepository {
         ]
       );
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata({ ...rows[0], is_available: true }, image);
+      return withMenuImageMetadata({ ...rows[0], price: rows[0].default_price, is_available: true }, image);
+    });
+  }
+
+  async linkExistingMenuItem(placeId, itemId, ownerId, data = {}) {
+    return db.transaction(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+         SELECT p.id,
+                mi.id,
+                $4,
+                COALESCE($5, mi.default_price)
+         FROM places p
+         JOIN menu_items mi ON mi.owner_id = p.owner_id
+         WHERE p.id = $1
+           AND mi.id = $2
+           AND p.owner_id = $3
+           AND p.deleted_at IS NULL
+         ON CONFLICT (place_id, menu_item_id) DO UPDATE
+           SET is_available = EXCLUDED.is_available,
+               price = EXCLUDED.price,
+               updated_at = NOW()
+         RETURNING menu_item_id, is_available, price`,
+        [
+          placeId,
+          itemId,
+          ownerId,
+          data.is_available ?? data.isAvailable ?? true,
+          data.price ?? null,
+        ]
+      );
+
+      if (!rows[0]) return null;
+
+      const { rows: linkedItems } = await client.query(
+        `SELECT mi.*,
+                mi.default_price,
+                pmi.price,
+                pmi.is_available,
+                mii.bucket_name AS image_bucket,
+                mii.object_path AS image_path,
+                mii.mime_type AS image_mime_type,
+                mii.alt_text AS image_alt_text
+         FROM place_menu_items pmi
+         JOIN menu_items mi ON mi.id = pmi.menu_item_id
+         LEFT JOIN LATERAL (
+           SELECT bucket_name, object_path, mime_type, alt_text
+           FROM menu_item_images
+           WHERE menu_item_id = mi.id
+           ORDER BY is_primary DESC, sort_order ASC, created_at ASC
+           LIMIT 1
+         ) mii ON TRUE
+         WHERE pmi.place_id = $1 AND pmi.menu_item_id = $2`,
+        [placeId, itemId]
+      );
+      return linkedItems[0] || null;
     });
   }
 
@@ -469,7 +544,6 @@ class VendorRepository {
     const fields = {
       name: data.name,
       description: data.description,
-      price: data.price,
       category: data.category !== undefined ? normalizeMenuItemCategory(data.category) : undefined,
     };
     if (image_url !== undefined) fields.image_url = image_url;
@@ -482,8 +556,8 @@ class VendorRepository {
     }
 
     const hasImageUpdate = hasStorageImageInput(data);
-    const hasAvailabilityUpdate = data.is_available !== undefined || data.isAvailable !== undefined;
-    if (setClauses.length === 0 && !hasImageUpdate && !hasAvailabilityUpdate) return null;
+    const hasLinkUpdate = data.price !== undefined || data.is_available !== undefined || data.isAvailable !== undefined;
+    if (setClauses.length === 0 && !hasImageUpdate && !hasLinkUpdate) return null;
     values.push(itemId, placeId, ownerId);
 
     return db.transaction(async (client) => {
@@ -510,15 +584,28 @@ class VendorRepository {
 
       if (!rows[0]) return null;
 
-      if (data.is_available !== undefined || data.isAvailable !== undefined) {
+      if (hasLinkUpdate) {
         await client.query(
-          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
-           WHERE place_id = $2 AND menu_item_id = $3`,
-          [data.is_available ?? data.isAvailable, placeId, itemId]
+          `UPDATE place_menu_items
+           SET price = COALESCE($1, price),
+               is_available = COALESCE($2, is_available),
+               updated_at = NOW()
+           WHERE place_id = $3 AND menu_item_id = $4`,
+          [data.price ?? null, data.is_available ?? data.isAvailable ?? null, placeId, itemId]
         );
       }
       const image = await upsertPrimaryMenuItemImage(client, rows[0].id, data, uploadedBy(data, ownerId));
-      return withMenuImageMetadata({ ...rows[0], is_available: data.is_available ?? data.isAvailable }, image);
+      const { rows: links } = await client.query(
+        `SELECT price, is_available FROM place_menu_items
+         WHERE place_id = $1 AND menu_item_id = $2`,
+        [placeId, itemId]
+      );
+      return withMenuImageMetadata({
+        ...rows[0],
+        default_price: rows[0].default_price,
+        price: links[0]?.price ?? rows[0].default_price,
+        is_available: links[0]?.is_available,
+      }, image);
     });
   }
 

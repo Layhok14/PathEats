@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router";
 import { LayoutDashboard, Store, UtensilsCrossed, Star, UserPlus, Settings } from "lucide-react";
+import { useAuth } from "../../shared/hooks/useAuth";
 
 const NAV = [
   { to: "/vendor", label: "Dashboard", icon: <LayoutDashboard size={16} />, end: true },
@@ -10,7 +11,20 @@ const NAV = [
   { to: "/vendor/settings", label: "Settings", icon: <Settings size={16} /> },
 ];
 
+const navTableByPath: Record<string, string> = {
+  "/vendor/stalls": "places",
+  "/vendor/menu": "menu_items",
+  "/vendor/reviews": "reviews",
+  "/vendor/settings": "users",
+};
+
 export function VendorLayout() {
+  const { user } = useAuth();
+  const visibleNavigation = NAV.filter((item) => {
+    const table = navTableByPath[item.to];
+    if (!table || !user?.tablePrivileges) return true;
+    return user.tablePrivileges[table]?.includes("SELECT");
+  });
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f8f9ff]">
       <aside className="flex flex-col w-[240px] shrink-0 h-full bg-[#004b1e]">
@@ -24,7 +38,7 @@ export function VendorLayout() {
           </div>
         </div>
         <nav className="flex-1 flex flex-col">
-          {NAV.map((item) => (
+          {visibleNavigation.map((item) => (
             <NavLink
               key={item.to} to={item.to} end={item.end}
               className={({ isActive }) =>

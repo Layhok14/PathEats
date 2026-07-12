@@ -138,7 +138,7 @@ function MenuItemModal({
           </div>
           {item?.id && (
             <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", background: "var(--muted)", padding: "8px 12px", borderRadius: "6px" }}>
-              ℹ️ Changing price or properties creates a new item version in the menu catalog.
+              Name, description, category, and photo are shared with every linked stall. Price and availability apply only to this stall.
             </p>
           )}
           <DialogFooter>
@@ -427,9 +427,12 @@ export function StallDetailPage() {
       } else {
         const source = catalogItems.find((m) => m.id === itemId);
         if (!source) return;
-        const { data: res } = await api.post(`/vendor/stalls/${id}/items`, source);
-        const created = mapItem(res.data);
-        setStallItems((prev) => [...prev, created]);
+        const { data: res } = await api.put(`/vendor/stalls/${id}/item-links/${itemId}`, {
+          price: source.price,
+          isAvailable: true,
+        });
+        const linked = mapItem(res.data);
+        setStallItems((prev) => [...prev, linked]);
         toast.success("Item added to stall.");
       }
     } catch (err: any) {

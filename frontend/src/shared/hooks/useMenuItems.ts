@@ -47,10 +47,6 @@ export function useMenuItems(filterCategory?: MenuCategory, options: { disabled?
     return item;
   };
 
-  const forkItem = async (_sourceId: string, changes: Partial<MenuItemFormData>): Promise<MenuItem> => {
-    return createItem(changes as MenuItemFormData);
-  };
-
   const updateItem = async (id: string, input: Partial<MenuItemFormData>): Promise<void> => {
     const { data } = await api.put(`/vendor/items/${id}`, input);
     const updated = mapItem(data.data);
@@ -62,7 +58,7 @@ export function useMenuItems(filterCategory?: MenuCategory, options: { disabled?
     setItems((prev) => prev.filter((m) => m.id !== id));
   };
 
-  return { items: filtered, allItems, loading, error, refresh, createItem, forkItem, updateItem, deleteItem };
+  return { items: filtered, allItems, loading, error, refresh, createItem, updateItem, deleteItem };
 }
 
 function mapItem(row: any): MenuItem {

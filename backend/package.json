@@ -6,7 +6,7 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "migrate": "node src/db/migrate.js",
-    "migrate:with-rls": "node src/db/migrate.js --include-rls",
+    "migrate:skip-policies": "node src/db/migrate.js --skip-policies",
     "seed": "node src/db/seed.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

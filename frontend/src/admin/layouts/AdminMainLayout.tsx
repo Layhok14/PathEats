@@ -52,15 +52,37 @@ const sections: NavSection[] = [
   },
 ];
 
+const navRequirements: Record<string, { table?: string; action?: string; capability?: string }> = {
+  "/admin/manage": { table: "role", action: "SELECT" },
+  "/admin/users": { table: "users", action: "SELECT" },
+  "/admin/vendors": { table: "places", action: "SELECT" },
+  "/admin/vendors/onboarding": { table: "onboarding_config", action: "SELECT" },
+  "/admin/vendors/moderation": { table: "reviews", action: "SELECT" },
+  "/admin/backups": { capability: "BACKUP" },
+  "/admin/developer/tools": { capability: "QUERY" },
+  "/admin/audit": { table: "audit_log", action: "SELECT" },
+};
+
 export default function AdminMainLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const userRole = user?.role_scope ?? "";
   const roleAllowed = (roles: string[]) => roles.includes(userRole);
+  const permissionAllowed = (path: string) => {
+    const requirement = navRequirements[path];
+    if (!requirement) return true;
+    if (requirement.capability) {
+      return !user?.systemCapabilities || user.systemCapabilities.includes(requirement.capability);
+    }
+    const actions = requirement.table ? user?.tablePrivileges?.[requirement.table] : undefined;
+    return !user?.tablePrivileges || Boolean(requirement.action && actions?.includes(requirement.action));
+  };
   const visibleSections = sections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => roleAllowed(item.roles ?? section.roles)),
+      items: section.items.filter((item) =>
+        roleAllowed(item.roles ?? section.roles) && permissionAllowed(item.path)
+      ),
     }))
     .filter((section) => section.items.length > 0);
 

@@ -1,6 +1,20 @@
--- Supabase RLS policy template.
--- Apply only after Supabase Auth user IDs map to public.users.id.
--- Express service-role connections should bypass RLS; browser clients should not.
+-- RLS policies and data integrity constraints.
+-- Always safe to apply: if Supabase Auth (auth.uid()) is not present,
+-- a NULL-returning shim is created so RLS defaults to deny for browser clients.
+
+DO $auth_shim$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'auth' AND p.proname = 'uid'
+  ) THEN
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE OR REPLACE FUNCTION auth.uid()
+    RETURNS UUID LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+  END IF;
+END
+$auth_shim$;
 
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_profile_images ENABLE ROW LEVEL SECURITY;
@@ -138,3 +152,17 @@ CREATE POLICY menu_item_images_owner_write ON menu_item_images
         AND mi.owner_id = (SELECT auth.uid())
     )
   );
+
+-- =====================================================================
+-- Data Integrity Constraints
+-- =====================================================================
+
+-- Prevent contradictory place state: a closed stall cannot be open.
+DO $integrity$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'places_consistent_open_status') THEN
+    ALTER TABLE places ADD CONSTRAINT places_consistent_open_status
+      CHECK (NOT (status = 'closed' AND is_open = TRUE));
+  END IF;
+END
+$integrity$;

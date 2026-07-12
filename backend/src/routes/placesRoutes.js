@@ -3,6 +3,7 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import * as placesController from "../controllers/placesController.js";
 import { getConsumerCategories } from "../repositories/adminRepository.js";
+import { requirePrivileges } from "../middlewares/privilegeGuard.js";
 
 const router = Router();
 
@@ -22,8 +23,8 @@ router.get("/categories", async (_req, res, next) => {
 router.get("/reviews/all", placesController.getAllReviews);
 router.get("/:id", placesController.getById);
 router.get("/:id/reviews", placesController.getReviews);
-router.post("/:id/reviews", authMiddleware, restrictToRoles("CONSUMER"), placesController.createReview);
-router.patch("/:id/reviews/:reviewId", authMiddleware, restrictToRoles("CONSUMER"), placesController.updateReview);
-router.delete("/:id/reviews/:reviewId", authMiddleware, restrictToRoles("CONSUMER"), placesController.deleteReview);
+router.post("/:id/reviews", authMiddleware, restrictToRoles("CONSUMER"), requirePrivileges({ table: "reviews", action: "INSERT" }), placesController.createReview);
+router.patch("/:id/reviews/:reviewId", authMiddleware, restrictToRoles("CONSUMER"), requirePrivileges({ table: "reviews", action: "UPDATE" }), placesController.updateReview);
+router.delete("/:id/reviews/:reviewId", authMiddleware, restrictToRoles("CONSUMER"), requirePrivileges({ table: "reviews", action: "DELETE" }), placesController.deleteReview);
 
 export default router;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, Users, Plus, Pencil, Trash2, Search, KeyRound, Unlock, Table2, UserPlus, Lock, X, Mail } from "lucide-react";
+import { ShieldCheck, Users, Plus, Pencil, Trash2, Search, KeyRound, Unlock, Table2, UserPlus, Lock, X } from "lucide-react";
 import { toast } from "sonner";
 import { MetricCard } from "../../components/MetricCard";
 import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
@@ -8,7 +8,7 @@ import { formatDate } from "../../../shared/utils/formatters";
 import CreateRoleModal from "../../components/AddRole";
 import {
   getAdminRoles, getAdminUsers, createAdminUser, updateAdminUser, updateAdminUserStatus, deleteAdminRole, deleteAdminUser,
-  getAdminDatabaseTables, type AdminRole, type AdminUser,
+  type AdminRole, type AdminUser,
 } from "../../services/adminDashboardService";
 
 const PAGE_SIZE = 6;
@@ -17,8 +17,8 @@ export default function AdminManagementPage() {
   const [activeTab, setActiveTab] = useState<"role" | "user">("role");
   const [userRoleFilter, setUserRoleFilter] = useState<string | null>(null);
 
-  const handleRoleUserCountClick = (roleName: string) => {
-    setUserRoleFilter(roleName);
+  const handleRoleUserCountClick = (roleId: string) => {
+    setUserRoleFilter(roleId);
     setActiveTab("user");
   };
 
@@ -45,7 +45,7 @@ export default function AdminManagementPage() {
   );
 }
 
-function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleName: string) => void }) {
+function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleId: string) => void }) {
   const [roles, setRoles] = useState<AdminRole[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -85,7 +85,7 @@ function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleNa
     <>
       <CreateRoleModal isOpen={showRoleModal} role={editingRole} onClose={() => { setShowRoleModal(false); setEditingRole(null); }} onCreated={loadRoles} />
       <div className="flex items-start justify-between mb-5">
-        <p className="text-[14px] text-[#64748b]">Create, edit, and delete database roles.</p>
+        <p className="text-[14px] text-[#64748b]">Create application roles and assign table privileges.</p>
         <button onClick={() => setShowRoleModal(true)} className="inline-flex items-center gap-2 rounded-lg bg-[#006e2f] text-white px-3 py-1.5 text-[12px] font-medium hover:bg-[#005a26] shadow-sm"><Plus size={14} /> Create role</button>
       </div>
       {loading ? (
@@ -118,7 +118,7 @@ function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleNa
                   </div>
                 </td>
                 <td className="px-6 py-3">
-                  <button onClick={() => onUserCountClick(role.name)} className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full transition-colors ${(role.userCount ?? 0) > 0 ? "bg-blue-50 text-[#005ac2] hover:bg-blue-100" : "bg-gray-50 text-[#94a3b8] hover:bg-gray-100"}`}>
+                  <button onClick={() => onUserCountClick(role.id)} className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-full transition-colors ${(role.userCount ?? 0) > 0 ? "bg-blue-50 text-[#005ac2] hover:bg-blue-100" : "bg-gray-50 text-[#94a3b8] hover:bg-gray-100"}`}>
                     {role.userCount ?? 0}
                   </button>
                 </td>
@@ -132,7 +132,7 @@ function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleNa
                 <td className="px-6 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => { setEditingRole(role); setShowRoleModal(true); }} className="p-1.5 rounded text-[#005ac2] hover:bg-blue-50"><Pencil size={15} /></button>
-                    <button onClick={() => handleDeleteRole(role)} disabled={(role.userCount ?? 0) > 0} title={(role.userCount ?? 0) > 0 ? "Reassign users first" : "Delete role"} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 size={15} /></button>
+                    <button onClick={() => handleDeleteRole(role)} disabled={role.isSystem || (role.userCount ?? 0) > 0} title={role.isSystem ? "Built-in roles cannot be deleted" : (role.userCount ?? 0) > 0 ? "Reassign users first" : "Delete role"} className="p-1.5 rounded text-[#ef4444] hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"><Trash2 size={15} /></button>
                   </div>
                 </td>
               </tr>
@@ -183,6 +183,7 @@ function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleNa
               <div>
                 <h2 className="text-[16px] font-bold text-[#0b1c30]">Table Privileges</h2>
                 <p className="text-[12px] text-[#64748b] mt-0.5">Role: {privilegesRole.name}</p>
+                {privilegesRole.baseScope && <p className="text-[11px] text-[#94a3b8]">System scope: {privilegesRole.baseScope.replaceAll("_", " ")}</p>}
               </div>
               <button onClick={() => setPrivilegesRole(null)} className="p-1 rounded text-[#64748b] hover:bg-[#f1f5f9]"><X size={18} /></button>
             </div>
@@ -217,6 +218,13 @@ function RoleManagementSection({ onUserCountClick }: { onUserCountClick: (roleNa
                 <KeyRound size={13} />
                 <span>Grant option: <span className={`font-semibold ${privilegesRole.grantOption ? "text-[#006e2f]" : "text-[#64748b]"}`}>{privilegesRole.grantOption ? "Yes" : "No"}</span></span>
               </div>
+              {privilegesRole.systemCapabilities.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {privilegesRole.systemCapabilities.map((capability) => (
+                    <span key={capability} className="rounded bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-[#005ac2]">{capability}</span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -258,7 +266,7 @@ function UserManagementSection({ initialRoleFilter, onClearRoleFilter }: { initi
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
     let result = users;
-    if (roleFilter !== "All") result = result.filter((u) => u.role === roleFilter);
+    if (roleFilter !== "All") result = result.filter((u) => u.roleId === roleFilter);
     if (search) result = result.filter((u) => u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search));
     return result;
   }, [users, query, roleFilter]);
@@ -307,7 +315,7 @@ function UserManagementSection({ initialRoleFilter, onClearRoleFilter }: { initi
           >
             <option value="All">All Roles</option>
             {roles.map((r) => (
-              <option key={r.id} value={r.name}>{r.name}</option>
+              <option key={r.id} value={r.id}>{r.name}</option>
             ))}
           </select>
           <div className="relative ml-auto">
@@ -322,7 +330,7 @@ function UserManagementSection({ initialRoleFilter, onClearRoleFilter }: { initi
               <tr key={u.id} className="border-t border-[#f1f5f9] hover:bg-[#f8fafc] transition-colors">
                 <td className="px-6 py-3"><span className="text-[13px] font-medium text-[#0b1c30]">{u.name}</span></td>
                 <td className="px-6 py-3 text-[13px] text-[#64748b]">{u.email}</td>
-                <td className="px-6 py-3"><span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#dbeafe] text-[#1e40af]">{u.role}</span></td>
+                <td className="px-6 py-3"><span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#dbeafe] text-[#1e40af]">{u.role}</span><p className="mt-1 text-[10px] text-[#94a3b8]">{u.roleScope.replaceAll("_", " ")}</p></td>
                 <td className="px-6 py-3"><span className="text-[13px]" style={{ color: u.status === "Active" ? "#006e2f" : "#ef4444" }}>{u.status}</span></td>
                 <td className="px-6 py-3">
                   <div className="flex gap-2">
@@ -392,7 +400,7 @@ function UserFormModal({
       email: user?.email ?? "",
       password: "",
       confirmPassword: "",
-      role: user?.role ?? "",
+      role: user?.roleId ?? "",
     });
     setFieldErrors({});
   }, [isOpen, user]);
@@ -413,7 +421,7 @@ function UserFormModal({
     if (!form.role) errs.role = "Role is required";
     if (!isEditing) {
       if (!form.password) errs.password = "Password is required";
-      else if (form.password.length < 6) errs.password = "At least 6 characters";
+      else if (form.password.length < 8) errs.password = "At least 8 characters";
       if (!form.confirmPassword) errs.confirmPassword = "Please confirm your password";
       else if (form.password !== form.confirmPassword) errs.confirmPassword = "Passwords do not match";
     }
@@ -427,18 +435,26 @@ function UserFormModal({
 
     setSaving(true);
     try {
+      const [firstName, ...lastNameParts] = form.name.trim().split(/\s+/);
+      const lastName = lastNameParts.join(" ");
       if (isEditing && user) {
-        await updateAdminUser(user.id, { firstName: form.name, email: form.email, role_scope: form.role });
+        await updateAdminUser(user.id, { firstName, lastName, email: form.email.trim(), roleId: form.role });
         toast.success(`User "${form.name}" updated.`);
       } else {
-        await createAdminUser({ name: form.name, email: form.email, role_scope: form.role, password: form.password });
+        await createAdminUser({ name: form.name.trim(), email: form.email.trim(), roleId: form.role, password: form.password });
         toast.success(`User "${form.name}" created.`);
       }
       onClose();
       await onDone();
     } catch (err) {
-      const msg = err && typeof err === "object" && "response" in err
-        ? (err as any).response?.data?.message : undefined;
+      const response = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { data?: { message?: string; fieldErrors?: Record<string, string> } } }).response?.data
+        : undefined;
+      const msg = response?.message;
+      if (response?.fieldErrors) {
+        setFieldErrors((previous) => ({ ...previous, ...response.fieldErrors }));
+        return;
+      }
       if (msg && msg.toLowerCase().includes("email")) {
         setFieldErrors((prev) => ({ ...prev, email: msg }));
       } else {
@@ -461,33 +477,38 @@ function UserFormModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Name *</label>
-            <input value={form.name} onChange={(e) => { setForm(f => ({ ...f, name: e.target.value })); clearFieldError("name"); }} placeholder="Full name" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            <input aria-invalid={Boolean(fieldErrors.name)} value={form.name} onChange={(e) => { setForm(f => ({ ...f, name: e.target.value })); clearFieldError("name"); }} placeholder="Full name" className={`w-full mt-1 rounded-lg border px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] ${fieldErrors.name ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
             {fieldErrors.name && <p className="text-xs text-red-500 mt-1">{fieldErrors.name}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Email *</label>
-            <input type="email" value={form.email} onChange={(e) => { setForm(f => ({ ...f, email: e.target.value })); clearFieldError("email"); }} placeholder="user@example.com" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+            <input type="email" aria-invalid={Boolean(fieldErrors.email)} value={form.email} onChange={(e) => { setForm(f => ({ ...f, email: e.target.value })); clearFieldError("email"); }} placeholder="user@example.com" className={`w-full mt-1 rounded-lg border px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] ${fieldErrors.email ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
             {fieldErrors.email && <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-[#64748b]">Role *</label>
-              <select value={form.role} onChange={(e) => { setForm(f => ({ ...f, role: e.target.value })); clearFieldError("role"); }} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]">
+              <select value={form.role} onChange={(e) => {
+                setForm(f => ({ ...f, role: e.target.value }));
+                clearFieldError("role");
+              }} aria-invalid={Boolean(fieldErrors.role)} className={`w-full mt-1 rounded-lg border px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] ${fieldErrors.role ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`}>
                 <option value="">Select role...</option>
-                {roles.map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+                {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             {fieldErrors.role && <p className="text-xs text-red-500 mt-1">{fieldErrors.role}</p>}
           </div>
-          <div>
-            <label className="text-[12px] font-medium text-[#64748b]">{isEditing ? "New Password (leave blank to keep)" : "Password *"}</label>
-            <input type="password" value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); clearFieldError("password"); }} placeholder={isEditing ? "Leave blank to keep current" : "Enter password"} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
-            {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
-          </div>
           {!isEditing && (
-            <div>
-              <label className="text-[12px] font-medium text-[#64748b]">Confirm Password *</label>
-              <input type="password" value={form.confirmPassword} onChange={(e) => { setForm(f => ({ ...f, confirmPassword: e.target.value })); clearFieldError("confirmPassword"); }} placeholder="Confirm password" className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
-              {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
-            </div>
+            <>
+              <div>
+                <label className="text-[12px] font-medium text-[#64748b]">Password *</label>
+                <input type="password" aria-invalid={Boolean(fieldErrors.password)} value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); clearFieldError("password"); }} placeholder="Enter password" className={`w-full mt-1 rounded-lg border px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] ${fieldErrors.password ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
+                {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-[#64748b]">Confirm Password *</label>
+                <input type="password" aria-invalid={Boolean(fieldErrors.confirmPassword)} value={form.confirmPassword} onChange={(e) => { setForm(f => ({ ...f, confirmPassword: e.target.value })); clearFieldError("confirmPassword"); }} placeholder="Confirm password" className={`w-full mt-1 rounded-lg border px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] ${fieldErrors.confirmPassword ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
+                {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
+              </div>
+            </>
           )}
           <div className="flex justify-end gap-3 pt-4 border-t border-[#e2e8f0]">
             <button type="button" onClick={onClose} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>

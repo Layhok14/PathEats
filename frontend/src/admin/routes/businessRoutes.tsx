@@ -25,11 +25,9 @@ const businessRoutes: RouteObject = {
     { path: "vendors/moderation", element: businessOrGlobal(<ReviewModerationPage />) },
     { path: "vendors/:vendorId", element: businessOrGlobal(<AdminStallManagePage />) },
     { path: "vendors/:vendorId/stall/:stallId", element: businessOrGlobal(<AdminStallDetailPage />) },
-    { path: "vendors/:vendorId/stall/:stallId/edit", element: businessOrGlobal(<StallCreatePage />) },
     { path: "stalls", element: businessOrGlobal(<AdminStallManagePage />) },
     { path: "stalls/new", element: businessOrGlobal(<StallCreatePage />) },
     { path: "stalls/stall/:stallId", element: businessOrGlobal(<AdminStallDetailPage />) },
-    { path: "stalls/stall/:stallId/edit", element: businessOrGlobal(<StallCreatePage />) },
   ],
 };
 

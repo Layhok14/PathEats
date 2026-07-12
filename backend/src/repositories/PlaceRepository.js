@@ -79,7 +79,7 @@ class PlaceRepository {
 
   async getMenuItems(placeId) {
     const { rows } = await db.query(
-      `SELECT mi.name, mi.price, mi.description, mi.category, mi.image_url,
+      `SELECT mi.name, pmi.price, mi.default_price, mi.description, mi.category, mi.image_url,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
@@ -103,7 +103,7 @@ class PlaceRepository {
   async getMenuItemsForPlaces(placeIds) {
     if (placeIds.length === 0) return {};
     const { rows } = await db.query(
-      `SELECT pmi.place_id, mi.name, mi.price, mi.description, mi.category, mi.image_url,
+      `SELECT pmi.place_id, mi.name, pmi.price, mi.default_price, mi.description, mi.category, mi.image_url,
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,

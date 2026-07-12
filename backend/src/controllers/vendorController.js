@@ -171,6 +171,17 @@ export const createStallMenuItem = catchAsync(async (req, res) => {
   res.status(201).json({ success: true, data: item });
 });
 
+export const linkExistingStallMenuItem = catchAsync(async (req, res) => {
+  if (req.body.price !== undefined) validatePrice(req.body.price);
+  const item = await vendorService.linkExistingMenuItem(
+    req.user.sub,
+    req.params.id,
+    req.params.itemId,
+    req.body
+  );
+  res.json({ success: true, data: item });
+});
+
 export const updateStallMenuItem = catchAsync(async (req, res) => {
   validatePrice(req.body.price);
   const item = await vendorService.updateMenuItem(req.user.sub, req.params.id, req.params.itemId, req.body);

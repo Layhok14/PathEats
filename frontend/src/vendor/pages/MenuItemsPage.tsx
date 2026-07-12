@@ -31,7 +31,6 @@ function ItemFormModal({
     imageUrl: item?.imageUrl ?? "",
     storageImage: item?.storageImage ?? null,
     category: (item?.category as MenuCategory) ?? "Snack",
-    isAvailable: item?.isAvailable ?? true,
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -69,7 +68,7 @@ function ItemFormModal({
         imageUrl: form.imageUrl,
         storageImage: form.storageImage,
         category: form.category,
-        isAvailable: form.isAvailable,
+        isAvailable: true,
       });
       toast.success(item ? "Menu item updated." : "New item created.");
       onClose();
@@ -120,14 +119,9 @@ function ItemFormModal({
               aspectRatio="square"
             />
           </div>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setForm((f) => ({ ...f, isAvailable: !f.isAvailable }))} style={{ width: "44px", height: "24px", borderRadius: "9999px", border: "none", background: form.isAvailable ? "var(--brand-green)" : "#cbced4", cursor: "pointer", position: "relative", flexShrink: 0 }}>
-              <div style={{ position: "absolute", top: "2px", left: form.isAvailable ? "22px" : "2px", width: "20px", height: "20px", borderRadius: "9999px", background: "white", transition: "left 0.2s" }} />
-            </button>
-            <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "14px", color: "var(--brand-text-dark)" }}>
-              {form.isAvailable ? "Available" : "Sold out"}
-            </span>
-          </div>
+          <p style={{ fontFamily: "Poppins, sans-serif", fontSize: "12px", color: "var(--brand-text-muted)", margin: 0 }}>
+            Availability and selling price are set separately for each stall.
+          </p>
           <DialogFooter>
             <button type="button" onClick={onClose} style={{ padding: "10px 20px", borderRadius: "6px", border: "1px solid var(--brand-card-border)", background: "var(--card)", fontFamily: "Poppins, sans-serif", cursor: "pointer" }}>
               Cancel
@@ -189,14 +183,6 @@ export function MenuItemsPage() {
           <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "22px", fontWeight: 700, color: "var(--brand-text-dark)" }}>{allItems.length}</span>
           <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)", marginLeft: "8px" }}>Total Items</span>
         </div>
-        <div style={{ background: "var(--card)", border: "1px solid var(--brand-card-border)", borderRadius: "8px", padding: "12px 20px" }}>
-          <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "22px", fontWeight: 700, color: "var(--brand-green)" }}>{allItems.filter((i) => i.isAvailable).length}</span>
-          <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)", marginLeft: "8px" }}>Available</span>
-        </div>
-        <div style={{ background: "var(--card)", border: "1px solid var(--brand-card-border)", borderRadius: "8px", padding: "12px 20px" }}>
-          <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "22px", fontWeight: 700, color: "#d4183d" }}>{allItems.filter((i) => !i.isAvailable).length}</span>
-          <span style={{ fontFamily: "Poppins, sans-serif", fontSize: "13px", color: "var(--brand-text-muted)", marginLeft: "8px" }}>Sold Out</span>
-        </div>
       </div>
 
       {/* Search + Add */}
@@ -242,15 +228,12 @@ export function MenuItemsPage() {
       {!loading && !error && filtered.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
           {filtered.map((item) => (
-            <div key={item.id} style={{ background: "var(--card)", borderRadius: "10px", border: "1px solid var(--brand-card-border)", overflow: "hidden", opacity: item.isAvailable ? 1 : 0.65 }}>
+            <div key={item.id} style={{ background: "var(--card)", borderRadius: "8px", border: "1px solid var(--brand-card-border)", overflow: "hidden" }}>
               <div className="relative h-36 overflow-hidden" style={{ background: "var(--muted)" }}>
                 {item.imageUrl
                   ? <img src={item.imageUrl} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
                   : <div className="w-full h-full flex items-center justify-center" style={{ color: "var(--brand-text-muted)", fontFamily: "Poppins, sans-serif", fontSize: "24px" }}>🍽</div>
                 }
-                {!item.isAvailable && (
-                  <span style={{ position: "absolute", top: "8px", right: "8px", padding: "2px 8px", borderRadius: "9999px", background: "#d4183d", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "11px", fontWeight: 600 }}>Sold out</span>
-                )}
                 <span style={{ position: "absolute", bottom: "8px", left: "8px", padding: "2px 8px", borderRadius: "9999px", background: "rgba(0,0,0,0.55)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "11px" }}>{item.category}</span>
               </div>
               <div className="p-3 flex flex-col gap-1">

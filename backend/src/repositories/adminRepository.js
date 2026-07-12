@@ -161,12 +161,6 @@ const tableExists = async (tableName) => {
   return Boolean(rows[0]?.exists);
 };
 
-const getRoleTableName = async () => {
-  if (await tableExists("role")) return "role";
-  if (await tableExists("roles")) return "roles";
-  return "role";
-};
-
 const getColumns = async (tableName) => {
   const rows = await optionalRows(
     `
@@ -291,21 +285,24 @@ export const getDashboardTelemetry = async () => {
 
 export const findAllUsers = async (page, limit, roleScope = null) => {
   const offset = (page - 1) * limit;
-  const whereClause = roleScope ? "WHERE role_scope = $3" : "";
+  const whereClause = roleScope ? "WHERE u.role_scope = $3" : "";
   const params = roleScope ? [limit, offset, roleScope] : [limit, offset];
   const rows = await pool.query(
     `
     SELECT
-      id::text,
-      email,
-      first_name,
-      last_name,
-      role_scope,
-      is_banned,
-      created_at
-    FROM users
+      u.id::text,
+      u.email,
+      u.first_name,
+      u.last_name,
+      u.role_scope,
+      u.role_id::text,
+      r.name AS role_name,
+      u.is_banned,
+      u.created_at
+    FROM users u
+    JOIN "role" r ON r.id = u.role_id
     ${whereClause}
-    ORDER BY created_at DESC
+    ORDER BY u.created_at DESC
     LIMIT $1 OFFSET $2
     `,
     params
@@ -315,7 +312,9 @@ export const findAllUsers = async (page, limit, roleScope = null) => {
     id: user.id,
     name: `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.email,
     email: user.email,
-    role: user.role_scope,
+    role: user.role_name,
+    roleId: user.role_id,
+    roleScope: user.role_scope,
     status: toStatus(user.is_banned),
     createdAt: user.created_at,
   }));
@@ -341,6 +340,7 @@ export const createUser = async (userData) => {
     "last_name",
     ...(phoneColumn ? [phoneColumn] : []),
     "role_scope",
+    "role_id",
     "is_banned",
   ];
   const values = [
@@ -350,6 +350,7 @@ export const createUser = async (userData) => {
     userData.last_name,
     ...(phoneColumn ? [userData.phone ?? null] : []),
     userData.role_scope ?? "CONSUMER",
+    userData.role_id,
     false,
   ];
   const placeholders = values.map((_, index) => `$${index + 1}`);
@@ -359,23 +360,29 @@ export const createUser = async (userData) => {
       `
       INSERT INTO users (${columnNames.map(quoteIdent).join(", ")})
       VALUES (${placeholders.join(", ")})
-      RETURNING id::text, email, first_name, last_name, role_scope, is_banned, created_at
+      RETURNING id::text, email, first_name, last_name, role_scope, role_id::text, is_banned, created_at
       `,
       values
     );
   } catch (err) {
     if (err.code === "23505" && err.constraint === "users_email_key") {
-      throw new AppError("A user with this email already exists", 409);
+      throw new AppError("A user with this email already exists", 409, {
+        code: "USER_EMAIL_DUPLICATE",
+        fieldErrors: { email: "A user with this email already exists." },
+      });
     }
     throw err;
   }
 
   const user = result.rows[0];
+  const role = await getRoleRecordById(user.role_id);
   return {
     id: user.id,
     name: `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim() || user.email,
     email: user.email,
-    role: user.role_scope,
+    role: role?.name ?? user.role_scope,
+    roleId: user.role_id,
+    roleScope: user.role_scope,
     status: toStatus(user.is_banned),
     createdAt: user.created_at,
   };
@@ -564,7 +571,7 @@ export const getVendorManagementOverview = async (search = "") => {
       to_jsonb(u) AS user_details,
       mi.id::text AS menu_item_id,
       mi.name AS menu_item_name,
-      mi.price AS menu_item_price,
+      COALESCE(mi.stall_price, mi.default_price) AS menu_item_price,
       to_jsonb(mi) AS menu_item_details,
       pc.id::text AS category_id,
       pc.name AS category_name,
@@ -583,7 +590,7 @@ export const getVendorManagementOverview = async (search = "") => {
     JOIN users u ON u.id::text = p.owner_id::text AND u.role_scope = 'VENDOR'
     LEFT JOIN place_categories pc ON pc.id::text = p.category_id::text
     LEFT JOIN LATERAL (
-      SELECT menu.*
+      SELECT menu.*, link.price AS stall_price
       FROM place_menu_items link
       JOIN menu_items menu ON menu.id = link.menu_item_id
       WHERE link.place_id::text = p.id::text
@@ -850,8 +857,8 @@ export const createStall = async (payload) => {
     const menuItemIds = [...new Set((payload.menuItemIds ?? payload.menu_item_ids ?? []).map(String))];
     if (menuItemIds.length > 0) {
       const result = await client.query(
-        `INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
-         SELECT $1, mi.id, TRUE
+        `INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+         SELECT $1, mi.id, TRUE, mi.default_price
          FROM menu_items mi
          WHERE mi.owner_id = $2 AND mi.id::text = ANY($3::text[])
          ON CONFLICT (place_id, menu_item_id) DO NOTHING`,
@@ -906,12 +913,12 @@ export const createStallMenuItem = async (placeId, payload) => {
       `WITH target_place AS (
          SELECT id, owner_id FROM places WHERE id::text = $1 AND deleted_at IS NULL
        ), created_item AS (
-         INSERT INTO menu_items (owner_id, name, description, price, category, image_url)
+         INSERT INTO menu_items (owner_id, name, description, default_price, category, image_url)
          SELECT owner_id, $2, $3, $4, $5, $6 FROM target_place
          RETURNING *
        ), linked_item AS (
-         INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
-         SELECT id, (SELECT id FROM created_item), $7 FROM target_place
+         INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+         SELECT id, (SELECT id FROM created_item), $7, (SELECT default_price FROM created_item) FROM target_place
        )
        SELECT * FROM created_item`,
       [
@@ -1041,65 +1048,27 @@ export const getReviewsByPlaceId = async (placeId, limit = 2000) => {
   return rows;
 };
 
-export const ensureRoleTable = async () => {
-  const tableName = await getRoleTableName();
-  // Check if table exists first
-  if (await tableExists(tableName)) {
-    // Check if table_privileges column exists, if not add it
-    const columns = await getColumns(tableName);
-    if (!columns.includes("table_privileges")) {
-      await pool.query(`
-        ALTER TABLE "${tableName}"
-        ADD COLUMN table_privileges JSONB DEFAULT '{}'::jsonb
-      `);
-      // Migrate old data: convert privileges[] + tables[] to table_privileges JSONB
-      await pool.query(`
-        UPDATE "${tableName}"
-        SET table_privileges = (
-          SELECT COALESCE(
-            jsonb_object_agg(
-              t,
-              (SELECT array_to_json(privileges)::jsonb)
-            ),
-            '{}'::jsonb
-          )
-          FROM unnest(tables) AS t
-        )
-        WHERE tables IS NOT NULL AND array_length(tables, 1) > 0
-      `);
-    }
-    return;
-  }
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS "${tableName}" (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name TEXT UNIQUE NOT NULL,
-      table_privileges JSONB DEFAULT '{}'::jsonb,
-      grant_option BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-};
-
 export const findAllRoles = async () => {
-  const tableName = await getRoleTableName();
-  await ensureRoleTable();
+  const tableName = "role";
 
   const rows = await optionalRows(
     `
     SELECT
       r.id::text,
       r.name,
+      r.base_scope,
       r.table_privileges,
+      r.system_capabilities,
       r.grant_option,
+      r.is_system,
       r.created_at,
       COALESCE(u.user_count, 0)::int AS user_count
     FROM "${tableName}" r
     LEFT JOIN (
-      SELECT role_scope, COUNT(*) AS user_count
+      SELECT role_id, COUNT(*) AS user_count
       FROM users
-      GROUP BY role_scope
-    ) u ON u.role_scope = r.name
+      GROUP BY role_id
+    ) u ON u.role_id = r.id
     ORDER BY r.created_at DESC
     `
   );
@@ -1107,48 +1076,95 @@ export const findAllRoles = async () => {
   return rows.map((role) => ({
     id: role.id,
     name: role.name,
+    baseScope: role.base_scope,
     tablePrivileges: role.table_privileges ?? {},
+    systemCapabilities: role.system_capabilities ?? [],
     grantOption: Boolean(role.grant_option),
+    isSystem: Boolean(role.is_system),
     userCount: role.user_count,
     createdAt: role.created_at,
   }));
 };
 
-export const createRole = async ({ name, tablePrivileges, grantOption }) => {
-  const tableName = await getRoleTableName();
-  await ensureRoleTable();
-  const result = await pool.query(
-    `
-    INSERT INTO "${tableName}" (name, table_privileges, grant_option)
-    VALUES ($1,$2,$3)
-    ON CONFLICT (name)
-    DO UPDATE SET table_privileges = EXCLUDED.table_privileges,
-                  grant_option = EXCLUDED.grant_option
-    RETURNING *
-    `,
-    [name, JSON.stringify(tablePrivileges ?? {}), grantOption ?? false]
-  );
-
-  return result.rows[0];
+export const createRole = async ({ name, tablePrivileges, systemCapabilities, grantOption }) => {
+  const tableName = "role";
+  try {
+    const result = await pool.query(
+      `INSERT INTO "${tableName}"
+         (name, base_scope, table_privileges, system_capabilities, grant_option, is_system)
+       VALUES ($1,'GLOBAL_ADMIN',$2,$3,$4,FALSE)
+       RETURNING id::text, name, base_scope, table_privileges, system_capabilities,
+                 grant_option, is_system, created_at, updated_at`,
+      [name, JSON.stringify(tablePrivileges ?? {}), JSON.stringify(systemCapabilities ?? []), grantOption ?? false]
+    );
+    const role = result.rows[0];
+    return {
+      id: role.id,
+      name: role.name,
+      baseScope: role.base_scope,
+      tablePrivileges: role.table_privileges ?? {},
+      systemCapabilities: role.system_capabilities ?? [],
+      grantOption: Boolean(role.grant_option),
+      isSystem: Boolean(role.is_system),
+      createdAt: role.created_at,
+    };
+  } catch (error) {
+    if (error.code === "23505") {
+      throw new AppError(`Role "${name}" already exists`, 409, {
+        code: "ROLE_NAME_DUPLICATE",
+        fieldErrors: { name: "A role with this name already exists." },
+      });
+    }
+    throw error;
+  }
 };
 
-export const updateRoleRecord = async (id, { name, tablePrivileges, grantOption }) => {
-  const tableName = await getRoleTableName();
-  await ensureRoleTable();
+export const linkExistingStallMenuItem = async (placeId, menuItemId, payload = {}) => {
+  const result = await pool.query(
+    `INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+     SELECT p.id,
+            mi.id,
+            $3,
+            COALESCE($4, mi.default_price)
+     FROM places p
+     JOIN menu_items mi ON mi.owner_id = p.owner_id
+     WHERE p.id::text = $1
+       AND mi.id::text = $2
+       AND p.deleted_at IS NULL
+     ON CONFLICT (place_id, menu_item_id) DO UPDATE
+       SET is_available = EXCLUDED.is_available,
+           price = EXCLUDED.price,
+           updated_at = NOW()
+     RETURNING menu_item_id::text AS id, price, is_available`,
+    [
+      placeId,
+      menuItemId,
+      payload.isAvailable ?? payload.is_available ?? true,
+      payload.price ?? null,
+    ]
+  );
+  return result.rows[0] ?? null;
+};
 
+export const updateRoleRecord = async (id, { name, tablePrivileges, systemCapabilities, grantOption }) => {
+  const tableName = "role";
   const result = await pool.query(
     `
     UPDATE "${tableName}"
-    SET name = COALESCE($2, name),
+    SET name = CASE WHEN is_system THEN name ELSE COALESCE($2, name) END,
         table_privileges = COALESCE($3::jsonb, table_privileges),
-        grant_option = COALESCE($4, grant_option)
+        system_capabilities = COALESCE($4::jsonb, system_capabilities),
+        grant_option = COALESCE($5, grant_option),
+        updated_at = NOW()
     WHERE id = $1
-    RETURNING id::text, name, table_privileges, grant_option, created_at
+    RETURNING id::text, name, base_scope, table_privileges, system_capabilities,
+              grant_option, is_system, created_at, updated_at
     `,
     [
       id,
       name ?? null,
       tablePrivileges ? JSON.stringify(tablePrivileges) : null,
+      systemCapabilities ? JSON.stringify(systemCapabilities) : null,
       typeof grantOption === "boolean" ? grantOption : null,
     ]
   );
@@ -1159,8 +1175,11 @@ export const updateRoleRecord = async (id, { name, tablePrivileges, grantOption 
   return {
     id: role.id,
     name: role.name,
+    baseScope: role.base_scope,
     tablePrivileges: role.table_privileges ?? {},
+    systemCapabilities: role.system_capabilities ?? [],
     grantOption: Boolean(role.grant_option),
+    isSystem: Boolean(role.is_system),
     createdAt: role.created_at,
   };
 };
@@ -1173,11 +1192,17 @@ export const countUsersByRoleScope = async (roleScope) => {
   return result.rows[0].count;
 };
 
+export const countUsersByRoleId = async (roleId) => {
+  const result = await pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role_id = $1", [roleId]);
+  return result.rows[0]?.count ?? 0;
+};
+
 export const getRoleRecordById = async (id) => {
-  const tableName = await getRoleTableName();
-  await ensureRoleTable();
+  const tableName = "role";
   const result = await pool.query(
-    `SELECT id::text, name, table_privileges, grant_option, created_at FROM "${tableName}" WHERE id = $1`,
+    `SELECT id::text, name, base_scope, table_privileges, system_capabilities,
+            grant_option, is_system, created_at, updated_at
+     FROM "${tableName}" WHERE id = $1`,
     [id]
   );
   if (!result.rows[0]) return null;
@@ -1185,18 +1210,40 @@ export const getRoleRecordById = async (id) => {
   return {
     id: role.id,
     name: role.name,
+    baseScope: role.base_scope,
     tablePrivileges: role.table_privileges,
+    systemCapabilities: role.system_capabilities ?? [],
     grantOption: Boolean(role.grant_option),
+    isSystem: Boolean(role.is_system),
+    createdAt: role.created_at,
+  };
+};
+
+export const getRoleRecordByName = async (name) => {
+  const result = await pool.query(
+    `SELECT id::text, name, base_scope, table_privileges, system_capabilities,
+            grant_option, is_system, created_at, updated_at
+     FROM "role" WHERE UPPER(name) = UPPER($1) LIMIT 1`,
+    [name]
+  );
+  const role = result.rows[0];
+  if (!role) return null;
+  return {
+    id: role.id,
+    name: role.name,
+    baseScope: role.base_scope,
+    tablePrivileges: role.table_privileges ?? {},
+    systemCapabilities: role.system_capabilities ?? [],
+    grantOption: Boolean(role.grant_option),
+    isSystem: Boolean(role.is_system),
     createdAt: role.created_at,
   };
 };
 
 export const deleteRoleRecord = async (id) => {
-  const tableName = await getRoleTableName();
-  await ensureRoleTable();
-
+  const tableName = "role";
   const result = await pool.query(
-    `DELETE FROM "${tableName}" WHERE id = $1 RETURNING id::text`,
+    `DELETE FROM "${tableName}" WHERE id = $1 AND is_system = FALSE RETURNING id::text`,
     [id]
   );
 
@@ -1512,19 +1559,34 @@ export const updateStall = async (id, payload) => {
       const menuItemIds = [...new Set((payload.menuItemIds ?? payload.menu_item_ids ?? []).map(String))];
       const ownerResult = await client.query("SELECT owner_id FROM places WHERE id::text = $1", [id]);
       const currentOwnerId = ownerResult.rows[0]?.owner_id;
-      await client.query("DELETE FROM place_menu_items WHERE place_id::text = $1", [id]);
       if (menuItemIds.length > 0) {
-        const linkResult = await client.query(
-          `INSERT INTO place_menu_items (place_id, menu_item_id, is_available)
-           SELECT $1, mi.id, TRUE
+        await client.query(
+          `INSERT INTO place_menu_items (place_id, menu_item_id, is_available, price)
+           SELECT $1, mi.id, TRUE, mi.default_price
            FROM menu_items mi
-           WHERE mi.owner_id = $2 AND mi.id::text = ANY($3::text[])`,
+           WHERE mi.owner_id = $2 AND mi.id::text = ANY($3::text[])
+           ON CONFLICT (place_id, menu_item_id) DO NOTHING`,
           [id, currentOwnerId, menuItemIds]
         );
-        if (linkResult.rowCount !== menuItemIds.length) {
+        const ownershipCheck = await client.query(
+          `SELECT COUNT(*)::int AS count
+           FROM menu_items
+           WHERE owner_id = $1 AND id::text = ANY($2::text[])`,
+          [currentOwnerId, menuItemIds]
+        );
+        if (ownershipCheck.rows[0]?.count !== menuItemIds.length) {
           throw new AppError("One or more menu items do not belong to the stall owner", 400);
         }
+        await client.query(
+          `DELETE FROM place_menu_items
+           WHERE place_id::text = $1 AND NOT (menu_item_id::text = ANY($2::text[]))`,
+          [id, menuItemIds]
+        );
+      } else {
+        await client.query("DELETE FROM place_menu_items WHERE place_id::text = $1", [id]);
       }
+    } else if (ownerIdUpdate) {
+      await client.query("DELETE FROM place_menu_items WHERE place_id::text = $1", [id]);
     }
     return stall;
   });
@@ -1553,7 +1615,8 @@ export const findAllMenuItems = async (placeId = null, ownerId = null) => {
       mi.id::text,
       mi.name,
       mi.description,
-      mi.price,
+      mi.default_price,
+      COALESCE(pmi.price, mi.default_price) AS price,
       mi.category,
       mi.image_url,
       ${primaryMenuItemImageSelect},
@@ -1562,7 +1625,7 @@ export const findAllMenuItems = async (placeId = null, ownerId = null) => {
       p.name AS place_name
     FROM menu_items mi
     LEFT JOIN LATERAL (
-      SELECT link.place_id, link.is_available
+      SELECT link.place_id, link.is_available, link.price
       FROM place_menu_items link
       WHERE link.menu_item_id = mi.id
         ${placeId ? `AND link.place_id::text = $1` : ""}
@@ -1597,15 +1660,17 @@ export const updateMenuItem = async (id, payload) => {
   const params = [];
   let idx = 1;
   const displayImageUrl = imageDisplayUrlFromStorageInput(payload, ["imageUrl", "image_url"]);
+  const placeId = payload.placeId ?? payload.place_id;
 
   const fieldMap = {
     name: "name",
     description: "description",
-    price: "price",
+    price: "default_price",
     category: "category",
   };
 
   for (const [key, col] of Object.entries(fieldMap)) {
+    if (key === "price" && placeId) continue;
     if (payload[key] !== undefined && allowed.has(col)) {
       const val = key === "category" ? normalizeMenuItemCategory(payload[key]) : payload[key];
       sets.push(`${quoteIdent(col)} = $${idx++}`);
@@ -1618,8 +1683,12 @@ export const updateMenuItem = async (id, payload) => {
   }
 
   const hasImageUpdate = hasStorageImageInput(payload);
-  const hasAvailabilityUpdate = payload.isAvailable !== undefined || payload.is_available !== undefined;
-  if (sets.length === 0 && !hasImageUpdate && !hasAvailabilityUpdate) return null;
+  const hasLinkUpdate = placeId && (
+    payload.price !== undefined ||
+    payload.isAvailable !== undefined ||
+    payload.is_available !== undefined
+  );
+  if (sets.length === 0 && !hasImageUpdate && !hasLinkUpdate) return null;
 
   return withTransaction(async (client) => {
     let item = { id };
@@ -1638,22 +1707,15 @@ export const updateMenuItem = async (id, payload) => {
 
     if (!item) return null;
 
-    if (payload.isAvailable !== undefined || payload.is_available !== undefined) {
-      const availability = payload.isAvailable ?? payload.is_available;
-      const placeId = payload.placeId ?? payload.place_id;
-      if (placeId) {
-        await client.query(
-          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
-           WHERE menu_item_id::text = $2 AND place_id::text = $3`,
-          [availability, id, placeId]
-        );
-      } else {
-        await client.query(
-          `UPDATE place_menu_items SET is_available = $1, updated_at = NOW()
-           WHERE menu_item_id::text = $2`,
-          [availability, id]
-        );
-      }
+    if (hasLinkUpdate) {
+      await client.query(
+        `UPDATE place_menu_items
+         SET price = COALESCE($1, price),
+             is_available = COALESCE($2, is_available),
+             updated_at = NOW()
+         WHERE menu_item_id::text = $3 AND place_id::text = $4`,
+        [payload.price ?? null, payload.isAvailable ?? payload.is_available ?? null, id, placeId]
+      );
     }
 
     const image = await upsertPrimaryMenuItemImage(client, id, payload, uploadedBy(payload));
@@ -1779,12 +1841,15 @@ export const getUserById = async (id) => {
       first_name,
       last_name,
       phone_number,
-      role_scope,
+      u.role_scope,
+      u.role_id::text,
+      r.name AS role_name,
       is_banned,
       created_at,
       updated_at
-    FROM users
-    WHERE id::text = $1
+    FROM users u
+    JOIN "role" r ON r.id = u.role_id
+    WHERE u.id::text = $1
     `,
     [id]
   );
@@ -1796,7 +1861,9 @@ export const getUserById = async (id) => {
     firstName: user.first_name,
     lastName: user.last_name,
     phone: user.phone_number,
-    role: user.role_scope,
+    role: user.role_name,
+    roleId: user.role_id,
+    roleScope: user.role_scope,
     isBanned: user.is_banned,
     status: user.is_banned ? "Suspended" : "Active",
     createdAt: user.created_at,
@@ -1804,13 +1871,12 @@ export const getUserById = async (id) => {
   };
 };
 
-export const updateUser = async (id, { firstName, lastName, email, role, role_scope }) => {
+export const updateUser = async (id, { firstName, lastName, email, roleId, roleScope }) => {
   const sets = [];
   const params = [];
   let idx = 1;
 
-  const roleScopeValue = role_scope ?? role;
-  if (roleScopeValue !== undefined && roleScopeValue !== "VENDOR") {
+  if (roleScope !== undefined && roleScope !== "VENDOR") {
     const ownedPlaceCount = await getOwnedPlaceCount(id);
     if (ownedPlaceCount > 0) {
       throw new AppError(
@@ -1832,26 +1898,45 @@ export const updateUser = async (id, { firstName, lastName, email, role, role_sc
     sets.push(`email = $${idx++}`);
     params.push(email);
   }
-  if (roleScopeValue !== undefined) {
+  if (roleScope !== undefined) {
     sets.push(`role_scope = $${idx++}`);
-    params.push(roleScopeValue);
+    params.push(roleScope);
+  }
+  if (roleId !== undefined) {
+    sets.push(`role_id = $${idx++}`);
+    params.push(roleId);
   }
 
   if (sets.length === 0) return null;
 
   params.push(id);
-  const result = await pool.query(
-    `UPDATE users SET ${sets.join(", ")} WHERE id::text = $${idx} RETURNING id::text, email, first_name, last_name, role_scope, is_banned`,
-    params
-  );
+  let result;
+  try {
+    result = await pool.query(
+      `UPDATE users SET ${sets.join(", ")}, updated_at = NOW() WHERE id::text = $${idx}
+       RETURNING id::text, email, first_name, last_name, role_scope, role_id::text, is_banned`,
+      params
+    );
+  } catch (error) {
+    if (error.code === "23505" && error.constraint === "users_email_key") {
+      throw new AppError("A user with this email already exists", 409, {
+        code: "USER_EMAIL_DUPLICATE",
+        fieldErrors: { email: "A user with this email already exists." },
+      });
+    }
+    throw error;
+  }
   const user = result.rows[0];
   if (!user) return null;
+  const assignedRole = await getRoleRecordById(user.role_id);
   return {
     id: user.id,
     email: user.email,
     firstName: user.first_name,
     lastName: user.last_name,
-    role: user.role_scope,
+    role: assignedRole?.name ?? user.role_scope,
+    roleId: user.role_id,
+    roleScope: user.role_scope,
     status: user.is_banned ? "Suspended" : "Active",
   };
 };
@@ -1954,59 +2039,6 @@ export const refreshPlaceRating = async (placeId) => {
   await pool.query("SELECT refresh_place_rating($1)", [placeId]);
 };
 
-// ── BA Assignment Filtering ──────────────────────────────────────────
-
-export const getAssignedVendorIds = async (assistantId) => {
-  const { rows } = await pool.query(
-    "SELECT vendor_id::text FROM business_assistant_assignments WHERE assistant_id = $1",
-    [assistantId]
-  );
-  return rows.map((r) => r.vendor_id);
-};
-
-export const isAssignedToVendor = async (assistantId, vendorId) => {
-  const { rows } = await pool.query(
-    "SELECT 1 FROM business_assistant_assignments WHERE assistant_id = $1 AND vendor_id = $2",
-    [assistantId, vendorId]
-  );
-  return rows.length > 0;
-};
-
-export const assignVendorToAssistant = async (assistantId, vendorId, assignedBy = null) => {
-  const { rows } = await pool.query(
-    `INSERT INTO business_assistant_assignments (assistant_id, vendor_id, assigned_by)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (assistant_id, vendor_id) DO NOTHING
-     RETURNING id::text, assistant_id::text, vendor_id::text, assigned_at`,
-    [assistantId, vendorId, assignedBy]
-  );
-  return rows[0] ?? null;
-};
-
-export const unassignVendorFromAssistant = async (assistantId, vendorId) => {
-  const { rows } = await pool.query(
-    `DELETE FROM business_assistant_assignments
-     WHERE assistant_id = $1 AND vendor_id = $2
-     RETURNING id::text`,
-    [assistantId, vendorId]
-  );
-  return rows[0] ?? null;
-};
-
-export const getAssistantAssignments = async (assistantId) => {
-  const { rows } = await pool.query(
-    `SELECT baa.id::text, baa.vendor_id::text, u.email AS vendor_email,
-            CONCAT_WS(' ', u.first_name, u.last_name) AS vendor_name,
-            baa.assigned_at
-     FROM business_assistant_assignments baa
-     JOIN users u ON u.id = baa.vendor_id
-     WHERE baa.assistant_id = $1
-     ORDER BY baa.assigned_at DESC`,
-    [assistantId]
-  );
-  return rows;
-};
-
 // ── Consumer Categories (public) ────────────────────────────────────
 
 export const getConsumerCategories = async () => {
@@ -2026,29 +2058,4 @@ export const getMenuItemLinkCount = async (menuItemId) => {
     [menuItemId]
   );
   return rows[0]?.count ?? 0;
-};
-
-// ── Vendor Onboarding ───────────────────────────────────────────────
-
-export const createVendorOnboarding = async (vendorId) => {
-  const { rows } = await pool.query(
-    `INSERT INTO vendor_onboarding (vendor_id, status)
-     VALUES ($1, 'pending')
-     ON CONFLICT DO NOTHING
-     RETURNING id::text, vendor_id::text, status, created_at`,
-    [vendorId]
-  );
-  return rows[0] ?? null;
-};
-
-export const getVendorOnboarding = async (vendorId) => {
-  const { rows } = await pool.query(
-    `SELECT id::text, vendor_id::text, status, rejection_reason, submitted_at, reviewed_at, created_at
-     FROM vendor_onboarding
-     WHERE vendor_id = $1
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [vendorId]
-  );
-  return rows[0] ?? null;
 };

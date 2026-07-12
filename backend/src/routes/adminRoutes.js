@@ -6,6 +6,8 @@ import AppError from "../utils/AppError.js";
 import * as adminController from "../controllers/adminController.js";
 import db, { pool } from "../config/db.js";
 import { normalizeRoleScope } from "../utils/roles.js";
+import { requirePrivileges, requireSystemCapability } from "../middlewares/privilegeGuard.js";
+import { BUILT_IN_ROLE_POLICIES } from "../utils/privilegeRegistry.js";
 
 const router = Router();
 
@@ -21,6 +23,11 @@ const devAdminBypass = (req, res, next) => {
       email: "dev-admin@patheat.local",
       role_scope: "GLOBAL_ADMIN",
       role: "GLOBAL_ADMIN",
+      roleName: "GLOBAL_ADMIN",
+      baseScope: "GLOBAL_ADMIN",
+      grantOption: true,
+      isSystemRole: true,
+      tablePrivileges: BUILT_IN_ROLE_POLICIES.GLOBAL_ADMIN,
     };
     return next();
   }
@@ -54,7 +61,7 @@ const vendorListOrGlobalAdmin = (req, _res, next) => {
 
 const vendorCreateOrGlobalAdmin = (req, _res, next) => {
   if (isGlobalAdmin(req)) return next();
-  if (isBusinessAssistant(req) && requestedRole(req.body.role_scope || req.body.role) === "VENDOR") return next();
+  if (isBusinessAssistant(req)) return next();
   return next(forbidden("Business assistants can only create vendor accounts."));
 };
 
@@ -137,8 +144,8 @@ router.get("/telemetry", catchAsync(adminController.getDashboardTelemetry));
  *       201:
  *         description: Role created
  */
-router.get("/roles", globalAdminOnly, catchAsync(adminController.getRoles));
-router.post("/roles", globalAdminOnly, catchAsync(adminController.createRole));
+router.get("/roles", globalAdminOnly, requirePrivileges({ table: "role", action: "SELECT" }), catchAsync(adminController.getRoles));
+router.post("/roles", globalAdminOnly, requirePrivileges({ table: "role", action: "INSERT" }), catchAsync(adminController.createRole));
 
 /**
  * @swagger
@@ -179,8 +186,8 @@ router.post("/roles", globalAdminOnly, catchAsync(adminController.createRole));
  *       200:
  *         description: Role deleted
  */
-router.patch("/roles/:id", globalAdminOnly, catchAsync(adminController.updateRoleRecord));
-router.delete("/roles/:id", globalAdminOnly, catchAsync(adminController.deleteRoleRecord));
+router.patch("/roles/:id", globalAdminOnly, requirePrivileges({ table: "role", action: "UPDATE" }), catchAsync(adminController.updateRoleRecord));
+router.delete("/roles/:id", globalAdminOnly, requirePrivileges({ table: "role", action: "DELETE" }), catchAsync(adminController.deleteRoleRecord));
 
 /**
  * @swagger
@@ -218,8 +225,8 @@ router.delete("/roles/:id", globalAdminOnly, catchAsync(adminController.deleteRo
  *       201:
  *         description: User created
  */
-router.get("/users", vendorListOrGlobalAdmin, catchAsync(adminController.getUsers));
-router.post("/users", vendorCreateOrGlobalAdmin, catchAsync(adminController.createUser));
+router.get("/users", vendorListOrGlobalAdmin, requirePrivileges({ table: "users", action: "SELECT" }), catchAsync(adminController.getUsers));
+router.post("/users", vendorCreateOrGlobalAdmin, requirePrivileges({ table: "users", action: "INSERT" }), catchAsync(adminController.createUser));
 
 /**
  * @swagger
@@ -236,7 +243,7 @@ router.post("/users", vendorCreateOrGlobalAdmin, catchAsync(adminController.crea
  *       200:
  *         description: Overview rows
  */
-router.get("/user-management/overview", vendorListOrGlobalAdmin, catchAsync(adminController.getUserManagementOverview));
+router.get("/user-management/overview", vendorListOrGlobalAdmin, requirePrivileges({ table: "users", action: "SELECT" }), catchAsync(adminController.getUserManagementOverview));
 
 /**
  * @swagger
@@ -262,7 +269,7 @@ router.get("/user-management/overview", vendorListOrGlobalAdmin, catchAsync(admi
  *       200:
  *         description: Role updated
  */
-router.patch("/users/:id/role", globalAdminOnly, catchAsync(adminController.updateRole));
+router.patch("/users/:id/role", globalAdminOnly, requirePrivileges({ table: "users", action: "UPDATE" }), catchAsync(adminController.updateRole));
 
 /**
  * @swagger
@@ -288,7 +295,7 @@ router.patch("/users/:id/role", globalAdminOnly, catchAsync(adminController.upda
  *       200:
  *         description: Status updated
  */
-router.patch("/users/:id/status", vendorAccountOrGlobalAdmin, catchAsync(adminController.updateStatus));
+router.patch("/users/:id/status", vendorAccountOrGlobalAdmin, requirePrivileges({ table: "users", action: "UPDATE" }), catchAsync(adminController.updateStatus));
 
 /**
  * @swagger
@@ -314,7 +321,7 @@ router.patch("/users/:id/status", vendorAccountOrGlobalAdmin, catchAsync(adminCo
  *       200:
  *         description: User ban status updated
  */
-router.post("/users/:id/ban", globalAdminOnly, catchAsync(async (req, res, next) => {
+router.post("/users/:id/ban", globalAdminOnly, requirePrivileges({ table: "users", action: "UPDATE" }), catchAsync(async (req, res, next) => {
   req.body.status = req.body.banned === false ? "Active" : "Suspended";
   return adminController.updateStatus(req, res, next);
 }));
@@ -372,9 +379,9 @@ router.post("/users/:id/ban", globalAdminOnly, catchAsync(async (req, res, next)
  *       200:
  *         description: User deleted
  */
-router.get("/users/:id", globalAdminOnly, catchAsync(adminController.getUserById));
-router.patch("/users/:id", vendorAccountOrGlobalAdmin, catchAsync(adminController.updateUser));
-router.delete("/users/:id", vendorAccountOrGlobalAdmin, catchAsync(adminController.deleteUser));
+router.get("/users/:id", globalAdminOnly, requirePrivileges({ table: "users", action: "SELECT" }), catchAsync(adminController.getUserById));
+router.patch("/users/:id", vendorAccountOrGlobalAdmin, requirePrivileges({ table: "users", action: "UPDATE" }), catchAsync(adminController.updateUser));
+router.delete("/users/:id", vendorAccountOrGlobalAdmin, requirePrivileges({ table: "users", action: "DELETE" }), catchAsync(adminController.deleteUser));
 
 /**
  * @swagger
@@ -387,7 +394,7 @@ router.delete("/users/:id", vendorAccountOrGlobalAdmin, catchAsync(adminControll
  *       200:
  *         description: Array of vendors
  */
-router.get("/vendors", catchAsync(adminController.getVendors));
+router.get("/vendors", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getVendors));
 
 /**
  * @swagger
@@ -404,7 +411,7 @@ router.get("/vendors", catchAsync(adminController.getVendors));
  *       200:
  *         description: Overview rows
  */
-router.get("/vendor-management/overview", catchAsync(adminController.getVendorManagementOverview));
+router.get("/vendor-management/overview", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getVendorManagementOverview));
 
 /**
  * @swagger
@@ -417,7 +424,7 @@ router.get("/vendor-management/overview", catchAsync(adminController.getVendorMa
  *       200:
  *         description: Array of categories
  */
-router.get("/place-categories", catchAsync(adminController.getPlaceCategories));
+router.get("/place-categories", requirePrivileges({ table: "place_categories", action: "SELECT" }), catchAsync(adminController.getPlaceCategories));
 
 /**
  * @swagger
@@ -443,7 +450,7 @@ router.get("/place-categories", catchAsync(adminController.getPlaceCategories));
  *       200:
  *         description: Approval status updated
  */
-router.post("/vendors/:id/approve", globalAdminOnly, catchAsync(adminController.approveVendor));
+router.post("/vendors/:id/approve", globalAdminOnly, requirePrivileges({ table: "places", action: "UPDATE" }), catchAsync(adminController.approveVendor));
 
 /**
  * @swagger
@@ -456,7 +463,7 @@ router.post("/vendors/:id/approve", globalAdminOnly, catchAsync(adminController.
  *       200:
  *         description: Options object
  */
-router.get("/stall-management/options", catchAsync(adminController.getStallManagementOptions));
+router.get("/stall-management/options", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getStallManagementOptions));
 
 /**
  * @swagger
@@ -469,7 +476,7 @@ router.get("/stall-management/options", catchAsync(adminController.getStallManag
  *       200:
  *         description: Array of active queries
  */
-router.get("/audit/activity", globalAdminOnly, catchAsync(adminController.getAuditActivity));
+router.get("/audit/activity", globalAdminOnly, requirePrivileges({ table: "audit_log", action: "SELECT" }), catchAsync(adminController.getAuditActivity));
 
 /**
  * @swagger
@@ -486,7 +493,7 @@ router.get("/audit/activity", globalAdminOnly, catchAsync(adminController.getAud
  *       200:
  *         description: Array of audit log entries
  */
-router.get("/audit/logs", globalAdminOnly, catchAsync(adminController.getAuditLogs));
+router.get("/audit/logs", globalAdminOnly, requirePrivileges({ table: "audit_log", action: "SELECT" }), catchAsync(adminController.getAuditLogs));
 
 /**
  * @swagger
@@ -507,7 +514,7 @@ router.get("/audit/logs", globalAdminOnly, catchAsync(adminController.getAuditLo
  *       200:
  *         description: Array of audit log entries for the specified role
  */
-router.get("/audit/logs/by-role", businessOrGlobal, catchAsync(adminController.getAuditLogsByRoleScope));
+router.get("/audit/logs/by-role", businessOrGlobal, requirePrivileges({ table: "audit_log", action: "SELECT" }), catchAsync(adminController.getAuditLogsByRoleScope));
 
 /**
  * @swagger
@@ -520,7 +527,7 @@ router.get("/audit/logs/by-role", businessOrGlobal, catchAsync(adminController.g
  *       200:
  *         description: Array of table names
  */
-router.get("/tables", globalAdminOnly, catchAsync(adminController.getDatabaseTables));
+router.get("/tables", globalAdminOnly, requirePrivileges({ table: "role", action: "SELECT" }), catchAsync(adminController.getDatabaseTables));
 
 /**
  * @swagger
@@ -533,7 +540,7 @@ router.get("/tables", globalAdminOnly, catchAsync(adminController.getDatabaseTab
  *       200:
  *         description: Array of stalls
  */
-router.get("/stalls", catchAsync(adminController.getAllStalls));
+router.get("/stalls", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getAllStalls));
 
 /**
  * @swagger
@@ -551,7 +558,7 @@ router.get("/stalls", catchAsync(adminController.getAllStalls));
  *       200:
  *         description: Array of stalls owned by the user
  */
-router.get("/stalls/owner/:ownerId", catchAsync(adminController.getStallsByOwner));
+router.get("/stalls/owner/:ownerId", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getStallsByOwner));
 
 /**
  * @swagger
@@ -571,7 +578,7 @@ router.get("/stalls/owner/:ownerId", catchAsync(adminController.getStallsByOwner
  *       404:
  *         description: Stall not found
  */
-router.get("/stalls/:id", catchAsync(adminController.getStallById));
+router.get("/stalls/:id", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getStallById));
 
 /**
  * @swagger
@@ -601,7 +608,7 @@ router.get("/stalls/:id", catchAsync(adminController.getStallById));
  *       201:
  *         description: Stall created
  */
-router.post("/stalls", businessOrGlobal, catchAsync(adminController.createStall));
+router.post("/stalls", businessOrGlobal, requirePrivileges({ table: "places", action: "INSERT" }), catchAsync(adminController.createStall));
 
 /**
  * @swagger
@@ -649,7 +656,7 @@ router.post("/stalls", businessOrGlobal, catchAsync(adminController.createStall)
  *       200:
  *         description: Stall deleted
  */
-router.patch("/stalls/:id", catchAsync(adminController.editStall));
+router.patch("/stalls/:id", requirePrivileges({ table: "places", action: "UPDATE" }), catchAsync(adminController.editStall));
 
 /**
  * @swagger
@@ -667,9 +674,9 @@ router.patch("/stalls/:id", catchAsync(adminController.editStall));
  *       200:
  *         description: Stall status toggled
  */
-router.patch("/stalls/:id/toggle", catchAsync(adminController.toggleStallStatus));
-router.delete("/stalls/:id", businessOrGlobal, catchAsync(adminController.deleteStall));
-router.get("/stalls/:id/impact", catchAsync(adminController.getDeletionImpact));
+router.patch("/stalls/:id/toggle", requirePrivileges({ table: "places", action: "UPDATE" }), catchAsync(adminController.toggleStallStatus));
+router.delete("/stalls/:id", businessOrGlobal, requirePrivileges({ table: "places", action: "DELETE" }), catchAsync(adminController.deleteStall));
+router.get("/stalls/:id/impact", requirePrivileges({ table: "places", action: "SELECT" }), catchAsync(adminController.getDeletionImpact));
 
 /**
  * @swagger
@@ -682,7 +689,7 @@ router.get("/stalls/:id/impact", catchAsync(adminController.getDeletionImpact));
  *       200:
  *         description: Array of menu items
  */
-router.get("/menu-items", catchAsync(adminController.getAllMenuItems));
+router.get("/menu-items", requirePrivileges({ table: "menu_items", action: "SELECT" }), catchAsync(adminController.getAllMenuItems));
 
 /**
  * @swagger
@@ -711,7 +718,7 @@ router.get("/menu-items", catchAsync(adminController.getAllMenuItems));
  *       200:
  *         description: Menu item updated
  */
-router.patch("/menu-items/:id", catchAsync(adminController.editMenuItem));
+router.patch("/menu-items/:id", requirePrivileges({ table: "menu_items", action: "UPDATE" }), catchAsync(adminController.editMenuItem));
 
 /**
  * @swagger
@@ -742,7 +749,13 @@ router.patch("/menu-items/:id", catchAsync(adminController.editMenuItem));
  *       201:
  *         description: Menu item created
  */
-router.post("/stalls/:placeId/menu-items", catchAsync(adminController.createStallMenuItem));
+router.post("/stalls/:placeId/menu-items", requirePrivileges({ table: "menu_items", action: "INSERT" }), catchAsync(adminController.createStallMenuItem));
+router.put(
+  "/stalls/:placeId/menu-item-links/:itemId",
+  businessOrGlobal,
+  requirePrivileges({ table: "place_menu_items", action: "INSERT" }),
+  catchAsync(adminController.linkExistingStallMenuItem)
+);
 
 /**
  * @swagger
@@ -760,8 +773,8 @@ router.post("/stalls/:placeId/menu-items", catchAsync(adminController.createStal
  *       200:
  *         description: Menu item deleted
  */
-router.delete("/stalls/menu-items/:id", businessOrGlobal, catchAsync(adminController.deleteStallMenuItem));
-router.get("/menu-items/:id/links", catchAsync(adminController.getMenuItemLinkCount));
+router.delete("/stalls/menu-items/:id", businessOrGlobal, requirePrivileges({ table: "place_menu_items", action: "DELETE" }), catchAsync(adminController.deleteStallMenuItem));
+router.get("/menu-items/:id/links", requirePrivileges({ table: "place_menu_items", action: "SELECT" }), catchAsync(adminController.getMenuItemLinkCount));
 
 /**
  * @swagger
@@ -784,7 +797,7 @@ router.get("/menu-items/:id/links", catchAsync(adminController.getMenuItemLinkCo
  *       201:
  *         description: Category created
  */
-router.post("/stalls/place-categories", globalAdminOnly, catchAsync(adminController.createStallCategory));
+router.post("/stalls/place-categories", globalAdminOnly, requirePrivileges({ table: "place_categories", action: "INSERT" }), catchAsync(adminController.createStallCategory));
 
 /**
  * @swagger
@@ -802,7 +815,7 @@ router.post("/stalls/place-categories", globalAdminOnly, catchAsync(adminControl
  *       200:
  *         description: Category deleted
  */
-router.delete("/stalls/place-categories/:id", globalAdminOnly, catchAsync(adminController.deleteStallCategory));
+router.delete("/stalls/place-categories/:id", globalAdminOnly, requirePrivileges({ table: "place_categories", action: "DELETE" }), catchAsync(adminController.deleteStallCategory));
 
 /**
  * @swagger
@@ -831,7 +844,7 @@ router.delete("/stalls/place-categories/:id", globalAdminOnly, catchAsync(adminC
  *       201:
  *         description: Hours created
  */
-router.post("/stalls/:placeId/place-hours", globalAdminOnly, catchAsync(adminController.createStallPlaceHour));
+router.post("/stalls/:placeId/place-hours", globalAdminOnly, requirePrivileges({ table: "place_hours", action: "INSERT" }), catchAsync(adminController.createStallPlaceHour));
 
 /**
  * @swagger
@@ -849,7 +862,7 @@ router.post("/stalls/:placeId/place-hours", globalAdminOnly, catchAsync(adminCon
  *       200:
  *         description: Hours deleted
  */
-router.delete("/stalls/place-hours/:id", globalAdminOnly, catchAsync(adminController.deleteStallPlaceHour));
+router.delete("/stalls/place-hours/:id", globalAdminOnly, requirePrivileges({ table: "place_hours", action: "DELETE" }), catchAsync(adminController.deleteStallPlaceHour));
 
 /**
  * @swagger
@@ -862,7 +875,7 @@ router.delete("/stalls/place-hours/:id", globalAdminOnly, catchAsync(adminContro
  *       200:
  *         description: Array of reviews
  */
-router.get("/reviews", catchAsync(adminController.getAllReviews));
+router.get("/reviews", requirePrivileges({ table: "reviews", action: "SELECT" }), catchAsync(adminController.getAllReviews));
 
 /**
  * @swagger
@@ -880,7 +893,7 @@ router.get("/reviews", catchAsync(adminController.getAllReviews));
  *       200:
  *         description: Array of reviews for the stall
  */
-router.get("/stalls/:placeId/reviews", catchAsync(adminController.getReviewsByPlaceId));
+router.get("/stalls/:placeId/reviews", requirePrivileges({ table: "reviews", action: "SELECT" }), catchAsync(adminController.getReviewsByPlaceId));
 
 /**
  * @swagger
@@ -908,7 +921,7 @@ router.get("/stalls/:placeId/reviews", catchAsync(adminController.getReviewsByPl
  *       201:
  *         description: Review created
  */
-router.post("/stalls/:placeId/reviews", globalAdminOnly, catchAsync(adminController.createStallReview));
+router.post("/stalls/:placeId/reviews", globalAdminOnly, requirePrivileges({ table: "reviews", action: "INSERT" }), catchAsync(adminController.createStallReview));
 
 /**
  * @swagger
@@ -926,7 +939,7 @@ router.post("/stalls/:placeId/reviews", globalAdminOnly, catchAsync(adminControl
  *       200:
  *         description: Review deleted
  */
-router.delete("/stalls/reviews/:id", globalAdminOnly, catchAsync(adminController.deleteStallReview));
+router.delete("/stalls/reviews/:id", globalAdminOnly, requirePrivileges({ table: "reviews", action: "DELETE" }), catchAsync(adminController.deleteStallReview));
 
 /**
  * @swagger
@@ -960,7 +973,7 @@ router.get("/health", globalAdminOnly, catchAsync(async (req, res) => {
 
 // ── Kill Query ──────────────────────────────────────────────────────────────
 
-router.post("/audit/kill-query", globalAdminOnly, catchAsync(async (req, res) => {
+router.post("/audit/kill-query", globalAdminOnly, requireSystemCapability("MAINTENANCE"), catchAsync(async (req, res) => {
   const { pid } = req.body;
   if (!pid || typeof pid !== "number") {
     throw new AppError("Valid PID (number) is required", 400);
@@ -974,24 +987,21 @@ router.post("/audit/kill-query", globalAdminOnly, catchAsync(async (req, res) =>
 }));
 
 // ── Onboarding Config ──────────────────────────────────────────────────
-router.get("/onboarding", catchAsync(adminController.getOnboardingConfig));
-router.put("/onboarding", businessOrGlobal, catchAsync(adminController.updateOnboardingConfig));
+router.get("/onboarding", requirePrivileges({ table: "onboarding_config", action: "SELECT" }), catchAsync(adminController.getOnboardingConfig));
+router.put("/onboarding", businessOrGlobal, requirePrivileges({ table: "onboarding_config", action: "UPDATE" }), catchAsync(adminController.updateOnboardingConfig));
 
 // ── Review Moderation ──────────────────────────────────────────────────
-router.patch("/stalls/reviews/:id/flag", catchAsync(adminController.flagReview));
-router.patch("/stalls/reviews/:id/unflag", catchAsync(adminController.unflagReview));
-router.delete("/stalls/reviews/:id/remove", businessOrGlobal, catchAsync(adminController.removeReview));
+router.patch("/stalls/reviews/:id/flag", requirePrivileges({ table: "reviews", action: "UPDATE" }), catchAsync(adminController.flagReview));
+router.patch("/stalls/reviews/:id/unflag", requirePrivileges({ table: "reviews", action: "UPDATE" }), catchAsync(adminController.unflagReview));
+router.delete("/stalls/reviews/:id/remove", businessOrGlobal, requirePrivileges({ table: "reviews", action: "DELETE" }), catchAsync(adminController.removeReview));
 
 // ── BA Assignments ────────────────────────────────────────────────────
-router.get("/ba-assignments/:assistantId", globalAdminOnly, catchAsync(adminController.getAssistantAssignments));
-router.post("/ba-assignments/:assistantId/vendor/:vendorId", globalAdminOnly, catchAsync(adminController.assignVendorToAssistant));
-router.delete("/ba-assignments/:assistantId/vendor/:vendorId", globalAdminOnly, catchAsync(adminController.unassignVendorFromAssistant));
 
 // ── Consumer Categories (public) ──────────────────────────────────────
-router.get("/categories", catchAsync(adminController.getConsumerCategories));
+router.get("/categories", requirePrivileges({ table: "place_categories", action: "SELECT" }), catchAsync(adminController.getConsumerCategories));
 
 // ── Profile ────────────────────────────────────────────────────────────
-router.get("/profile", catchAsync(async (req, res) => {
+router.get("/profile", requirePrivileges({ table: "users", action: "SELECT" }), catchAsync(async (req, res) => {
   const result = await pool.query(
     `SELECT id::text, email, first_name, last_name, phone_number, role_scope, is_banned, created_at, updated_at
      FROM users WHERE id = $1`,

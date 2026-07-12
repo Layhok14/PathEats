@@ -4,8 +4,8 @@ import { fileURLToPath } from 'url';
 import { pool } from '../config/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const seeder_file = path.join(__dirname, 'seed-data.sql');
-const indexing_file = path.join(__dirname, 'indexing.sql');
+const seeder_file = path.join(__dirname, 'seed.sql');
+const indexing_file = path.join(__dirname, 'indexes.sql');
 
 async function runSeed() {
   console.log('Reading seed file...');

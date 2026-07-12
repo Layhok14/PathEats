@@ -1,5 +1,6 @@
 import AdminSidebar from "../../shared/components/AdminSidebar";
 import type { NavSection } from "../../shared/components/AdminSidebar";
+import { useAuth } from "../../shared/hooks/useAuth";
 
 const sections: NavSection[] = [
   {
@@ -16,5 +17,19 @@ const sections: NavSection[] = [
 ];
 
 export default function BusinessLayout() {
-  return <AdminSidebar sections={sections} portalSubtitle="Business Portal" logoutRedirect="/business/login" />;
+  const { user } = useAuth();
+  const tableByPath: Record<string, string> = {
+    "/business/vendors": "places",
+    "/business/vendors/onboarding": "onboarding_config",
+    "/business/vendors/moderation": "reviews",
+    "/business/stalls": "places",
+  };
+  const visibleSections = sections.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => {
+      const table = tableByPath[item.path];
+      return !table || !user?.tablePrivileges || user.tablePrivileges[table]?.includes("SELECT");
+    }),
+  }));
+  return <AdminSidebar sections={visibleSections} portalSubtitle="Business Portal" logoutRedirect="/business/login" />;
 }

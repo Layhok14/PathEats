@@ -73,7 +73,7 @@ export const imageDisplayUrlFromStorageInput = (payload, fallbackUrlKeys = []) =
 
   if (bucketName === "local-vendor-images" && objectPath.startsWith("vendor-images/")) {
     const fileName = objectPath.split("/").pop();
-    return fileName ? `/api/uploads/vendor-images/${fileName}` : null;
+    return fileName ? `/uploads/vendor-images/${fileName}` : null;
   }
 
   const explicitUrl = asTrimmedString(

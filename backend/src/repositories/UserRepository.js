@@ -19,12 +19,15 @@ class UserRepository {
    */
   async create(data) {
     const { rows } = await db.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, phone_number, role_scope)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, email, first_name, last_name, phone_number, role_scope, created_at`,
+      `INSERT INTO users (email, password_hash, first_name, last_name, phone_number, role_scope, role_id)
+       SELECT $1, $2, $3, $4, $5, r.base_scope, r.id
+       FROM "role" r
+       WHERE r.name = $6
+       RETURNING id, email, first_name, last_name, phone_number, role_scope, role_id, created_at`,
       [data.email, data.password_hash, data.first_name, data.last_name, data.phone_number || null, data.role_scope || "CONSUMER"]
     );
-    return rows[0];
+    if (!rows[0]) throw new Error("Registration role is not configured");
+    return this.findById(rows[0].id);
   }
 
   /**
@@ -39,6 +42,12 @@ class UserRepository {
          u.last_name,
          u.phone_number,
          u.role_scope,
+         u.role_id,
+         r.name AS role_name,
+         r.base_scope,
+         r.table_privileges,
+         r.system_capabilities,
+         r.grant_option,
          u.is_banned,
          u.created_at,
          upi.bucket_name AS profile_image_bucket,
@@ -47,6 +56,7 @@ class UserRepository {
          upi.size_bytes AS profile_image_size_bytes,
          upi.alt_text AS profile_image_alt_text
        FROM users u
+       JOIN "role" r ON r.id = u.role_id
        LEFT JOIN user_profile_images upi ON upi.user_id = u.id
        WHERE u.id = $1`,
       [id]
@@ -157,7 +167,16 @@ class UserRepository {
    */
   async findByEmailWithPassword(email) {
     const { rows } = await db.query(
-      `SELECT * FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      `SELECT u.*,
+              r.name AS role_name,
+              r.base_scope,
+              r.table_privileges,
+              r.system_capabilities,
+              r.grant_option
+       FROM users u
+       JOIN "role" r ON r.id = u.role_id
+       WHERE LOWER(u.email) = LOWER($1)
+       LIMIT 1`,
       [email]
     );
     return rows[0] || null;

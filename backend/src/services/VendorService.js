@@ -21,6 +21,15 @@ const normalizeMenuItemIds = (data) => {
   return ids;
 };
 
+const menuItemDuplicateError = () => new AppError(
+  "A catalog item with this name already exists",
+  409,
+  {
+    code: "MENU_ITEM_DUPLICATE",
+    safeMessage: "This item is already in your menu catalog. Add the existing item to the stall instead.",
+  }
+);
+
 class VendorService {
   constructor() {
     this.vendorRepo = new VendorRepository();
@@ -117,7 +126,12 @@ class VendorService {
       name: sanitizeText(data.name),
       description: data.description ? sanitizeText(data.description) : data.description,
     };
-    return this.vendorRepo.createMenuItemGlobal(ownerId, sanitized);
+    try {
+      return await this.vendorRepo.createMenuItemGlobal(ownerId, sanitized);
+    } catch (error) {
+      if (error?.code === "23505") throw menuItemDuplicateError();
+      throw error;
+    }
   }
 
   async updateMenuItemGlobal(ownerId, itemId, data) {
@@ -126,7 +140,13 @@ class VendorService {
       name: data.name ? sanitizeText(data.name) : data.name,
       description: data.description ? sanitizeText(data.description) : data.description,
     };
-    const item = await this.vendorRepo.updateMenuItemGlobal(ownerId, itemId, sanitized);
+    let item;
+    try {
+      item = await this.vendorRepo.updateMenuItemGlobal(ownerId, itemId, sanitized);
+    } catch (error) {
+      if (error?.code === "23505") throw menuItemDuplicateError();
+      throw error;
+    }
     if (!item) throw new AppError("Menu item not found", 404);
     return item;
   }
@@ -151,8 +171,20 @@ class VendorService {
       name: sanitizeText(data.name),
       description: data.description ? sanitizeText(data.description) : data.description,
     };
-    const item = await this.vendorRepo.createMenuItem(placeId, ownerId, sanitized);
+    let item;
+    try {
+      item = await this.vendorRepo.createMenuItem(placeId, ownerId, sanitized);
+    } catch (error) {
+      if (error?.code === "23505") throw menuItemDuplicateError();
+      throw error;
+    }
     if (!item) throw new AppError("Stall not found", 404);
+    return item;
+  }
+
+  async linkExistingMenuItem(ownerId, placeId, itemId, data) {
+    const item = await this.vendorRepo.linkExistingMenuItem(placeId, itemId, ownerId, data);
+    if (!item) throw new AppError("Stall or catalog item not found", 404);
     return item;
   }
 
@@ -162,7 +194,13 @@ class VendorService {
       name: data.name ? sanitizeText(data.name) : data.name,
       description: data.description ? sanitizeText(data.description) : data.description,
     };
-    const item = await this.vendorRepo.updateMenuItem(placeId, itemId, ownerId, sanitized);
+    let item;
+    try {
+      item = await this.vendorRepo.updateMenuItem(placeId, itemId, ownerId, sanitized);
+    } catch (error) {
+      if (error?.code === "23505") throw menuItemDuplicateError();
+      throw error;
+    }
     if (!item) throw new AppError("Menu item not found", 404);
     return item;
   }

@@ -9,6 +9,12 @@ interface AuthUser {
   lastName: string;
   email: string;
   role_scope: string;
+  roleId?: string;
+  roleName?: string;
+  baseScope?: string;
+  tablePrivileges?: Record<string, string[]>;
+  systemCapabilities?: string[];
+  grantOption?: boolean;
 }
 
 interface AuthContextValue {

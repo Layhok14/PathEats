@@ -67,9 +67,10 @@ export async function downloadDevBackup(id: string): Promise<{ blob: Blob; filen
   const r = await api.get<Blob>(`/dev/backups/${id}/download`, { responseType: "blob", timeout: 300000 });
   const disposition = r.headers["content-disposition"] || "";
   const filenameMatch = disposition.match(/filename="?([^"]+)"?/i);
+  const extension = r.headers["x-backup-format"] === "csv" ? "csv" : "dump";
   return {
     blob: r.data,
-    filename: filenameMatch?.[1] || `patheats-backup-${id}.dump`,
+    filename: filenameMatch?.[1] || `patheats-backup-${id}.${extension}`,
   };
 }
 export async function deleteDevBackup(id: string): Promise<void> {

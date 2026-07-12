@@ -19,7 +19,13 @@ export async function authMiddleware(req, res, next) {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, JWT_SECRET);
     const { rows } = await db.query(
-      `SELECT id, email, role_scope, is_banned FROM users WHERE id = $1 LIMIT 1`,
+      `SELECT u.id, u.email, u.role_scope, u.role_id::text, u.is_banned,
+              r.name AS role_name, r.base_scope, r.table_privileges,
+              r.system_capabilities, r.grant_option, r.is_system
+       FROM users u
+       JOIN "role" r ON r.id = u.role_id
+       WHERE u.id = $1
+       LIMIT 1`,
       [decoded.sub]
     );
 
@@ -44,6 +50,13 @@ export async function authMiddleware(req, res, next) {
       sub: rows[0].id,
       email: rows[0].email,
       role_scope: roleScope,
+      baseScope: roleScope,
+      roleId: rows[0].role_id,
+      roleName: rows[0].role_name,
+      tablePrivileges: rows[0].table_privileges ?? {},
+      systemCapabilities: rows[0].system_capabilities ?? [],
+      grantOption: Boolean(rows[0].grant_option),
+      isSystemRole: Boolean(rows[0].is_system),
     };
     return next();
   } catch (err) {

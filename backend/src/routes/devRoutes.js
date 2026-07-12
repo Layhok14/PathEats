@@ -25,12 +25,15 @@ import {
   restoreFullDump,
   restoreTableDump,
   restoreCsvFile,
+  withRecoveryLock,
 } from "../services/backupRecoveryService.js";
 import {
   getUserManagementOverview,
   getVendorManagementOverview,
 } from "../services/AdminService.js";
 import { logAuditAction } from "../repositories/adminRepository.js";
+import { requireSystemCapability } from "../middlewares/privilegeGuard.js";
+import { BUILT_IN_ROLE_POLICIES, BUILT_IN_SYSTEM_CAPABILITIES } from "../utils/privilegeRegistry.js";
 
 const MAX_RECOVERY_FILE_BYTES = 100 * 1024 * 1024;
 const REQUIRED_RECOVERY_CONFIRMATION = "RECOVER";
@@ -46,8 +49,8 @@ const upload = multer({
   limits: { fileSize: MAX_RECOVERY_FILE_BYTES },
   fileFilter: (_req, file, cb) => {
     const ext = file.originalname.split(".").pop()?.toLowerCase();
-    if (["dump", "backup", "pgdump", "json", "csv"].includes(ext)) return cb(null, true);
-    cb(new AppError("Only .dump, .backup, .pgdump, .json, and .csv files are allowed", 400));
+    if (["dump", "backup", "pgdump", "csv"].includes(ext)) return cb(null, true);
+    cb(new AppError("Only .dump, .backup, .pgdump, and .csv files are allowed", 400));
   },
 });
 
@@ -73,6 +76,13 @@ function validateRecoveryContent(_content, type) {
 
 function expectedRecoveryConfirmation(type) {
   return type === "PostgreSQL Dump" ? POSTGRES_DUMP_CONFIRMATION : REQUIRED_RECOVERY_CONFIRMATION;
+}
+
+function safeRecoveryError(error, fallback) {
+  console.error("[Recovery] Operation failed:", error);
+  if (error?.safeMessage) return error.safeMessage;
+  if (error?.statusCode && error.statusCode < 500) return error.safeMessage || error.message;
+  return fallback;
 }
 
 
@@ -112,6 +122,8 @@ const devAdminBypass = (req, res, next) => {
       email: "dev@patheat.app",
       role_scope: "DEVELOPER_ADMIN",
       role: "DEVELOPER_ADMIN",
+      tablePrivileges: BUILT_IN_ROLE_POLICIES.DEVELOPER_ADMIN,
+      systemCapabilities: BUILT_IN_SYSTEM_CAPABILITIES.DEVELOPER_ADMIN,
     };
     return next();
   }
@@ -121,6 +133,11 @@ const devAdminBypass = (req, res, next) => {
 
 router.use(devAdminBypass);
 router.use(restrictToRoles("GLOBAL_ADMIN", "DEVELOPER_ADMIN"));
+router.use("/backups", requireSystemCapability("BACKUP"));
+router.use("/recovery", requireSystemCapability("RECOVERY"));
+router.use("/query", requireSystemCapability("QUERY"));
+router.use("/queries", requireSystemCapability("QUERY"));
+router.use("/maintenance", requireSystemCapability("MAINTENANCE"));
 const devOrGlobalAdmin = restrictToRoles("DEVELOPER_ADMIN", "GLOBAL_ADMIN");
 
 const logDevAudit = (req, action, targetType, targetId, details = null) => {
@@ -132,19 +149,10 @@ const logDevAudit = (req, action, targetType, targetId, details = null) => {
 // ── Ensure tables ───────────────────────────────────────────────────────────
 
 const ensureQueryPresetsTable = async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS query_presets (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      title VARCHAR(255) NOT NULL,
-      query_string TEXT NOT NULL,
-      category VARCHAR(20) NOT NULL DEFAULT 'viewing'
-        CHECK (category IN ('viewing', 'altering', 'deleting', 'updating', 'creating')),
-      is_system_preset BOOLEAN DEFAULT FALSE,
-      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-      last_used_at TIMESTAMPTZ DEFAULT NOW(),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
+  const { rows } = await pool.query(`SELECT to_regclass('public.query_presets') AS exists`);
+  if (!rows[0]?.exists) {
+    throw new AppError("Query presets table is not initialized. Run database migrations first.", 503);
+  }
   await pool.query(`
     DELETE FROM query_presets
     WHERE is_system_preset = TRUE
@@ -167,12 +175,7 @@ const ensureQueryPresetsTable = async () => {
       AND qp.title = older.title
       AND (qp.created_at, qp.id::text) > (older.created_at, older.id::text)
   `);
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_query_presets_system_title
-    ON query_presets (title)
-    WHERE is_system_preset = TRUE
-  `);
-  await pool.query(`
+    await pool.query(`
     INSERT INTO query_presets (title, query_string, category, is_system_preset) VALUES
       ('Table Sizes', 'SELECT relname AS table_name, n_live_tup AS row_count, pg_size_pretty(pg_total_relation_size(relid)) AS total_size FROM pg_stat_user_tables ORDER BY n_live_tup DESC', 'viewing', TRUE),
       ('Recent Registrations', 'SELECT id, email, first_name, last_name, role_scope, created_at FROM users WHERE created_at > NOW() - INTERVAL ''7 days'' ORDER BY created_at DESC', 'viewing', TRUE),
@@ -202,75 +205,22 @@ const ensureQueryPresetsTable = async () => {
 };
 
 const ensureBackupRecoveryTables = async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS backup_profiles (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      profile_name VARCHAR(255) NOT NULL,
-      method VARCHAR(50) NOT NULL,
-      scope TEXT DEFAULT 'full',
-      schedule_interval VARCHAR(50),
-      schedule_unit VARCHAR(20),
-      status VARCHAR(20) DEFAULT 'CONFIGURED',
-      size VARCHAR(50) DEFAULT 'N/A',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      last_backup_at TIMESTAMPTZ,
-      next_backup_at TIMESTAMPTZ
-    )
-  `);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS last_backup_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS next_backup_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS last_error TEXT`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS run_count INTEGER NOT NULL DEFAULT 0`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS run_started_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE backup_profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS recovery_operations (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      recovery_type VARCHAR(50) NOT NULL,
-      file_name VARCHAR(255) DEFAULT 'N/A',
-      status VARCHAR(20) DEFAULT 'COMPLETED',
-      message TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS scheduled_backups (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      profile_id UUID REFERENCES backup_profiles(id) ON DELETE CASCADE,
-      profile_name VARCHAR(255),
-      file_name VARCHAR(255) NOT NULL,
-      file_path TEXT NOT NULL,
-      method VARCHAR(50) NOT NULL,
-      scope TEXT,
-      size VARCHAR(50) DEFAULT 'N/A',
-      status VARCHAR(20) DEFAULT 'COMPLETED',
-      message TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`ALTER TABLE scheduled_backups ADD COLUMN IF NOT EXISTS artifact_format VARCHAR(50)`);
-  await pool.query(`ALTER TABLE scheduled_backups ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+  const { rows } = await pool.query(
+    `SELECT to_regclass('public.backup_profiles') AS profiles,
+            to_regclass('public.scheduled_backups') AS scheduled,
+            to_regclass('public.recovery_operations') AS recovery`
+  );
+  if (!rows[0]?.profiles || !rows[0]?.scheduled || !rows[0]?.recovery) {
+    throw new AppError("Backup tables are not initialized. Run database migrations first.", 503);
+  }
   await ensureBackupStorageDir();
 };
 
 const ensureDatabaseActivityLogTable = async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS database_activity_log (
-      id BIGSERIAL PRIMARY KEY,
-      event_type VARCHAR(20) NOT NULL
-        CHECK (event_type IN ('login_success', 'login_failed', 'query_execution')),
-      actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
-      payload TEXT,
-      executed_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_dal_event_type ON database_activity_log(event_type)
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_dal_executed_at ON database_activity_log(executed_at DESC)
-  `);
+  const { rows } = await pool.query(`SELECT to_regclass('public.database_activity_log') AS exists`);
+  if (!rows[0]?.exists) {
+    throw new AppError("Database activity log table is not initialized. Run database migrations first.", 503);
+  }
 };
 
 // ── SQL Validation ──────────────────────────────────────────────────────────
@@ -393,7 +343,7 @@ router.get("/logs", catchAsync(async (req, res) => {
   res.json({ success: true, data: { logs: logs.slice(0, limit), summary: { critical: logs.filter((l) => l.level === "CRITICAL").length, warning: logs.filter((l) => l.level === "WARNING").length, info: logs.filter((l) => l.level === "INFO").length } } });
 }));
 
-// ── Seed (removed — use psql directly or seed-data.sql) ──────────────────────
+// ── Seed (removed — use psql directly or seed.sql) ──────────────────────
 
 // ── API Metrics ─────────────────────────────────────────────────────────────
 
@@ -677,7 +627,15 @@ router.get("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
 router.post("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
   await ensureBackupRecoveryTables();
   const { profileName, method, scope, scheduleInterval, scheduleUnit } = req.body;
-  if (!profileName || !method) throw new AppError("profileName and method are required", 400);
+  const fieldErrors = {};
+  if (!String(profileName ?? "").trim()) fieldErrors.profileName = "Profile name is required.";
+  if (!method) fieldErrors.method = "Select a backup method.";
+  if (Object.keys(fieldErrors).length > 0) {
+    throw new AppError("Backup profile is invalid", 400, {
+      code: "BACKUP_PROFILE_INVALID",
+      fieldErrors,
+    });
+  }
 
   if (!BACKUP_METHODS.has(method)) {
     throw new AppError("Invalid backup method", 400);
@@ -690,7 +648,9 @@ router.post("/backups", devOrGlobalAdmin, catchAsync(async (req, res) => {
   if (scheduleInterval || scheduleUnit) {
     const interval = Number(scheduleInterval);
     if (!Number.isSafeInteger(interval) || interval < 0) {
-      throw new AppError("Schedule interval must be a non-negative integer", 400);
+      throw new AppError("Schedule interval must be a non-negative integer", 400, {
+        fieldErrors: { schedule: "Use a whole number of 0 or more." },
+      });
     }
     if (interval > 0) {
       if (!SCHEDULE_UNITS.has(scheduleUnit)) {
@@ -896,9 +856,9 @@ router.get("/backups/scheduled/:id/download", devOrGlobalAdmin, catchAsync(async
 
   const ext = path.extname(backup.file_name || "").slice(1).toLowerCase() || "dump";
   const filename = backup.file_name || `scheduled-backup.${ext}`;
-  res.setHeader("Content-Type", ext === "json" ? "application/json" : ext === "csv" ? "text/csv" : "application/octet-stream");
+  res.setHeader("Content-Type", ext === "csv" ? "text/csv" : "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.setHeader("X-Backup-Format", ext === "json" ? "patheats-logical-json" : ext === "csv" ? "csv" : "postgres-custom");
+  res.setHeader("X-Backup-Format", ext === "csv" ? "csv" : "postgres-custom");
 
   const stream = createReadStream(backup.file_path);
   stream.on("error", () => {
@@ -950,10 +910,12 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
     throw new AppError("Row Level CSV recovery requires a .csv file", 400);
   }
 
-  const insertOp = async (status, message) => {
+  const insertOp = async (status, message, scope = null) => {
     const r = await db.query(
-      `INSERT INTO recovery_operations (recovery_type, file_name, status, message) VALUES ($1, $2, $3, $4) RETURNING id, recovery_type AS type, file_name AS "fileName", status, message, created_at AS "createdAt"`,
-      [type, fileName, status, message]
+      `INSERT INTO recovery_operations (recovery_type, file_name, scope, actor_id, status, message)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, recovery_type AS type, file_name AS "fileName", scope, status, message, created_at AS "createdAt"`,
+      [type, fileName, scope, nullableUuid(req.user?.sub), status, message]
     );
     return r.rows[0];
   };
@@ -972,23 +934,25 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
       const tableList = inspection.tableNames;
       if (tableList.length === 0) throw new AppError("No public tables found in the dump", 400);
 
-      const isFull = inspection.entryCount >= 5;
-      if (isFull) {
-        await restoreFullDump(temp.dumpPath);
-      } else {
-        for (const t of tableList) {
-          await restoreTableDump(temp.dumpPath, t);
+      await withRecoveryLock(async () => {
+        if (inspection.isFullDatabase) {
+          await restoreFullDump(temp.dumpPath);
+        } else {
+          for (const tableName of tableList) {
+            await restoreTableDump(temp.dumpPath, tableName);
+          }
         }
-      }
+      });
 
       const op = await insertOp(
         "COMPLETED",
-        `PostgreSQL dump restored. ${inspection.entryCount} data entries from "${fileName}" across ${tableList.length} table(s).`
+        `PostgreSQL dump restored. ${inspection.dataEntryCount} data entries across ${tableList.length} table(s).`,
+        inspection.isFullDatabase ? "full" : `tables:${tableList.join(",")}`
       );
       logDevAudit(req, "execute_recovery", "recovery_operations", op.id, { type, fileName, status: "COMPLETED" });
       return res.json({ success: true, data: op });
     } catch (err) {
-      const msg = err.message || "PostgreSQL dump recovery failed";
+      const msg = safeRecoveryError(err, "PostgreSQL dump recovery failed. The database was left unchanged or rolled back.");
       const op = await insertOp("FAILED", msg);
       return res.status(err.statusCode || 500).json({ success: false, data: op, error: msg });
     } finally {
@@ -1012,12 +976,12 @@ router.post("/recovery", devOrGlobalAdmin, upload.single("file"), catchAsync(asy
     try {
       const temp = await writeRecoveryTempFile(req.file);
       tempDir = temp.tempDir;
-      await restoreCsvFile(temp.dumpPath, targetTable);
-      const op = await insertOp("COMPLETED", `CSV data restored into table "${targetTable}" from "${fileName}".`);
+      await withRecoveryLock(() => restoreCsvFile(temp.dumpPath, targetTable));
+      const op = await insertOp("COMPLETED", `CSV rows restored into table "${targetTable}".`, `table:${targetTable}`);
       logDevAudit(req, "execute_recovery", "recovery_operations", op.id, { type, fileName, targetTable, status: "COMPLETED" });
       return res.json({ success: true, data: op });
     } catch (err) {
-      const msg = err.message || "CSV recovery failed";
+      const msg = safeRecoveryError(err, "CSV recovery failed. No CSV changes were committed.");
       const op = await insertOp("FAILED", msg);
       return res.status(err.statusCode || 500).json({ success: false, data: op, error: msg });
     } finally {

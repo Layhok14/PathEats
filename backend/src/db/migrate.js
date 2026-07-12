@@ -7,10 +7,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const MIGRATIONS_DIR = path.join(__dirname, "migrations");
-const INDEXING_FILE = path.join(__dirname, "indexing.sql");
-const RLS_POLICY_FILE = path.join(__dirname, "supabase-rls-policies.sql");
+const INDEXING_FILE = path.join(__dirname, "indexes.sql");
+const RLS_POLICY_FILE = path.join(__dirname, "policies.sql");
 
-const includeRls = process.argv.includes("--include-rls");
+const skipPolicies = process.argv.includes("--skip-policies");
+const onlyArgument = process.argv.find((argument) => argument.startsWith("--only="));
+const onlyFileNames = onlyArgument
+  ? new Set(onlyArgument.slice("--only=".length).split(",").map((name) => name.trim()).filter(Boolean))
+  : null;
 
 async function readSqlFiles(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -45,13 +49,22 @@ async function run() {
   const client = await pool.connect();
 
   try {
-    const migrationFiles = await readSqlFiles(MIGRATIONS_DIR);
+    const allMigrationFiles = await readSqlFiles(MIGRATIONS_DIR);
+    const migrationFiles = onlyFileNames
+      ? allMigrationFiles.filter((file) => onlyFileNames.has(file.name))
+      : allMigrationFiles;
+
+    if (onlyFileNames && migrationFiles.length !== onlyFileNames.size) {
+      const found = new Set(migrationFiles.map((file) => file.name));
+      const missing = [...onlyFileNames].filter((name) => !found.has(name));
+      throw new Error(`Migration files not found: ${missing.join(", ")}`);
+    }
 
     for (const file of migrationFiles) {
       await applySqlFile(client, file);
     }
 
-    const indexingSql = await readOptionalSqlFile(INDEXING_FILE);
+    const indexingSql = onlyFileNames ? "" : await readOptionalSqlFile(INDEXING_FILE);
     if (indexingSql.trim()) {
       await applySqlFile(client, {
         name: path.basename(INDEXING_FILE),
@@ -59,13 +72,13 @@ async function run() {
       });
     }
 
-    if (includeRls) {
+    if (!skipPolicies && !onlyFileNames) {
       await applySqlFile(client, {
         name: path.basename(RLS_POLICY_FILE),
         sql: await fs.readFile(RLS_POLICY_FILE, "utf8"),
       });
-    } else {
-      console.log("Skipped Supabase RLS policies. Re-run with --include-rls after auth IDs are aligned.");
+    } else if (skipPolicies) {
+      console.log("Skipped policies and data integrity constraints (--skip-policies).");
     }
 
     console.log("Database migrations completed.");

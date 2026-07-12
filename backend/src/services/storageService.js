@@ -5,9 +5,11 @@ import { fileURLToPath } from "url";
 import AppError from "../utils/AppError.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOCAL_VENDOR_IMAGE_DIR = path.resolve(__dirname, "../../uploads/vendor-images");
+const LOCAL_VENDOR_IMAGE_DIR = process.env.VENDOR_IMAGE_DIR
+  ? path.resolve(process.env.VENDOR_IMAGE_DIR)
+  : path.resolve(__dirname, "../../../frontend/public/uploads/vendor-images");
 const LOCAL_VENDOR_IMAGE_BUCKET = "local-vendor-images";
-const LOCAL_VENDOR_IMAGE_PREFIX = "/api/uploads/vendor-images";
+const LOCAL_VENDOR_IMAGE_PREFIX = "/uploads/vendor-images";
 const DEFAULT_VENDOR_IMAGE_BUCKET = "vendor-images";
 const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
 

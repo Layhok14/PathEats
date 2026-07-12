@@ -35,6 +35,17 @@ function parseBackupScope(scope = "") {
   return Object.fromEntries(scope.split(";").map((part) => part.split(/:(.*)/s)).filter(([key]) => key));
 }
 
+function saveBackupFile(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onClose: () => void; onCreated: (name: string) => void; tables: string[]; backup?: DevBackup | null }) {
   const initialScope = parseBackupScope(backup?.scope || "");
   const [profileName, setProfileName] = useState(backup?.profileName || "");
@@ -45,14 +56,35 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
   const [rowCondition, setRowCondition] = useState(initialScope.condition || "");
   const [scheduleInterval, setScheduleInterval] = useState(backup?.scheduleInterval || "");
   const [scheduleUnit, setScheduleUnit] = useState(backup?.scheduleUnit || "Hours");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const hasBackupTarget =
-    method === "Entire Database" ||
-    (method === "Specific Tables" && selectedTables.length > 0) ||
-    (method === "Specific Rows" && selectedTable);
-  const canProceed = profileName.trim() && method && hasBackupTarget;
+  function clearFieldError(field: string) {
+    setFieldErrors((current) => ({ ...current, [field]: "" }));
+    setFormError("");
+  }
+
+  function validate(): boolean {
+    const errors: Record<string, string> = {};
+    const interval = scheduleInterval === "" ? 0 : Number(scheduleInterval);
+    if (!profileName.trim()) errors.profileName = "Profile name is required.";
+    else if (profileName.trim().length > 100) errors.profileName = "Use no more than 100 characters.";
+    if (!method) errors.method = "Select a backup method.";
+    if (method === "Specific Tables" && selectedTables.length === 0) errors.tables = "Select at least one table.";
+    if (method === "Specific Rows" && !selectedTable) errors.table = "Select a table.";
+    if (method === "Specific Rows" && rowCondition.trim() && !/^WHERE\s+/i.test(rowCondition.trim())) {
+      errors.condition = "Begin the condition with WHERE.";
+    }
+    if (!Number.isSafeInteger(interval) || interval < 0) errors.schedule = "Use a whole number of 0 or more.";
+    setFieldErrors(errors);
+    setFormError("");
+    return Object.keys(errors).length === 0;
+  }
 
   const handleCreate = async () => {
+    if (!validate()) return;
+    setSaving(true);
     try {
       let scope = "";
       if (method === "Entire Database") {
@@ -71,17 +103,30 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
         scheduleInterval: scheduleInterval || null,
         scheduleUnit: scheduleInterval ? scheduleUnit : null,
       };
-      if (backup) await updateDevBackup(backup.id, payload);
-      else await createDevBackup({
-        ...payload,
-        scheduleInterval: payload.scheduleInterval || undefined,
-        scheduleUnit: payload.scheduleUnit || undefined,
-      });
+      if (backup) {
+        await updateDevBackup(backup.id, payload);
+        toast.success("Backup profile updated.");
+      } else {
+        const created = await createDevBackup({
+          ...payload,
+          scheduleInterval: payload.scheduleInterval || undefined,
+          scheduleUnit: payload.scheduleUnit || undefined,
+        });
+        const { blob, filename } = await downloadDevBackup(created.id);
+        saveBackupFile(blob, filename);
+        toast.success(`Backup created and downloaded as ${filename}.`);
+      }
 
       onCreated(profileName.trim());
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[BackupCreator] Failed:", err);
-      toast.error(backup ? "Failed to update backup profile." : "Failed to create backup profile.");
+      const response = (err as { response?: { data?: { message?: string; fieldErrors?: Record<string, string> } } })?.response?.data;
+      if (response?.fieldErrors) setFieldErrors(response.fieldErrors);
+      const message = response?.message || (backup ? "Failed to update backup profile." : "Failed to create or download backup.");
+      setFormError(message);
+      toast.error(message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -98,18 +143,20 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
         <div className="p-6 flex flex-col gap-4">
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Profile Name</label>
-            <input type="text" value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="e.g. Daily_Full_Main_DB" className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8]" />
+            <input type="text" aria-invalid={Boolean(fieldErrors.profileName)} value={profileName} onChange={(e) => { setProfileName(e.target.value); clearFieldError("profileName"); }} placeholder="e.g. Daily_Full_Main_DB" className={`w-full px-3 py-2 text-[13px] border rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] ${fieldErrors.profileName ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
+            {fieldErrors.profileName && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.profileName}</p>}
           </div>
 
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Backup Method</label>
             <div className="flex gap-3">
               {BACKUP_METHODS.map((m) => (
-                <button key={m} onClick={() => setMethod(m)} className={`flex-1 px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors ${method === m ? "bg-[#006e2f] text-white border-[#006e2f]" : "border-[#e2e8f0] text-[#374151] hover:bg-gray-50"}`}>
+                <button key={m} onClick={() => { setMethod(m); clearFieldError("method"); }} className={`flex-1 px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors ${method === m ? "bg-[#006e2f] text-white border-[#006e2f]" : "border-[#e2e8f0] text-[#374151] hover:bg-gray-50"}`}>
                   {m}
                 </button>
               ))}
             </div>
+            {fieldErrors.method && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.method}</p>}
           </div>
 
           {method === "Entire Database" && (
@@ -127,11 +174,12 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
               <div className="grid grid-cols-3 gap-2 max-h-[160px] overflow-y-auto border border-[#e2e8f0] rounded-lg p-2">
                 {tables.map((t) => (
                   <label key={t} className="flex items-center gap-1.5 text-[12px] text-[#374151] cursor-pointer">
-                    <input type="checkbox" checked={selectedTables.includes(t)} onChange={() => setSelectedTables((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])} className="accent-[#006e2f]" />
+                    <input type="checkbox" checked={selectedTables.includes(t)} onChange={() => { setSelectedTables((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]); clearFieldError("tables"); }} className="accent-[#006e2f]" />
                     {t}
                   </label>
                 ))}
               </div>
+              {fieldErrors.tables && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.tables}</p>}
             </div>
           )}
 
@@ -139,21 +187,24 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
             <div className="flex flex-col gap-3">
               <div>
                 <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Select Table</label>
-                <select value={selectedTable} onChange={(e) => setSelectedTable(e.target.value)} className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
+                <select value={selectedTable} aria-invalid={Boolean(fieldErrors.table)} onChange={(e) => { setSelectedTable(e.target.value); clearFieldError("table"); }} className={`w-full px-3 py-2 text-[13px] border rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white ${fieldErrors.table ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`}>
                   <option value="">— Select —</option>
                   {tables.map((t) => (<option key={t} value={t}>{t}</option>))}
                 </select>
+                {fieldErrors.table && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.table}</p>}
               </div>
               <div>
                 <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">WHERE Condition (optional)</label>
                 <input
                   type="text"
                   value={rowCondition}
-                  onChange={(e) => setRowCondition(e.target.value)}
+                  onChange={(e) => { setRowCondition(e.target.value); clearFieldError("condition"); }}
                   placeholder='e.g. WHERE created_at > NOW() - INTERVAL &apos;30 days&apos;'
-                  className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] font-mono"
+                  aria-invalid={Boolean(fieldErrors.condition)}
+                  className={`w-full px-3 py-2 text-[13px] border rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] font-mono ${fieldErrors.condition ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`}
                 />
-                <p className="text-[11px] text-[#64748b] mt-1">Generates a verified logical backup containing only rows matching this condition.</p>
+                {fieldErrors.condition && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.condition}</p>}
+                <p className="text-[11px] text-[#64748b] mt-1">Downloads a CSV containing only matching rows. Restoring it updates matching primary keys and preserves unrelated data.</p>
               </div>
             </div>
           )}
@@ -161,18 +212,20 @@ function BackupCreatorModal({ onClose, onCreated, tables, backup = null }: { onC
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Schedule (optional)</label>
             <div className="flex gap-2 items-center">
-              <input type="number" min="0" step="1" value={scheduleInterval} onChange={(e) => setScheduleInterval(e.target.value)} placeholder="0 = none" className="w-24 px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8]" />
+              <input type="number" min="0" step="1" aria-invalid={Boolean(fieldErrors.schedule)} value={scheduleInterval} onChange={(e) => { setScheduleInterval(e.target.value); clearFieldError("schedule"); }} placeholder="0 = none" className={`w-24 px-3 py-2 text-[13px] border rounded-lg outline-none focus:border-[#006e2f] text-[#374151] placeholder:text-[#94a3b8] ${fieldErrors.schedule ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
               <select value={scheduleUnit} onChange={(e) => setScheduleUnit(e.target.value)} className="px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
                 {SCHEDULE_UNITS.map((u) => (<option key={u} value={u}>{u}</option>))}
               </select>
             </div>
+            {fieldErrors.schedule && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.schedule}</p>}
             <p className="text-[11px] text-[#94a3b8] mt-1">Set to 0 or leave empty for no schedule.</p>
           </div>
+          {formError && <p role="alert" className="rounded-lg border border-[#f2b8b5] bg-[#fff8f7] px-3 py-2 text-[12px] text-[#ba1a1a]">{formError}</p>}
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
           <button onClick={onClose} className="px-4 py-1.5 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] bg-white hover:bg-gray-50">Cancel</button>
-          <button onClick={handleCreate} disabled={!canProceed} className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">{backup ? "Save Changes" : "Create Backup Profile"}</button>
+          <button onClick={handleCreate} disabled={saving} className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">{saving ? (backup ? "Saving..." : "Creating backup...") : backup ? "Save Changes" : "Create & Download"}</button>
         </div>
       </div>
     </div>
@@ -186,6 +239,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [selectedTable, setSelectedTable] = useState("");
   const [tables, setTables] = useState<DevTableInfo[]>([]);
@@ -215,9 +269,10 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   const handleFileDrop = (droppedFile: File) => {
     setError("");
     setSuccess("");
+    setFieldErrors((current) => ({ ...current, file: "", recoveryType: "" }));
 
     if (droppedFile.size > MAX_RECOVERY_FILE_BYTES) {
-      setError("File exceeds 100 MB limit.");
+      setFieldErrors((current) => ({ ...current, file: "File exceeds the 100 MB limit." }));
       setFile(null);
       return;
     }
@@ -228,7 +283,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
     } else if (lowerName.endsWith(".dump") || lowerName.endsWith(".backup") || lowerName.endsWith(".pgdump")) {
       setRecoveryType("PostgreSQL Dump");
     } else {
-      setError("Unsupported file type. Use .dump, .backup, .pgdump, or .csv files.");
+      setFieldErrors((current) => ({ ...current, file: "Use a .dump, .backup, .pgdump, or .csv file." }));
       setFile(null);
       return;
     }
@@ -237,21 +292,25 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
   };
 
   const handleReview = () => {
-    if (!recoveryType) { setError("Select a recovery type."); return; }
-    if (!file) { setError("Upload a file."); return; }
-    if (recoveryType === "Row Level CSV" && !selectedTable) { setError("Select a target table."); return; }
+    const errors: Record<string, string> = {};
+    if (!recoveryType) errors.recoveryType = "Select a recovery type.";
+    if (!file) errors.file = "Choose a recovery file.";
+    if (recoveryType === "Row Level CSV" && !selectedTable) errors.targetTable = "Select a target table.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setConfirmationText("");
     setStep("confirm");
   };
 
   const handleInitiate = async () => {
     if (confirmationText.trim() !== requiredConfirmation) {
-      setError(`Type ${requiredConfirmation} to confirm this recovery.`);
+      setFieldErrors((current) => ({ ...current, confirmation: `Type ${requiredConfirmation} exactly.` }));
       return;
     }
     try {
       setProcessing(true);
       setError("");
+      setFieldErrors((current) => ({ ...current, confirmation: "" }));
 
       await initiateDevRecovery({
         type: recoveryType,
@@ -302,17 +361,18 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
               </label>
               <p className="mt-1 text-[11px] text-[#64748b]">
                 {recoveryType === "PostgreSQL Dump"
-                  ? "A verified full database dump replaces the public schema with automatic rollback protection. Partial dumps merge through an isolated staging schema."
-                  : "Logical and CSV recovery merge backed-up rows by primary key and preserve unrelated rows and tables."}
+                  ? "A verified full database dump restores the public schema in one transaction. A failed restore commits no database changes."
+                  : "CSV recovery updates rows by primary key and preserves unrelated rows and tables."}
               </p>
               <input
                 id="recovery-confirmation"
                 type="text"
                 value={confirmationText}
-                onChange={(e) => setConfirmationText(e.target.value.toUpperCase())}
+                onChange={(e) => { setConfirmationText(e.target.value.toUpperCase()); setFieldErrors((current) => ({ ...current, confirmation: "" })); }}
                 placeholder={requiredConfirmation}
                 className="mt-3 w-full rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] font-semibold tracking-widest text-[#374151] outline-none focus:border-[#ba1a1a]"
               />
+              {fieldErrors.confirmation && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.confirmation}</p>}
             </div>
             {error && (
               <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
@@ -350,24 +410,26 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
         <div className="p-6 flex flex-col gap-4">
           <div>
             <label className="text-[12px] font-semibold text-[#64748b] mb-2 block">Recovery Type</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {RECOVERY_TYPES.map((t) => (
-                <button key={t} onClick={() => { setRecoveryType(t); setError(""); setSuccess(""); setFile(null); }}
+                <button key={t} onClick={() => { setRecoveryType(t); setError(""); setSuccess(""); setFile(null); setFieldErrors({}); }}
                   className={`px-3 py-2 rounded-lg text-[12px] font-medium border transition-colors ${recoveryType === t ? "bg-[#006e2f] text-white border-[#006e2f]" : "border-[#e2e8f0] text-[#374151] hover:bg-gray-50"}`}>
                   {t}
                 </button>
               ))}
             </div>
+            {fieldErrors.recoveryType && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.recoveryType}</p>}
           </div>
 
           {recoveryType === "Row Level CSV" && (
             <div className="flex flex-col gap-3">
               <div>
                 <label className="text-[12px] font-semibold text-[#64748b] mb-1 block">Select Target Table</label>
-                <select value={selectedTable} onChange={(e) => setSelectedTable(e.target.value)} className="w-full px-3 py-2 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white">
+                <select value={selectedTable} aria-invalid={Boolean(fieldErrors.targetTable)} onChange={(e) => { setSelectedTable(e.target.value); setFieldErrors((current) => ({ ...current, targetTable: "" })); }} className={`w-full px-3 py-2 text-[13px] border rounded-lg outline-none focus:border-[#006e2f] text-[#374151] bg-white ${fieldErrors.targetTable ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`}>
                   <option value="">— Select —</option>
                   {tables.map((t) => (<option key={t.name} value={t.name}>{t.name}</option>))}
                 </select>
+                {fieldErrors.targetTable && <p className="mt-1 text-[11px] text-[#ba1a1a]">{fieldErrors.targetTable}</p>}
               </div>
             </div>
           )}
@@ -395,6 +457,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
               </>
             )}
           </div>
+          {fieldErrors.file && <p className="-mt-3 text-[11px] text-[#ba1a1a]">{fieldErrors.file}</p>}
 
           {error && (
             <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
@@ -413,7 +476,7 @@ function RecoveryModal({ onClose, onInitiated }: { onClose: () => void; onInitia
 
         <div className="flex items-center justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
           <button onClick={onClose} className="px-4 py-1.5 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] bg-white hover:bg-gray-50">Cancel</button>
-          <button onClick={handleReview} disabled={!recoveryType || !file || processing}
+          <button onClick={handleReview} disabled={processing}
             className="px-4 py-1.5 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50 disabled:cursor-not-allowed">
             Review & Confirm
           </button>
@@ -488,14 +551,7 @@ function BackupTab() {
   const handleDownload = async (backup: DevBackup) => {
     try {
       const { blob, filename } = await downloadDevBackup(backup.id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
+      saveBackupFile(blob, filename);
       setExecutionLog((prev) => [`[${new Date().toLocaleTimeString()}] Local backup downloaded: ${filename}`, ...prev]);
       toast.success("Backup downloaded to your device.");
       await loadBackups();

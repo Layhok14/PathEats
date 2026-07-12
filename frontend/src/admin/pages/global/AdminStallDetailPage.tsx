@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowLeft, Star, MapPin, Store, ListOrdered, Edit, Trash2,
-  CheckSquare, Pencil, X, Plus, Search, Expand, Clock, DollarSign, Camera
+  CheckSquare, Pencil, X, Plus, Search, Expand, DollarSign
 } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -23,7 +23,7 @@ import { portalPath, useManagementPortalBase } from "../../utils/portalPath";
 
 type Tab = "info" | "menu" | "reviews";
 
-function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; onChange: (lat: number, lng: number) => void }) {
+function LocationPreviewMap({ lat, lng, editable = false, onChange }: { lat: number; lng: number; editable?: boolean; onChange: (lat: number, lng: number) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -83,21 +83,23 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
       map.resize();
       const el = document.createElement("div");
       el.innerHTML = `<svg width="28" height="40" viewBox="0 0 24 40" fill="none"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 28 12 28s12-19 12-28C24 5.4 18.6 0 12 0z" fill="#006e2f" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="5" fill="white"/></svg>`;
-      el.style.cursor = "grab";
+      el.style.cursor = editable ? "grab" : "default";
       el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
-      const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, draggable: true })
+      const marker = new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, draggable: editable })
         .setLngLat([lng, lat])
         .addTo(map);
       markerRef.current = marker;
 
-      marker.on("dragend", () => {
-        const ll = marker.getLngLat();
-        onChange(ll.lat, ll.lng);
-      });
-      map.on("click", (e) => {
-        marker.setLngLat(e.lngLat);
-        onChange(e.lngLat.lat, e.lngLat.lng);
-      });
+      if (editable) {
+        marker.on("dragend", () => {
+          const ll = marker.getLngLat();
+          onChange(ll.lat, ll.lng);
+        });
+        map.on("click", (e) => {
+          marker.setLngLat(e.lngLat);
+          onChange(e.lngLat.lat, e.lngLat.lng);
+        });
+      }
     });
 
     return () => {
@@ -107,6 +109,10 @@ function LocationPreviewMap({ lat, lng, onChange }: { lat: number; lng: number; 
       markerRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    markerRef.current?.setLngLat([lng, lat]);
+  }, [lat, lng]);
 
   return (
     <div style={{ position: "relative", borderRadius: "8px", overflow: "hidden" }}>
@@ -201,11 +207,89 @@ function MenuItemModal({
             </button>
             <span className="text-[13px] text-[#0b1c30]">{form.isAvailable ? "Available" : "Unavailable"}</span>
           </div>
+          {item?.id && (
+            <p className="rounded-md bg-[#f1f5f9] px-3 py-2 text-[11px] text-[#64748b]">
+              Price and availability apply only to this stall. Other catalog details are shared with every linked stall.
+            </p>
+          )}
           <div className="flex justify-end gap-3 border-t border-[#e2e8f0] pt-4">
             <button type="button" onClick={onClose} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26]">{saving ? "Saving..." : "Save"}</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function CatalogPicker({
+  items,
+  onAdd,
+  onClose,
+}: {
+  items: AdminMenuItemRow[];
+  onAdd: (item: AdminMenuItemRow) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredItems = items.filter((item) =>
+    !normalizedSearch ||
+    item.name.toLowerCase().includes(normalizedSearch) ||
+    item.description?.toLowerCase().includes(normalizedSearch)
+  );
+
+  const addItem = async (item: AdminMenuItemRow) => {
+    setAddingId(item.id);
+    try {
+      await onAdd(item);
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#e2e8f0] px-6 py-4">
+          <h2 className="text-[16px] font-bold text-[#0b1c30]">Add Existing Menu Item</h2>
+          <button onClick={onClose} className="rounded p-1 text-[#64748b] hover:bg-[#f1f5f9]" aria-label="Close catalog">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="relative px-6 py-4">
+          <Search size={15} className="absolute left-9 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search the vendor catalog"
+            className="w-full rounded-md border border-[#e2e8f0] py-2 pl-9 pr-3 text-[13px] outline-none focus:border-[#006e2f]"
+          />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">
+          {filteredItems.length === 0 ? (
+            <p className="py-8 text-center text-[13px] text-[#64748b]">No unlinked catalog items found.</p>
+          ) : (
+            <div className="divide-y divide-[#e2e8f0]">
+              {filteredItems.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-[#0b1c30]">{item.name}</p>
+                    <p className="text-[12px] text-[#64748b]">{formatPrice(Number(item.price))} · {item.category}</p>
+                  </div>
+                  <button
+                    onClick={() => addItem(item)}
+                    disabled={addingId !== null}
+                    className="rounded-md bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {addingId === item.id ? "Adding..." : "Add"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -219,10 +303,13 @@ export default function AdminStallDetailPage() {
   const [stall, setStall] = useState<AdminStallRow | null>(null);
   const [menuItems, setMenuItems] = useState<AdminMenuItemRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingInfo, setSavingInfo] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<AdminStallRow>>({});
   const [editItem, setEditItem] = useState<Partial<AdminMenuItemRow> | null>(null);
   const [showCreateItem, setShowCreateItem] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<AdminMenuItemRow[]>([]);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteItemTarget, setDeleteItemTarget] = useState<AdminMenuItemRow | null>(null);
@@ -239,7 +326,12 @@ export default function AdminStallDetailPage() {
         getAdminPlaceCategories().catch(() => [] as { name: string }[]),
       ]);
       setStall(stallRes.data.data);
-      setEditForm(stallRes.data.data);
+      const loadedStall = stallRes.data.data;
+      setEditForm({
+        ...loadedStall,
+        latitude: loadedStall.location?.coordinates?.[1],
+        longitude: loadedStall.location?.coordinates?.[0],
+      });
       setMenuItems(menuRes.data.data);
       if (catRes.length > 0) setCategories(catRes.map((c: { name: string }) => c.name));
     } catch (err) {
@@ -254,16 +346,41 @@ export default function AdminStallDetailPage() {
 
   const stallItems = menuItems;
 
+  const isDirty = useMemo(() => {
+    if (!stall) return false;
+    const origLat = stall.location?.coordinates?.[1];
+    const origLng = stall.location?.coordinates?.[0];
+    return (
+      String(editForm.name ?? "") !== String(stall.name ?? "") ||
+      String(editForm.description ?? "") !== String(stall.description ?? "") ||
+      String(editForm.address ?? "") !== String(stall.address ?? "") ||
+      String(editForm.priceRange ?? "") !== String(stall.priceRange ?? "") ||
+      String(editForm.photoUrl ?? "") !== String(stall.photoUrl ?? "") ||
+      Number(editForm.latitude ?? origLat) !== Number(origLat) ||
+      Number(editForm.longitude ?? origLng) !== Number(origLng)
+    );
+  }, [editForm, stall]);
+
   const handleSaveInfo = async () => {
     if (!stallId || !stall) return;
+    const latitude = Number(editForm.latitude);
+    const longitude = Number(editForm.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      toast.error("Enter valid latitude and longitude coordinates.");
+      return;
+    }
+    setSavingInfo(true);
     try {
-      await api.patch(`/admin/stalls/${stallId}`, editForm);
-      setStall({ ...stall, ...editForm });
+      const { data } = await api.patch<{ success: boolean; data: AdminStallRow }>(`/admin/stalls/${stallId}`, editForm);
+      setStall(data.data);
+      setEditForm({ ...data.data, latitude: data.data.location?.coordinates?.[1], longitude: data.data.location?.coordinates?.[0] });
       setEditMode(false);
       setSuccessMsg("Stall details updated.");
-    } catch (err) {
+    } catch (err: any) {
       console.error("[AdminStallDetailPage] Failed to update stall:", err);
-      toast.error("Could not update stall.");
+      toast.error(err?.response?.data?.message || "Could not update stall.");
+    } finally {
+      setSavingInfo(false);
     }
   };
 
@@ -297,13 +414,43 @@ export default function AdminStallDetailPage() {
   const handleSaveItem = async (data: { name: string; price: string; category: string; description?: string; imageUrl?: string; isAvailable?: boolean }) => {
     if (!stallId) return;
     if (editItem?.id) {
-      await api.patch(`/admin/menu-items/${editItem.id}`, data);
+      await api.patch(`/admin/menu-items/${editItem.id}`, { ...data, placeId: stallId });
       setSuccessMsg("Menu item updated.");
     } else {
       await api.post(`/admin/stalls/${stallId}/menu-items`, data);
       setSuccessMsg("Menu item created.");
     }
     await loadData();
+  };
+
+  const openCatalog = async () => {
+    if (!stall?.ownerId) return;
+    try {
+      const { data } = await api.get<{ success: boolean; data: AdminMenuItemRow[] }>("/admin/menu-items", {
+        params: { ownerId: stall.ownerId },
+      });
+      const linkedIds = new Set(menuItems.map((item) => item.id));
+      setCatalogItems(data.data.filter((item) => !linkedIds.has(item.id)));
+      setShowCatalog(true);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Could not load the vendor menu catalog.");
+    }
+  };
+
+  const handleAddExisting = async (item: AdminMenuItemRow) => {
+    if (!stallId) return;
+    try {
+      await api.put(`/admin/stalls/${stallId}/menu-item-links/${item.id}`, {
+        price: item.price,
+        isAvailable: true,
+      });
+      setShowCatalog(false);
+      setSuccessMsg("Menu item added to the stall.");
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Could not add the menu item.");
+      throw error;
+    }
   };
 
   const handleDeleteItem = async (item: AdminMenuItemRow) => {
@@ -410,18 +557,19 @@ export default function AdminStallDetailPage() {
                 <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
                   <h3 className="text-[16px] font-bold text-[#0b1c30] mb-4">Location</h3>
                   <LocationPreviewMap
-                    lat={stall.location?.coordinates?.[1] ?? 11.5564}
-                    lng={stall.location?.coordinates?.[0] ?? 104.9282}
+                    lat={Number(editForm.latitude ?? stall.location?.coordinates?.[1] ?? 11.5564)}
+                    lng={Number(editForm.longitude ?? stall.location?.coordinates?.[0] ?? 104.9282)}
+                    editable
                     onChange={(lat, lng) => setEditForm(f => ({ ...f, latitude: lat, longitude: lng }))}
                   />
                   <div className="grid grid-cols-2 gap-3 mt-4">
                     <div>
                       <label className="text-[12px] font-medium text-[#64748b]">Latitude</label>
-                      <input type="number" step="0.0001" value={stall.location?.coordinates?.[1] ?? ""} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none bg-gray-50 text-[#94a3b8]" readOnly />
+                      <input type="number" step="0.0001" value={editForm.latitude ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, latitude: Number(event.target.value) }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
                     </div>
                     <div>
                       <label className="text-[12px] font-medium text-[#64748b]">Longitude</label>
-                      <input type="number" step="0.0001" value={stall.location?.coordinates?.[0] ?? ""} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none bg-gray-50 text-[#94a3b8]" readOnly />
+                      <input type="number" step="0.0001" value={editForm.longitude ?? ""} onChange={(event) => setEditForm((current) => ({ ...current, longitude: Number(event.target.value) }))} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
                     </div>
                   </div>
                 </div>
@@ -431,7 +579,7 @@ export default function AdminStallDetailPage() {
                 <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6 space-y-5">
                   <div className="flex items-center justify-between">
                     <h3 className="text-[16px] font-bold text-[#0b1c30]">Basic Information</h3>
-                    <button onClick={() => navigate(portalPath(portalBase, vendorId ? `/vendors/${vendorId}/stall/${stallId}/edit` : `/stalls/stall/${stallId}/edit`))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#475569] text-[12px] font-medium hover:bg-[#e2e8f0]">
+                    <button onClick={() => setEditMode(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f1f5f9] text-[#475569] text-[12px] font-medium hover:bg-[#e2e8f0]">
                       <Edit size={13} /> Edit
                     </button>
                   </div>
@@ -487,6 +635,7 @@ export default function AdminStallDetailPage() {
                         <LocationPreviewMap
                           lat={stall.location.coordinates[1]}
                           lng={stall.location.coordinates[0]}
+                          editable={false}
                           onChange={() => {}}
                         />
                         <div className="grid grid-cols-2 gap-3 mt-4">
@@ -511,8 +660,9 @@ export default function AdminStallDetailPage() {
             <div className="flex items-center justify-end gap-3">
               {editMode ? (
                 <>
+                  {isDirty && <span className="text-[11px] text-amber-600 mr-auto">Unsaved changes</span>}
                   <button onClick={() => { setEditMode(false); setEditForm(stall); }} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
-                  <button onClick={handleSaveInfo} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26]">Save Changes</button>
+                  <button onClick={handleSaveInfo} disabled={savingInfo || !isDirty} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-60 disabled:cursor-not-allowed">{savingInfo ? "Saving..." : "Save Changes"}</button>
                 </>
               ) : (
                 <>
@@ -540,9 +690,14 @@ export default function AdminStallDetailPage() {
             <div className="bg-white rounded-xl border border-[#e2e8f0] shadow-sm p-6">
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-[16px] font-bold text-[#0b1c30]">Menu Items ({stallItems.length})</h3>
-                <button onClick={() => setShowCreateItem(true)} className="flex items-center gap-1.5 rounded-lg bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
-                  <Plus size={14} /> Add Item
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={openCatalog} className="flex items-center gap-1.5 rounded-md border border-[#bccbb9] px-3 py-1.5 text-[12px] font-semibold text-[#006e2f] hover:bg-green-50">
+                    <ListOrdered size={14} /> Add Existing
+                  </button>
+                  <button onClick={() => setShowCreateItem(true)} className="flex items-center gap-1.5 rounded-md bg-[#006e2f] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#005a26]">
+                    <Plus size={14} /> Create New
+                  </button>
+                </div>
               </div>
               {stallItems.length === 0 ? (
                 <p className="py-10 text-center text-[13px] text-[#94a3b8]">No menu items for this stall.</p>
@@ -605,6 +760,14 @@ export default function AdminStallDetailPage() {
           onClose={() => setShowCreateItem(false)}
           onSave={handleSaveItem}
           categories={categories}
+        />
+      )}
+
+      {showCatalog && (
+        <CatalogPicker
+          items={catalogItems}
+          onAdd={handleAddExisting}
+          onClose={() => setShowCatalog(false)}
         />
       )}
 
