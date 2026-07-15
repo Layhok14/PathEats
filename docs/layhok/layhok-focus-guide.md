@@ -31,6 +31,7 @@ Focus on:
 Read:
 
 - [admin-role-user-management-guide.md](D:\Desktop\CADT\Year_2\Term3\Project\Food\Update\PathEats\docs\shared\admin-role-user-management-guide.md)
+- [authentication-authorization-password-guide.md](D:\Desktop\CADT\Year_2\Term3\Project\Food\Update\PathEats\docs\shared\authentication-authorization-password-guide.md)
 
 Focus on:
 
@@ -38,6 +39,10 @@ Focus on:
 - how users are assigned by `roleId`
 - how backend derives `role_scope`
 - which files own create role, create user, update role, update user
+- why editing an existing role affects backend permission checks on the next API request
+- why frontend menu visibility may need refresh or re-login after role changes
+- why custom roles use existing interfaces instead of creating a new interface automatically
+- how JWT, refresh token, and SMTP forgot-password flow work at a simple level
 
 ### 3. Backup and recovery
 
@@ -61,15 +66,25 @@ Focus on:
 - `backend/src/routes/devRoutes.js`
 - `backend/src/controllers/adminController.js`
 - `backend/src/services/AdminService.js`
+- `backend/src/services/AuthService.js`
+- `backend/src/services/emailService.js`
+- `backend/src/middlewares/authMiddleware.js`
+- `backend/src/middlewares/privilegeGuard.js`
 - `backend/src/services/backupService.js`
 - `backend/src/services/backupRecoveryService.js`
 - `backend/src/repositories/adminRepository.js`
+- `backend/src/repositories/TokenRepository.js`
+- `backend/src/repositories/OtpRepository.js`
 
 ## Simple questions you should be able to answer
 
 - Where does real permission checking happen?
 - How is a user linked to a role?
 - Why is backend more important than frontend for security?
+- If an existing role is edited, what updates immediately and what may need refresh?
+- Do new custom roles get a brand-new interface automatically?
+- What is JWT used for?
+- What does SMTP do in forgot password?
 - Why is row backup downloaded as CSV?
 - Why are some tables real but not shown in the main ERD?
 
@@ -89,6 +104,7 @@ Focus on:
 Use these docs first:
 - docs/shared/system-data-flow-guide.md
 - docs/shared/admin-role-user-management-guide.md
+- docs/shared/authentication-authorization-password-guide.md
 - docs/shared/backup-recovery-guide.md
 - docs/shared/database-presentation-qa-guide.md
 

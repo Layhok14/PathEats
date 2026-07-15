@@ -151,6 +151,82 @@ class UserRepository {
     return rows[0] || null;
   }
 
+  async findPreferences(userId) {
+    const { rows } = await db.query(
+      `SELECT id, user_id, search_radius, theme, is_active, created_at, updated_at
+       FROM user_preferences
+       WHERE user_id = $1
+       LIMIT 1`,
+      [userId]
+    );
+    return rows[0] || null;
+  }
+
+  async findProfileImage(userId) {
+    const { rows } = await db.query(
+      `SELECT id, user_id, bucket_name, object_path, uploaded_by,
+              mime_type, size_bytes, alt_text, created_at, updated_at
+       FROM user_profile_images
+       WHERE user_id = $1
+       LIMIT 1`,
+      [userId]
+    );
+    return rows[0] || null;
+  }
+
+  async upsertPreferences(userId, data) {
+    const currentPreferences = await this.findPreferences(userId);
+    const nextPreferences = {
+      searchRadius: data.search_radius ?? currentPreferences?.search_radius ?? 100,
+      theme: data.theme ?? currentPreferences?.theme ?? "light",
+      isActive: data.is_active ?? currentPreferences?.is_active ?? true,
+    };
+
+    const { rows } = await db.query(
+      `INSERT INTO user_preferences (user_id, search_radius, theme, is_active)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id)
+       DO UPDATE SET
+         search_radius = EXCLUDED.search_radius,
+         theme = EXCLUDED.theme,
+         is_active = EXCLUDED.is_active,
+         updated_at = NOW()
+       RETURNING id, user_id, search_radius, theme, is_active, created_at, updated_at`,
+      [userId, nextPreferences.searchRadius, nextPreferences.theme, nextPreferences.isActive]
+    );
+    return rows[0];
+  }
+
+  async upsertProfileImage(userId, storageImage) {
+    const { rows } = await db.query(
+      `INSERT INTO user_profile_images (
+         user_id, bucket_name, object_path, uploaded_by,
+         mime_type, size_bytes, alt_text
+       )
+       VALUES ($1, $2, $3, $1, $4, $5, $6)
+       ON CONFLICT (user_id)
+       DO UPDATE SET
+         bucket_name = EXCLUDED.bucket_name,
+         object_path = EXCLUDED.object_path,
+         uploaded_by = EXCLUDED.uploaded_by,
+         mime_type = EXCLUDED.mime_type,
+         size_bytes = EXCLUDED.size_bytes,
+         alt_text = EXCLUDED.alt_text,
+         updated_at = NOW()
+       RETURNING id, user_id, bucket_name, object_path, uploaded_by,
+                 mime_type, size_bytes, alt_text, created_at, updated_at`,
+      [
+        userId,
+        storageImage.bucketName,
+        storageImage.objectPath,
+        storageImage.mimeType,
+        storageImage.sizeBytes,
+        storageImage.altText || null,
+      ]
+    );
+    return rows[0];
+  }
+
   /**
    * Update user's password hash.
    */

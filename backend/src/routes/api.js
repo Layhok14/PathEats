@@ -5,6 +5,7 @@ import vendorRoutes from "./vendorRoutes.js";
 import adminRoutes from "./adminRoutes.js";
 import devRoutes from "./devRoutes.js";
 import placesRoutes from "./placesRoutes.js";
+import storageRoutes from "./storageRoutes.js";
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.get("/health", (req, res) => {
 
 // ── Domain Routes ──────────────────────────────────────────────────────────
 router.use("/auth", authRoutes);       // Public
+router.use("/storage", storageRoutes); // Public signed image URLs
 router.use("/user", userRoutes);       // CONSUMER
 router.use("/vendor", vendorRoutes);   // VENDOR
 router.use("/admin", adminRoutes);     // GLOBAL_ADMIN

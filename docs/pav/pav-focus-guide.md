@@ -57,6 +57,18 @@ Focus on:
 - simple difference between dump and CSV
 - why wrong table choice matters for business data
 
+### 4. Light login and permission understanding
+
+Read:
+
+- [authentication-authorization-password-guide.md](D:\Desktop\CADT\Year_2\Term3\Project\Food\Update\PathEats\docs\shared\authentication-authorization-password-guide.md)
+
+Focus on:
+
+- authentication means proving who the user is
+- authorization means checking what the vendor or business-side user can do
+- backend permission checks matter more than frontend menu visibility
+
 ## Code areas to know
 
 - `frontend/src/vendor/pages/StallCreatePage.tsx`
@@ -67,6 +79,8 @@ Focus on:
 - `backend/src/services/VendorService.js`
 - `backend/src/repositories/VendorRepository.js`
 - `backend/src/repositories/PlaceRepository.js`
+- `backend/src/middlewares/authMiddleware.js`
+- `backend/src/middlewares/privilegeGuard.js`
 
 ## Simple questions you should be able to answer
 
@@ -74,6 +88,7 @@ Focus on:
 - Which tables are most important for vendor features?
 - Why is ownership checking important?
 - What links menu items to places?
+- What is the difference between login and permission checking?
 - Why should not every internal table appear in the main ERD?
 
 ## AI prompt if you need help
@@ -93,6 +108,7 @@ Use these docs first:
 - docs/shared/system-data-flow-guide.md
 - docs/shared/database-design-and-erd-guide.md
 - docs/shared/backup-recovery-guide.md
+- docs/shared/authentication-authorization-password-guide.md
 
 Do not make it long.
 I want the important flow, files, and likely questions only.

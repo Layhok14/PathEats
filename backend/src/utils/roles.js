@@ -10,7 +10,6 @@ export const PUBLIC_REGISTRATION_ROLES = new Set([
   ROLES.CONSUMER,
   ROLES.VENDOR,
 ]);
-
 export const normalizeRoleScope = (roleScope, fallback = ROLES.CONSUMER) => {
   const normalized = String(roleScope || fallback).trim().toUpperCase();
   return normalized || fallback;

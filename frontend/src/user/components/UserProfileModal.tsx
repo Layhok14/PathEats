@@ -1,7 +1,8 @@
 // User profile modal — personal info form and notification preferences.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
 import {
   X,
   User,
@@ -13,13 +14,15 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../shared/hooks/useTheme";
 import { useAuth } from "../../shared/hooks/useAuth";
+import api from "../../shared/services/axiosService";
 
 /**
  * @param {{ onClose: ()=>void }} props
  */
 export function UserProfileModal({ onClose }) {
   const { darkMode, tm } = useTheme();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     firstName: user?.firstName ?? "Guest",
@@ -34,6 +37,76 @@ export function UserProfileModal({ onClose }) {
     summary: false,
   });
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+
+    api.get("/user/profile")
+      .then((response) => {
+        const profile = response.data.data;
+        setForm({
+          firstName: profile.first_name || "",
+          lastName: profile.last_name || "",
+          email: profile.email || "",
+          phone: profile.phone_number || "",
+        });
+        setAvatarPreview(profile.profile_image_url || null);
+      })
+      .catch((error) => {
+        console.error("[UserProfileModal] Failed to load profile:", error);
+      });
+  }, [user]);
+
+  function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setAvatarPreview(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  }
+
+  async function handleSaveProfile() {
+    const errors: Record<string, string> = {};
+    if (!form.firstName.trim()) errors.firstName = "First name is required";
+    if (!form.phone.trim()) errors.phone = "Phone number is required";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSaving(true);
+    try {
+      await api.put("/user/profile", {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        phone: form.phone,
+      });
+
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("image", avatarFile);
+        formData.append(
+          "altText",
+          `${form.firstName} ${form.lastName}`.trim() || "Consumer profile image"
+        );
+        const imageResponse = await api.post("/user/profile/image", formData);
+        setAvatarPreview(imageResponse.data.data.profile_image_url || null);
+        setAvatarFile(null);
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      toast.success("Profile saved.");
+    } catch (error) {
+      console.error("[UserProfileModal] Failed to save profile:", error);
+      toast.error("Could not save profile.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function clearFieldError(field: string) {
     setFieldErrors((prev) => {
@@ -103,13 +176,31 @@ export function UserProfileModal({ onClose }) {
           {/* Avatar + name */}
           <div className="flex items-center gap-4">
             <div className="relative shrink-0">
-              <div
-                className="w-16 h-16 rounded-full flex items-center justify-center"
-                style={{ background: tm.primary }}
-              >
-                <User size={28} className="text-white" />
-              </div>
+              {avatarPreview ? (
+                <img
+                  src={avatarPreview}
+                  alt={`${form.firstName} ${form.lastName}`.trim() || "Profile"}
+                  className="w-16 h-16 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{ background: tm.primary }}
+                >
+                  <User size={28} className="text-white" />
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
               <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Change profile image"
                 className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
                 style={{
                   background: tm.surface2,
@@ -238,15 +329,8 @@ export function UserProfileModal({ onClose }) {
                 {fieldErrors.phone && <p className="text-xs text-red-500 mt-1">{fieldErrors.phone}</p>}
               </div>
               <button
-                onClick={() => {
-                  const errs: Record<string, string> = {};
-                  if (!form.firstName.trim()) errs.firstName = "First name is required";
-                  if (!form.phone.trim()) errs.phone = "Phone number is required";
-                  setFieldErrors(errs);
-                  if (Object.keys(errs).length > 0) return;
-                  setSaved(true);
-                  setTimeout(() => setSaved(false), 2000);
-                }}
+                onClick={handleSaveProfile}
+                disabled={saving}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all hover:brightness-110 active:scale-95"
                 style={{ background: tm.primary, color: tm.primaryText }}
               >
@@ -255,7 +339,7 @@ export function UserProfileModal({ onClose }) {
                     <Check size={13} /> Saved!
                   </>
                 ) : (
-                  "Save Changes"
+                  saving ? "Saving..." : "Save Changes"
                 )}
               </button>
             </div>

@@ -29,19 +29,18 @@ async function run() {
   // 1. Hash passwords for the 5 .env-defined accounts
   for (const u of SEED_USERS) {
     if (!u.email || !u.password) {
-      console.warn(`  ⚠  ${u.label}: missing email or password in .env, skipping`);
+      console.warn(`  ${u.label}: missing email or password in .env, skipping`);
       continue;
     }
     const result = await hashUserPassword(u.email, u.password);
     if (result) {
-      console.log(`  ✓  ${u.label}: ${u.email}  (password updated)`);
+      console.log(`  ${u.label}: ${u.email}  (password updated)`);
       credentials.push({ email: u.email, password: u.password, role: u.label });
     } else {
-      console.warn(`  ⚠  ${u.label}: ${u.email} not found in DB — run seed.js first`);
+      console.warn(` ${u.label}: ${u.email} not found in DB — run seed.js first`);
     }
   }
 
-  // 2. Hash passwords for ALL remaining users with password_hash = 'pending'
   const pendingCredentials = await hashAllPendingPasswords(DEFAULT_PASSWORD);
   credentials.push(...pendingCredentials);
 

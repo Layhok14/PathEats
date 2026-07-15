@@ -1,5 +1,6 @@
 import { isPlaceActive } from "../utils/placeStatus.js";
 import { scheduleToResponse } from "../utils/placeHours.js";
+import { storageImageUrlFromMetadata } from "../services/storageService.js";
 
 const toStorageImage = (row) => {
   if (!row.image_bucket || !row.image_path) return null;
@@ -8,6 +9,7 @@ const toStorageImage = (row) => {
     bucketName: row.image_bucket,
     objectPath: row.image_path,
     mimeType: row.image_mime_type || null,
+    sizeBytes: row.image_size_bytes == null ? undefined : Number(row.image_size_bytes),
     altText: row.image_alt_text || "",
   };
 };
@@ -39,13 +41,14 @@ class VendorModel {
 
   static toResponse(row) {
     const isOpen = isPlaceActive(row);
+    const storageImage = toStorageImage(row);
 
     return {
       id: row.id,
       name: row.name,
       description: row.description || "",
-      photoUrl: row.photo_url || "",
-      storageImage: toStorageImage(row),
+      photoUrl: storageImageUrlFromMetadata(storageImage) || row.photo_url || "",
+      storageImage,
       category: row.category_name || "Others",
       category_id: row.category_id,
       price_range: row.price_range || 1,

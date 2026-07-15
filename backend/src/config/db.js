@@ -50,5 +50,4 @@ const db = {
     console.log(`error message: ${err.message}.`);
   }
 })();
-
 export default db;

@@ -742,6 +742,7 @@ function mapItem(row: any): MenuItem {
           bucketName: row.image_bucket,
           objectPath: row.image_path,
           mimeType: row.image_mime_type || null,
+          sizeBytes: row.image_size_bytes == null ? undefined : Number(row.image_size_bytes),
           altText: row.image_alt_text || "",
         }
       : null),

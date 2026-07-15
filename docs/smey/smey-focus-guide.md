@@ -50,12 +50,15 @@ Focus on:
 Read:
 
 - [system-data-flow-guide.md](D:\Desktop\CADT\Year_2\Term3\Project\Food\Update\PathEats\docs\shared\system-data-flow-guide.md)
+- [authentication-authorization-password-guide.md](D:\Desktop\CADT\Year_2\Term3\Project\Food\Update\PathEats\docs\shared\authentication-authorization-password-guide.md)
 
 Focus on:
 
 - controller, service, repository meaning
 - why backend is where validation happens
 - why frontend alone is not enough
+- how login uses JWT and refresh token at a simple level
+- how forgot password uses OTP email through SMTP
 
 ## Code areas to know
 
@@ -67,6 +70,8 @@ Focus on:
 - `backend/src/controllers/placesController.js`
 - `backend/src/services/PlaceService.js`
 - `backend/src/repositories/PlaceRepository.js`
+- `backend/src/services/AuthService.js`
+- `backend/src/middlewares/authMiddleware.js`
 
 ## Simple questions you should be able to answer
 
@@ -74,6 +79,8 @@ Focus on:
 - Which tables matter most for consumer features?
 - Where do reviews get saved?
 - Why is backend validation important?
+- What does login prove?
+- What does forgot password send to the user?
 - How does the system return data back to the page?
 
 ## AI prompt if you need help
@@ -92,6 +99,7 @@ Focus on:
 Use these docs first:
 - docs/shared/system-data-flow-guide.md
 - docs/shared/database-design-and-erd-guide.md
+- docs/shared/authentication-authorization-password-guide.md
 
 Keep it short and practical.
 Show the main files and simple explanations only.

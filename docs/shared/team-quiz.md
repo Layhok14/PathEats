@@ -67,6 +67,18 @@ Why is it important to understand the service and repository layer for presentat
 
 What does Axios do in the frontend flow?
 
+## Q13
+
+What is the difference between authentication and authorization?
+
+## Q14
+
+What is the JWT access token used for?
+
+## Q15
+
+What happens to old sessions after forgot-password reset succeeds?
+
 ---
 
 # Role-specific quick checks
@@ -154,3 +166,15 @@ Because those layers explain the real logic and database behavior, which is what
 ### A12
 
 It sends HTTP requests and helps attach auth tokens / handle API communication.
+
+### A13
+
+Authentication proves who the user is. Authorization checks what that user is allowed to do.
+
+### A14
+
+It proves the logged-in user identity for protected backend requests. The backend verifies it before allowing the request to continue.
+
+### A15
+
+The password is updated, OTPs are invalidated, and old refresh tokens are revoked so old sessions cannot continue.

@@ -55,7 +55,6 @@ class AuthService {
         details: { requestedRole: normalizedRoleScope },
       });
     }
-
     validatePassword(password);
 
     const existing = await this.userRepo.findByEmail(email);

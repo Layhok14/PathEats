@@ -2,6 +2,7 @@ import PlaceRepository from "../repositories/PlaceRepository.js";
 import AppError from "../utils/AppError.js";
 import db from "../config/db.js";
 import { scheduleToResponse } from "../utils/placeHours.js";
+import { storageImageUrlFromMetadata } from "./storageService.js";
 
 const CATEGORY_TO_CUISINE = {
   "Rice": "Rice",
@@ -22,6 +23,7 @@ const toStorageImage = (row) => {
     bucketName: row.image_bucket,
     objectPath: row.image_path,
     mimeType: row.image_mime_type || null,
+    sizeBytes: row.image_size_bytes == null ? undefined : Number(row.image_size_bytes),
     altText: row.image_alt_text || "",
   };
 };
@@ -129,6 +131,7 @@ class PlaceService {
   }
 
   toVendor(row, menu) {
+    const storageImage = toStorageImage(row);
     return {
       id: row.id,
       name: row.name,
@@ -139,20 +142,23 @@ class PlaceService {
       wait_time_est: 0,
       lat: parseFloat(row.lat),
       lng: parseFloat(row.lng),
-      photo_url: row.photo_url || "",
-      storage_image: toStorageImage(row),
+      photo_url: storageImageUrlFromMetadata(storageImage) || row.photo_url || "",
+      storage_image: storageImage,
       description: row.description || "",
       open_now: row.open_now,
       hours: scheduleToResponse(row.operating_hours),
       address: row.address || "",
-      menu: menu.map((m) => ({
-        name: m.name,
-        price: parseFloat(m.price),
-        desc: m.description || undefined,
-        category: m.category || undefined,
-        image_url: m.image_url || undefined,
-        storage_image: toStorageImage(m),
-      })),
+      menu: menu.map((m) => {
+        const menuStorageImage = toStorageImage(m);
+        return {
+          name: m.name,
+          price: parseFloat(m.price),
+          desc: m.description || undefined,
+          category: m.category || undefined,
+          image_url: storageImageUrlFromMetadata(menuStorageImage) || m.image_url || undefined,
+          storage_image: menuStorageImage,
+        };
+      }),
     };
   }
 }

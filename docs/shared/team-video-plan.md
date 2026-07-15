@@ -61,6 +61,9 @@ Say:
 - Frontend visibility is not real security.
 - Backend middleware is what actually checks permission.
 - The main backend layers are routes, middleware, controller, service, repository, and database.
+- Authentication proves who the user is with email, password, JWT access token, and refresh token.
+- Authorization checks what that user can do using role scope, table privileges, and system capabilities.
+- Forgot password uses OTP email through SMTP, then revokes old sessions after password reset.
 
 Important message:
 
@@ -113,9 +116,10 @@ Say:
 
 1. `docs/shared/team-collaboration-context.md`
 2. `docs/shared/system-data-flow-guide.md`
-3. `docs/shared/database-design-and-erd-guide.md`
-4. `docs/shared/backup-recovery-guide.md`
-5. each member folder:
+3. `docs/shared/authentication-authorization-password-guide.md`
+4. `docs/shared/database-design-and-erd-guide.md`
+5. `docs/shared/backup-recovery-guide.md`
+6. each member folder:
    - `docs/layhok`
    - `docs/pav`
    - `docs/smey`

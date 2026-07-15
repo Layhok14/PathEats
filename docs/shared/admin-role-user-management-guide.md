@@ -224,6 +224,150 @@ Important meaning:
 - it asks for the application’s managed privilege catalog
 - only application-managed tables and allowed actions are exposed
 
+## Why The Role UI Has Four Table Actions
+
+The role UI intentionally exposes four table data actions:
+
+- `SELECT`: read data
+- `INSERT`: create data
+- `UPDATE`: modify existing data
+- `DELETE`: remove data
+
+These are defined in:
+
+- `backend/src/utils/privilegeRegistry.js`
+  - `TABLE_ACTIONS = ["SELECT", "INSERT", "UPDATE", "DELETE"]`
+
+They are stored in:
+
+- `"role".table_privileges`
+
+They are enforced by:
+
+- `backend/src/middlewares/privilegeGuard.js`
+  - `requirePrivileges({ table, action })`
+
+Important explanation:
+
+- this is application-level RBAC, not raw PostgreSQL `GRANT` management
+- the four actions map to the main CRUD / DML operations that the backend routes actually perform
+- the UI should not currently show deeper PostgreSQL privileges such as `TRUNCATE`, `REFERENCES`, `TRIGGER`, `CREATE`, `CONNECT`, `USAGE`, or `EXECUTE`
+- those extra privileges are database-administration concepts, but the current application does not enforce them route-by-route
+
+Non-table operations are handled separately through system capabilities:
+
+- `BACKUP`
+- `RECOVERY`
+- `QUERY`
+- `MAINTENANCE`
+
+These are defined in:
+
+- `backend/src/utils/privilegeRegistry.js`
+  - `SYSTEM_CAPABILITIES`
+
+They are enforced by:
+
+- `backend/src/middlewares/privilegeGuard.js`
+  - `requireSystemCapability(...)`
+
+Defense answer if asked:
+
+> We use four table privilege options because our admin role system is an application-level RBAC model. These four actions match the main CRUD and DML operations our backend routes actually perform. More advanced PostgreSQL privileges exist, but they are database-administration privileges and are not needed for our application routes. For non-table actions like backup and recovery, we use a separate system capability model.
+
+Recommended position for this phase:
+
+- keep the four table actions
+- do not expand the UI into full PostgreSQL privilege administration
+- explain that the interface is interactive and aligned with database access-control concepts, while the backend enforcement remains scoped to the application
+
+## What Happens After Editing An Existing Role
+
+Editing an existing role affects every user assigned to that role, but there is an important split between backend enforcement and frontend display.
+
+Backend enforcement updates on the next authenticated API request.
+
+Why:
+
+- `backend/src/middlewares/authMiddleware.js`
+  - `authMiddleware`
+  - verifies the JWT access token
+  - reloads the current user from `users`
+  - joins the `"role"` table
+  - attaches fresh `tablePrivileges` and `systemCapabilities` to `req.user`
+
+Then route guards use the latest role data:
+
+- `backend/src/middlewares/privilegeGuard.js`
+  - `requirePrivileges({ table, action })`
+  - `requireSystemCapability(...)`
+
+Example:
+
+- if `places.UPDATE` is removed from the `VENDOR` role
+- vendor users may still be logged in
+- but the next protected update route using `requirePrivileges({ table: "places", action: "UPDATE" })` should reject them
+
+Frontend display may not update immediately.
+
+Why:
+
+- `frontend/src/shared/hooks/useAuth.tsx`
+  - stores the logged-in user object in `localStorage`
+  - that stored object includes `tablePrivileges` and `systemCapabilities`
+- frontend layouts use that stored user object to hide or show navigation items
+
+Relevant frontend checks:
+
+- `frontend/src/admin/layouts/AdminMainLayout.tsx`
+  - checks `user.tablePrivileges`
+  - checks `user.systemCapabilities`
+- `frontend/src/vendor/layouts/VendorLayout.tsx`
+  - checks `user.tablePrivileges`
+- `frontend/src/admin/layouts/BusinessLayout.tsx`
+  - checks `user.tablePrivileges`
+
+Practical meaning:
+
+- backend permissions can change immediately
+- visible buttons or menu items may need refresh, token refresh, or re-login to fully match the new role
+- if the old button is still visible, the backend should still block the action if the privilege was removed
+
+## New Roles And Interface Access
+
+New custom roles do not create new interfaces.
+
+Current behavior:
+
+- `adminRepository.createRole` inserts custom roles with `base_scope = GLOBAL_ADMIN`
+- users assigned to those custom roles get `users.role_scope` derived from the role base scope
+- therefore current custom roles are admin-family roles
+
+Important files and functions:
+
+- `backend/src/repositories/adminRepository.js`
+  - `createRole`
+  - stores `base_scope`, `table_privileges`, `system_capabilities`, and `grant_option`
+- `backend/src/services/AdminService.js`
+  - `createUser`
+  - `updateRole`
+  - looks up the selected role record and derives the user's effective `role_scope`
+- `frontend/src/shared/components/AuthGuard.tsx`
+  - checks `requiredRole` using `user.role_scope`
+- `frontend/src/admin/routes/adminRoutes.tsx`
+  - maps existing admin, developer, and business routes to existing role scopes
+
+What this means:
+
+- custom role users do not access the database by terminal
+- they access the existing application interface that matches their base scope
+- their allowed actions are limited by the privileges stored in their role
+- the project does not currently generate a new custom UI for every custom role
+
+Defense answer if asked:
+
+> Editing a role affects all assigned users because the backend reloads role privileges on every authenticated request. The frontend menu may need refresh or re-login to visually update, but backend enforcement uses the latest database role. New roles do not create new interfaces; they reuse existing application areas based on their base scope and are limited by table privileges and system capabilities.
+
 ## 2. Create role
 
 Frontend path:
@@ -595,6 +739,8 @@ Use this concise explanation:
 
 - the admin management feature is split into role management and user management
 - roles define allowed table privileges and system capabilities
+- table privileges intentionally use `SELECT`, `INSERT`, `UPDATE`, and `DELETE` because the feature is application-level RBAC, not full PostgreSQL `GRANT` administration
+- backup, recovery, query, and maintenance are separated as system capabilities instead of table privileges
 - users are linked to roles by `role_id`
 - when creating or updating a user, the backend looks up the selected role and derives the user’s effective application scope from that role
 - this prevents the frontend from inventing unauthorized scopes

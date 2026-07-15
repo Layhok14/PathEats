@@ -6,6 +6,8 @@ export const SYSTEM_CAPABILITIES = Object.freeze(["BACKUP", "RECOVERY", "QUERY",
 
 export const PRIVILEGE_REGISTRY = Object.freeze({
   users: TABLE_ACTIONS,
+  user_preferences: TABLE_ACTIONS,
+  user_profile_images: TABLE_ACTIONS,
   places: TABLE_ACTIONS,
   place_categories: TABLE_ACTIONS,
   place_hours: TABLE_ACTIONS,
@@ -34,6 +36,8 @@ const allTablePrivileges = Object.fromEntries(
 export const BUILT_IN_ROLE_POLICIES = Object.freeze({
   [ROLES.CONSUMER]: {
     users: ["SELECT", "UPDATE"],
+    user_preferences: ["SELECT", "INSERT", "UPDATE"],
+    user_profile_images: TABLE_ACTIONS,
     places: ["SELECT"],
     menu_items: ["SELECT"],
     place_menu_items: ["SELECT"],
@@ -44,6 +48,8 @@ export const BUILT_IN_ROLE_POLICIES = Object.freeze({
   },
   [ROLES.VENDOR]: {
     users: ["SELECT", "UPDATE"],
+    user_preferences: ["SELECT", "INSERT", "UPDATE"],
+    user_profile_images: TABLE_ACTIONS,
     places: TABLE_ACTIONS,
     place_categories: ["SELECT"],
     place_hours: TABLE_ACTIONS,

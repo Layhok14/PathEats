@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../services/axiosService";
 import type { Stall, StallFormData } from "../types";
+import { hasCompleteStorageImageMetadata } from "../utils/storageImage";
 
 export function useStalls(options: { disabled?: boolean } = {}) {
   const [stalls, setStalls] = useState<Stall[]>([]);
@@ -78,6 +79,9 @@ export function useStalls(options: { disabled?: boolean } = {}) {
         price_range: (formData as any).price_range,
         operatingHours: formData.operatingHours,
       };
+      if (body.storageImage && !hasCompleteStorageImageMetadata(body.storageImage)) {
+        delete (body as Partial<typeof body>).storageImage;
+      }
       Object.keys(body).forEach((k) => (body as any)[k] === undefined && delete (body as any)[k]);
       const { data } = await api.put(`/vendor/stalls/${id}`, body);
       const updated = data.data;

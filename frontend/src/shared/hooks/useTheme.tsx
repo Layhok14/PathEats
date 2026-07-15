@@ -1,8 +1,10 @@
 // Theme context — light/dark mode.
 // Dark mode only applies to /user/* routes. Admin/vendor/CS/dev stay light.
 
-import { createContext, useContext, useState, useEffect, useMemo } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useLocation } from "react-router";
+import api from "../services/axiosService";
+import { useAuth } from "./useAuth";
 
 export const DARK_THEME = {
   appBg: "#0F172A", sidebar: "#1E293B", navBg: "#0F172A",
@@ -30,12 +32,64 @@ export const LIGHT_THEME = {
   primary: "#22C55E", primaryText: "#ffffff",
 };
 
-const ThemeContext = createContext(null);
+type ThemeTokens = typeof LIGHT_THEME;
 
-export function ThemeProvider({ children }) {
-  const [darkMode, setDarkMode] = useState(false);
+interface ThemeContextValue {
+  darkMode: boolean;
+  setDarkMode: Dispatch<SetStateAction<boolean>>;
+  tm: ThemeTokens;
+  isUserRoute: boolean;
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [darkMode, setDarkModeState] = useState(false);
+  const darkModeRef = useRef(false);
   const location = useLocation();
+  const { user } = useAuth();
   const isUserRoute = location.pathname.startsWith("/user");
+  const isAuthenticatedConsumer = user?.role_scope === "CONSUMER";
+
+  useEffect(() => {
+    darkModeRef.current = darkMode;
+  }, [darkMode]);
+
+  useEffect(() => {
+    if (!isUserRoute || !isAuthenticatedConsumer) return;
+
+    let active = true;
+    api.get("/user/preferences")
+      .then((response) => {
+        if (!active) return;
+        const prefersDarkMode = response.data.data?.theme === "dark";
+        darkModeRef.current = prefersDarkMode;
+        setDarkModeState(prefersDarkMode);
+      })
+      .catch((error) => {
+        console.error("[useTheme] Failed to load saved theme:", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticatedConsumer, isUserRoute, user?.id]);
+
+  const setDarkMode = useCallback<Dispatch<SetStateAction<boolean>>>((valueOrUpdater) => {
+    const nextDarkMode = typeof valueOrUpdater === "function"
+      ? valueOrUpdater(darkModeRef.current)
+      : Boolean(valueOrUpdater);
+
+    darkModeRef.current = nextDarkMode;
+    setDarkModeState(nextDarkMode);
+
+    if (isUserRoute && isAuthenticatedConsumer) {
+      api.put("/user/preferences", { theme: nextDarkMode ? "dark" : "light" })
+        .catch((error) => {
+          console.error("[useTheme] Failed to save theme:", error);
+        });
+    }
+  }, [isAuthenticatedConsumer, isUserRoute]);
 
   // Apply .dark class to <html> only on user routes
   useEffect(() => {

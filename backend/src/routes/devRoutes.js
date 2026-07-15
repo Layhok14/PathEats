@@ -721,7 +721,7 @@ router.get("/backups/:id/download", devOrGlobalAdmin, catchAsync(async (req, res
   const filename = `${safeDownloadName(profile.profileName)}.${extension}`;
   res.setHeader("Content-Type", contentType);
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.setHeader("X-Backup-Format", format);
+  res.setHeader("Backup-Format", format);
 
   const stream = createReadStream(dumpPath);
   const cleanup = () => rm(tempDir, { recursive: true, force: true }).catch(() => {});

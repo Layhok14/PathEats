@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../services/axiosService";
 import type { VendorMenuItem as MenuItem, MenuCategory } from "../types";
+import { hasCompleteStorageImageMetadata } from "../utils/storageImage";
 
 export type MenuItemFormData = Omit<MenuItem, "id">;
 
@@ -48,7 +49,11 @@ export function useMenuItems(filterCategory?: MenuCategory, options: { disabled?
   };
 
   const updateItem = async (id: string, input: Partial<MenuItemFormData>): Promise<void> => {
-    const { data } = await api.put(`/vendor/items/${id}`, input);
+    const payload = { ...input };
+    if (payload.storageImage && !hasCompleteStorageImageMetadata(payload.storageImage)) {
+      delete payload.storageImage;
+    }
+    const { data } = await api.put(`/vendor/items/${id}`, payload);
     const updated = mapItem(data.data);
     setItems((prev) => prev.map((m) => (m.id === id ? updated : m)));
   };
@@ -67,12 +72,13 @@ function mapItem(row: any): MenuItem {
     name: row.name,
     description: row.description || "",
     price: parseFloat(row.price),
-    imageUrl: row.image_url || "",
+    imageUrl: row.image_url || row.imageUrl || "",
     storageImage: row.storageImage || (row.image_bucket && row.image_path
       ? {
           bucketName: row.image_bucket,
           objectPath: row.image_path,
           mimeType: row.image_mime_type || null,
+          sizeBytes: row.image_size_bytes == null ? undefined : Number(row.image_size_bytes),
           altText: row.image_alt_text || "",
         }
       : null),

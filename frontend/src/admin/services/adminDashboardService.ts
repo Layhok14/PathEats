@@ -301,6 +301,7 @@ export interface AdminMenuItemRow {
   price: string;
   category: string;
   imageUrl: string | null;
+  storageImage?: import("../../shared/types").StorageImage | null;
   isAvailable: boolean;
   placeId?: string | null;
   placeName?: string | null;

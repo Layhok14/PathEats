@@ -5,6 +5,7 @@ import {
   upsertPrimaryMenuItemImage,
   upsertPrimaryPlaceImage,
 } from "../utils/storageImageMetadata.js";
+import { storageImageUrlFromMetadata } from "../services/storageService.js";
 import { normalizePlaceStatus, PLACE_STATUS, statusFromOpenFlag } from "../utils/placeStatus.js";
 import { normalizeMenuItemCategory } from "../utils/validation.js";
 import {
@@ -15,13 +16,23 @@ import {
 
 const uploadedBy = (data, fallbackUserId) => data.uploaded_by || data.uploadedBy || fallbackUserId || null;
 
-const withMenuImageMetadata = (item, image) => ({
-  ...item,
-  image_bucket: image?.bucket_name ?? item.image_bucket ?? null,
-  image_path: image?.object_path ?? item.image_path ?? null,
-  image_mime_type: image?.mime_type ?? item.image_mime_type ?? null,
-  image_alt_text: image?.alt_text ?? item.image_alt_text ?? null,
-});
+const withMenuImageMetadata = (item, image = null) => {
+  const result = {
+    ...item,
+    image_bucket: image?.bucket_name ?? item.image_bucket ?? null,
+    image_path: image?.object_path ?? item.image_path ?? null,
+    image_mime_type: image?.mime_type ?? item.image_mime_type ?? null,
+    image_size_bytes: image?.size_bytes ?? item.image_size_bytes ?? null,
+    image_alt_text: image?.alt_text ?? item.image_alt_text ?? null,
+  };
+  return {
+    ...result,
+    image_url: storageImageUrlFromMetadata({
+      bucketName: result.image_bucket,
+      objectPath: result.image_path,
+    }) || result.image_url || null,
+  };
+};
 
 class VendorRepository {
 
@@ -36,6 +47,7 @@ class VendorRepository {
               pi.bucket_name AS image_bucket,
               pi.object_path AS image_path,
               pi.mime_type AS image_mime_type,
+              pi.size_bytes AS image_size_bytes,
               pi.alt_text AS image_alt_text,
               pc.slug AS category_slug, pc.name AS category_name,
               p.category_id,
@@ -43,7 +55,7 @@ class VendorRepository {
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM place_images
          WHERE place_id = p.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -67,6 +79,7 @@ class VendorRepository {
               pi.bucket_name AS image_bucket,
               pi.object_path AS image_path,
               pi.mime_type AS image_mime_type,
+              pi.size_bytes AS image_size_bytes,
               pi.alt_text AS image_alt_text,
               pc.slug AS category_slug, pc.name AS category_name,
               p.category_id,
@@ -74,7 +87,7 @@ class VendorRepository {
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM place_images
          WHERE place_id = p.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -316,10 +329,11 @@ class VendorRepository {
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
+              mii.size_bytes AS image_size_bytes,
               mii.alt_text AS image_alt_text
        FROM menu_items mi
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM menu_item_images
          WHERE menu_item_id = mi.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -330,7 +344,7 @@ class VendorRepository {
        LIMIT $2`,
       [ownerId, limit]
     );
-    return rows;
+    return rows.map((row) => withMenuImageMetadata(row));
   }
 
   async getMenuItems(placeId, ownerId) {
@@ -342,12 +356,13 @@ class VendorRepository {
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
+              mii.size_bytes AS image_size_bytes,
               mii.alt_text AS image_alt_text
        FROM place_menu_items pmi
        JOIN menu_items mi ON mi.id = pmi.menu_item_id
        JOIN places p ON p.id = pmi.place_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM menu_item_images
          WHERE menu_item_id = mi.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -357,7 +372,7 @@ class VendorRepository {
        ORDER BY mi.created_at DESC`,
       [placeId, ownerId]
     );
-    return rows;
+    return rows.map((row) => withMenuImageMetadata(row));
   }
 
   async updateMenuItemGlobal(ownerId, itemId, data) {
@@ -518,11 +533,12 @@ class VendorRepository {
                 mii.bucket_name AS image_bucket,
                 mii.object_path AS image_path,
                 mii.mime_type AS image_mime_type,
+                mii.size_bytes AS image_size_bytes,
                 mii.alt_text AS image_alt_text
          FROM place_menu_items pmi
          JOIN menu_items mi ON mi.id = pmi.menu_item_id
          LEFT JOIN LATERAL (
-           SELECT bucket_name, object_path, mime_type, alt_text
+           SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
            FROM menu_item_images
            WHERE menu_item_id = mi.id
            ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -531,7 +547,7 @@ class VendorRepository {
          WHERE pmi.place_id = $1 AND pmi.menu_item_id = $2`,
         [placeId, itemId]
       );
-      return linkedItems[0] || null;
+      return linkedItems[0] ? withMenuImageMetadata(linkedItems[0]) : null;
     });
   }
 

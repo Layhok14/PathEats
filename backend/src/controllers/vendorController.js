@@ -1,8 +1,12 @@
 import bcrypt from "bcryptjs";
-import multer from "multer";
 import VendorService from "../services/VendorService.js";
 import UserRepository from "../repositories/UserRepository.js";
 import { uploadVendorImage } from "../services/storageService.js";
+import { imageUpload } from "../middlewares/imageUpload.js";
+import {
+  attachProfileImageUrl,
+  saveProfileImage,
+} from "../services/profileImageService.js";
 import { getOnboardingConfig } from "../repositories/adminRepository.js";
 import AppError from "../utils/AppError.js";
 import { catchAsync } from "../utils/catchAsync.js";
@@ -11,17 +15,7 @@ import { validatePrice } from "../utils/validation.js";
 const userRepo = new UserRepository();
 const vendorService = new VendorService();
 
-export const MAX_VENDOR_IMAGE_BYTES = 5 * 1024 * 1024;
-export const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-
-export const imageUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_VENDOR_IMAGE_BYTES },
-  fileFilter: (_req, file, cb) => {
-    if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) return cb(null, true);
-    cb(new AppError("Only JPEG, PNG, WEBP, and GIF images are allowed", 400));
-  },
-});
+export { imageUpload };
 
 // ── Public ──
 
@@ -50,7 +44,7 @@ export const uploadImage = catchAsync(async (req, res) => {
 export const getProfile = catchAsync(async (req, res) => {
   const user = await userRepo.findById(req.user.sub);
   if (!user) throw new AppError("Profile not found", 404);
-  res.json({ success: true, data: user });
+  res.json({ success: true, data: attachProfileImageUrl(user) });
 });
 
 export const updateProfile = catchAsync(async (req, res) => {
@@ -62,6 +56,19 @@ export const updateProfile = catchAsync(async (req, res) => {
   const user = await userRepo.updateProfile(req.user.sub, data);
   if (!user) throw new AppError("No profile fields to update", 400);
   res.json({ success: true, data: user });
+});
+
+export const uploadProfileImage = catchAsync(async (req, res) => {
+  if (!req.file) throw new AppError("Profile image file is required", 400);
+
+  const profileImage = await saveProfileImage({
+    userId: req.user.sub,
+    file: req.file,
+    altText: req.body.altText,
+    baseUrl: `${req.protocol}://${req.get("host")}`,
+  });
+
+  res.status(201).json({ success: true, data: profileImage });
 });
 
 export const changePassword = catchAsync(async (req, res) => {

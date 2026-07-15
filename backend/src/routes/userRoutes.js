@@ -3,6 +3,7 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import * as userController from "../controllers/userController.js";
 import { requirePrivileges } from "../middlewares/privilegeGuard.js";
+import { imageUpload } from "../middlewares/imageUpload.js";
 
 const router = Router();
 
@@ -11,6 +12,23 @@ router.use(restrictToRoles("CONSUMER"));
 
 router.get("/profile", requirePrivileges({ table: "users", action: "SELECT" }), userController.getProfile);
 router.put("/profile", requirePrivileges({ table: "users", action: "UPDATE" }), userController.updateProfile);
+router.post(
+  "/profile/image",
+  requirePrivileges({ table: "user_profile_images", action: "INSERT" }),
+  imageUpload.single("image"),
+  userController.uploadProfileImage
+);
+
+router.get(
+  "/preferences",
+  requirePrivileges({ table: "user_preferences", action: "SELECT" }),
+  userController.getPreferences
+);
+router.put(
+  "/preferences",
+  requirePrivileges({ table: "user_preferences", action: "UPDATE" }),
+  userController.updatePreferences
+);
 
 // Bookmarks
 router.get("/bookmarks", requirePrivileges({ table: "bookmarks", action: "SELECT" }), userController.getBookmarks);

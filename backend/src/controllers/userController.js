@@ -2,6 +2,10 @@ import UserRepository from "../repositories/UserRepository.js";
 import db from "../config/db.js";
 import AppError from "../utils/AppError.js";
 import { catchAsync } from "../utils/catchAsync.js";
+import {
+  attachProfileImageUrl,
+  saveProfileImage,
+} from "../services/profileImageService.js";
 
 const userRepo = new UserRepository();
 
@@ -11,7 +15,7 @@ export const getProfile = catchAsync(async (req, res) => {
     code: "USER_PROFILE_NOT_FOUND",
     safeMessage: "We could not find your profile.",
   });
-  res.json({ success: true, data: user });
+  res.json({ success: true, data: attachProfileImageUrl(user) });
 });
 
 export const updateProfile = catchAsync(async (req, res) => {
@@ -26,6 +30,66 @@ export const updateProfile = catchAsync(async (req, res) => {
     safeMessage: "Choose at least one profile field to update.",
   });
   res.json({ success: true, data: user });
+});
+
+export const uploadProfileImage = catchAsync(async (req, res) => {
+  if (!req.file) throw new AppError("Profile image file is required", 400);
+
+  const profileImage = await saveProfileImage({
+    userId: req.user.sub,
+    file: req.file,
+    altText: req.body.altText,
+    baseUrl: `${req.protocol}://${req.get("host")}`,
+  });
+
+  res.status(201).json({ success: true, data: profileImage });
+});
+
+export const getPreferences = catchAsync(async (req, res) => {
+  const preferences = await userRepo.findPreferences(req.user.sub);
+  res.json({
+    success: true,
+    data: preferences ?? {
+      user_id: req.user.sub,
+      search_radius: 100,
+      theme: "light",
+      is_active: true,
+    },
+  });
+});
+
+export const updatePreferences = catchAsync(async (req, res) => {
+  const { searchRadius, theme, isActive } = req.body;
+  const includesSupportedField =
+    searchRadius !== undefined || theme !== undefined || isActive !== undefined;
+
+  if (!includesSupportedField) {
+    throw new AppError("Choose at least one preference to update", 400);
+  }
+
+  if (searchRadius !== undefined) {
+    const parsedSearchRadius = Number(searchRadius);
+    const isValidSearchRadius =
+      Number.isInteger(parsedSearchRadius) && parsedSearchRadius > 0 && parsedSearchRadius <= 100000;
+    if (!isValidSearchRadius) {
+      throw new AppError("Search radius must be a whole number between 1 and 100000", 400);
+    }
+  }
+
+  if (theme !== undefined && !["light", "dark"].includes(theme)) {
+    throw new AppError("Theme must be light or dark", 400);
+  }
+
+  if (isActive !== undefined && typeof isActive !== "boolean") {
+    throw new AppError("isActive must be a boolean", 400);
+  }
+
+  const preferences = await userRepo.upsertPreferences(req.user.sub, {
+    search_radius: searchRadius === undefined ? undefined : Number(searchRadius),
+    theme,
+    is_active: isActive,
+  });
+  res.json({ success: true, data: preferences });
 });
 
 // ── Bookmarks ──

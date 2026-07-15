@@ -16,12 +16,13 @@ class PlaceRepository {
               pi.bucket_name AS image_bucket,
               pi.object_path AS image_path,
               pi.mime_type AS image_mime_type,
+              pi.size_bytes AS image_size_bytes,
               pi.alt_text AS image_alt_text,
               pc.name AS category_name, pc.slug AS category_slug
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM place_images
          WHERE place_id = p.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -52,12 +53,13 @@ class PlaceRepository {
               pi.bucket_name AS image_bucket,
               pi.object_path AS image_path,
               pi.mime_type AS image_mime_type,
+              pi.size_bytes AS image_size_bytes,
               pi.alt_text AS image_alt_text,
               pc.name AS category_name, pc.slug AS category_slug
        FROM places p
        LEFT JOIN place_categories pc ON pc.id = p.category_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM place_images
          WHERE place_id = p.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -83,11 +85,12 @@ class PlaceRepository {
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
+              mii.size_bytes AS image_size_bytes,
               mii.alt_text AS image_alt_text
        FROM place_menu_items pmi
        JOIN menu_items mi ON mi.id = pmi.menu_item_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM menu_item_images
          WHERE menu_item_id = mi.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -107,11 +110,12 @@ class PlaceRepository {
               mii.bucket_name AS image_bucket,
               mii.object_path AS image_path,
               mii.mime_type AS image_mime_type,
+              mii.size_bytes AS image_size_bytes,
               mii.alt_text AS image_alt_text
        FROM place_menu_items pmi
        JOIN menu_items mi ON mi.id = pmi.menu_item_id
        LEFT JOIN LATERAL (
-         SELECT bucket_name, object_path, mime_type, alt_text
+         SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
          FROM menu_item_images
          WHERE menu_item_id = mi.id
          ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -133,6 +137,7 @@ class PlaceRepository {
         image_bucket: row.image_bucket,
         image_path: row.image_path,
         image_mime_type: row.image_mime_type,
+        image_size_bytes: row.image_size_bytes,
         image_alt_text: row.image_alt_text,
       });
     }
@@ -180,7 +185,7 @@ class PlaceRepository {
       ) mi_search ON TRUE
       LEFT JOIN place_categories pc ON pc.id = p.category_id
       LEFT JOIN LATERAL (
-        SELECT bucket_name, object_path, mime_type, alt_text
+        SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
         FROM place_images
         WHERE place_id = p.id
         ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -233,6 +238,7 @@ class PlaceRepository {
          pi.bucket_name AS image_bucket,
          pi.object_path AS image_path,
          pi.mime_type AS image_mime_type,
+         pi.size_bytes AS image_size_bytes,
          pi.alt_text AS image_alt_text,
          ${searchSelect}
        ${fromClause}

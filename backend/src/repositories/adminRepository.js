@@ -6,6 +6,7 @@ import {
   upsertPrimaryMenuItemImage,
   upsertPrimaryPlaceImage,
 } from "../utils/storageImageMetadata.js";
+import { storageImageUrlFromMetadata } from "../services/storageService.js";
 import { normalizePlaceStatus, PLACE_STATUS } from "../utils/placeStatus.js";
 import { normalizeMenuItemCategory } from "../utils/validation.js";
 import TokenRepository from "./TokenRepository.js";
@@ -88,28 +89,37 @@ const toStorageImage = (row) => {
     bucketName: row.image_bucket,
     objectPath: row.image_path,
     mimeType: row.image_mime_type || null,
+    sizeBytes: row.image_size_bytes == null ? undefined : Number(row.image_size_bytes),
     altText: row.image_alt_text || "",
   };
 };
 
-const withMenuImageMetadata = (item, image) => ({
-  ...item,
-  image_bucket: image?.bucket_name ?? item.image_bucket ?? null,
-  image_path: image?.object_path ?? item.image_path ?? null,
-  image_mime_type: image?.mime_type ?? item.image_mime_type ?? null,
-  image_alt_text: image?.alt_text ?? item.image_alt_text ?? null,
-});
+const withMenuImageMetadata = (item, image = null) => {
+  const result = {
+    ...item,
+    image_bucket: image?.bucket_name ?? item.image_bucket ?? null,
+    image_path: image?.object_path ?? item.image_path ?? null,
+    image_mime_type: image?.mime_type ?? item.image_mime_type ?? null,
+    image_size_bytes: image?.size_bytes ?? item.image_size_bytes ?? null,
+    image_alt_text: image?.alt_text ?? item.image_alt_text ?? null,
+  };
+  return {
+    ...result,
+    image_url: storageImageUrlFromMetadata(toStorageImage(result)) || result.image_url || null,
+  };
+};
 
 const primaryPlaceImageSelect = `
   pi.bucket_name AS image_bucket,
   pi.object_path AS image_path,
   pi.mime_type AS image_mime_type,
+  pi.size_bytes AS image_size_bytes,
   pi.alt_text AS image_alt_text
 `;
 
 const primaryPlaceImageJoin = `
   LEFT JOIN LATERAL (
-    SELECT bucket_name, object_path, mime_type, alt_text
+    SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
     FROM place_images
     WHERE place_id::text = p.id::text
     ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -121,12 +131,13 @@ const primaryMenuItemImageSelect = `
   mii.bucket_name AS image_bucket,
   mii.object_path AS image_path,
   mii.mime_type AS image_mime_type,
+  mii.size_bytes AS image_size_bytes,
   mii.alt_text AS image_alt_text
 `;
 
 const primaryMenuItemImageJoin = `
   LEFT JOIN LATERAL (
-    SELECT bucket_name, object_path, mime_type, alt_text
+    SELECT bucket_name, object_path, mime_type, size_bytes, alt_text
     FROM menu_item_images
     WHERE menu_item_id::text = mi.id::text
     ORDER BY is_primary DESC, sort_order ASC, created_at ASC
@@ -1296,7 +1307,7 @@ export const findAllStalls = async (page = 1, limit = 50) => {
       description: row.description,
       address: row.address,
       priceRange: row.price_range,
-      photoUrl: row.photo_url,
+      photoUrl: storageImageUrlFromMetadata(toStorageImage(row)) || row.photo_url,
       storageImage: toStorageImage(row),
       isAdminManaged: row.is_admin_managed,
       isOpen: row.is_open,
@@ -1360,7 +1371,7 @@ export const findStallsByOwner = async (ownerId, limit = 50) => {
     description: row.description,
     address: row.address,
     priceRange: row.price_range,
-    photoUrl: row.photo_url,
+    photoUrl: storageImageUrlFromMetadata(toStorageImage(row)) || row.photo_url,
     storageImage: toStorageImage(row),
     isAdminManaged: row.is_admin_managed,
     isOpen: row.is_open,
@@ -1425,7 +1436,7 @@ export const findStallById = async (id) => {
     description: row.description,
     address: row.address,
     priceRange: row.price_range,
-    photoUrl: row.photo_url,
+    photoUrl: storageImageUrlFromMetadata(toStorageImage(row)) || row.photo_url,
     storageImage: toStorageImage(row),
     isAdminManaged: row.is_admin_managed,
     isOpen: row.is_open,
@@ -1646,7 +1657,7 @@ export const findAllMenuItems = async (placeId = null, ownerId = null) => {
     description: row.description,
     price: row.price,
     category: row.category,
-    imageUrl: row.image_url,
+    imageUrl: storageImageUrlFromMetadata(toStorageImage(row)) || row.image_url,
     storageImage: toStorageImage(row),
     isAvailable: row.is_available,
     placeId: row.place_id,

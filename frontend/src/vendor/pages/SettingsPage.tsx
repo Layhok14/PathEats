@@ -14,6 +14,7 @@ interface VendorProfile {
   last_name: string;
   phone_number: string | null;
   role_scope: string;
+  profile_image_url?: string | null;
 }
 
 export function SettingsPage() {
@@ -25,6 +26,7 @@ export function SettingsPage() {
   const [lastName, setLastName] = useState(user?.lastName || "");
   const [phone, setPhone] = useState("");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -55,6 +57,7 @@ export function SettingsPage() {
         setFirstName(p.first_name || "");
         setLastName(p.last_name || "");
         setPhone(p.phone_number || "");
+        setAvatarPreview(p.profile_image_url || null);
       })
       .catch((err) => toast.error(getApiErrorMessage(err, "Failed to load profile")))
       .finally(() => setLoading(false));
@@ -63,6 +66,7 @@ export function SettingsPage() {
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setAvatarFile(file);
     const reader = new FileReader();
     reader.onload = () => setAvatarPreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -77,6 +81,14 @@ export function SettingsPage() {
     try {
       const { data } = await api.put("/vendor/profile", { firstName, lastName, phone: phone || undefined });
       setProfile(data.data);
+      if (avatarFile) {
+        const formData = new FormData();
+        formData.append("image", avatarFile);
+        formData.append("altText", `${firstName} ${lastName}`.trim() || "Vendor profile image");
+        const imageResponse = await api.post("/vendor/profile/image", formData);
+        setAvatarPreview(imageResponse.data.data.profile_image_url || null);
+        setAvatarFile(null);
+      }
       toast.success("Profile saved.");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "Failed to save profile"));

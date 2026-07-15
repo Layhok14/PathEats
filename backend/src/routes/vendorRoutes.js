@@ -19,6 +19,12 @@ router.post("/uploads/images", requirePrivileges({ table: "menu_item_images", ac
 // Profile
 router.get("/profile", requirePrivileges({ table: "users", action: "SELECT" }), vendorController.getProfile);
 router.put("/profile", requirePrivileges({ table: "users", action: "UPDATE" }), vendorController.updateProfile);
+router.post(
+  "/profile/image",
+  requirePrivileges({ table: "user_profile_images", action: "INSERT" }),
+  vendorController.imageUpload.single("image"),
+  vendorController.uploadProfileImage
+);
 router.post("/change-password", vendorController.changePassword);
 
 // Dashboard
