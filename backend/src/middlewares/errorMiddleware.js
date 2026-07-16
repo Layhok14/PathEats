@@ -28,7 +28,7 @@ function requestTraceId(req) {
  * Global Express error handler.
  * Catches all errors thrown via `next(err)` or `throw` in async handlers.
  */
-export function errorHandler(err, req, res, next) {
+export function errorHandler(err, req, res, _next) {
   const statusCode = statusFromError(err);
   const traceId = requestTraceId(req);
   const code = errorCode(err, statusCode);

@@ -1,6 +1,5 @@
 import PlaceRepository from "../repositories/PlaceRepository.js";
 import AppError from "../utils/AppError.js";
-import db from "../config/db.js";
 import { scheduleToResponse } from "../utils/placeHours.js";
 import { storageImageUrlFromMetadata } from "./storageService.js";
 
@@ -119,15 +118,84 @@ class PlaceService {
     }
     const review = await this.placeRepo.updateReview(reviewId, userId, data);
     if (!review) throw new AppError("Review not found or you do not have permission to edit it", 404);
-    await db.query("SELECT refresh_place_rating($1)", [review.vendor_id]);
+    await this.placeRepo.refreshRating(review.vendor_id);
     return review;
   }
 
   async deleteReview(reviewId, userId) {
     const review = await this.placeRepo.deleteReview(reviewId, userId);
     if (!review) throw new AppError("Review not found or you do not have permission to delete it", 404);
-    await db.query("SELECT refresh_place_rating($1)", [review.place_id]);
+    await this.placeRepo.refreshRating(review.place_id);
     return review;
+  }
+
+  calculateScore({ price_range, dist_m, rating, wait_time_est }) {
+    const finalScore =
+      0.35 * (1 - (Math.max(1, Math.min(4, price_range || 1)) - 1) / 3) +
+      0.30 * (1 - Math.min(dist_m || 0, 300) / 300) +
+      0.20 * ((rating || 0) / 5) -
+      0.15 * ((wait_time_est || 0) / 15);
+
+    const metric = (label) => {
+      let raw;
+      if (label === "affordability") raw = (1 - (Math.max(1, Math.min(4, price_range || 1)) - 1) / 3) * 100;
+      else if (label === "proximity") raw = (1 - Math.min(dist_m || 0, 300) / 300) * 100;
+      else if (label === "rating") raw = ((rating || 0) / 5) * 100;
+      else raw = Math.max(0, 100 - ((wait_time_est || 0) / 15) * 100);
+      return { label, score: Math.round(raw) };
+    };
+
+    return {
+      final_score: Math.max(0, Math.min(0.85, finalScore)),
+      overall: Math.round((finalScore / 0.85) * 100),
+      metrics: ["affordability", "proximity", "rating", "wait_time"].map(metric),
+    };
+  }
+
+  async getRoute({ origin, destination, waypoints }) {
+    if (!origin || !destination) throw new AppError("origin and destination are required", 400);
+    const isValidCoordinate = (value) =>
+      value && typeof value.lat === "number" && typeof value.lng === "number" &&
+      Number.isFinite(value.lat) && Number.isFinite(value.lng) &&
+      value.lat >= -90 && value.lat <= 90 && value.lng >= -180 && value.lng <= 180;
+    if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
+      throw new AppError("Origin and destination coordinates are invalid", 400);
+    }
+
+    const routeCoordinates = [origin, ...(Array.isArray(waypoints) ? waypoints.filter(isValidCoordinate) : []), destination]
+      .map(({ lng, lat }) => `${lng},${lat}`)
+      .join(";");
+    const baseUrl = process.env.OSRM_BASE_URL || "https://router.project-osrm.org";
+    try {
+      const response = await fetch(`${baseUrl}/route/v1/driving/${routeCoordinates}?geometries=geojson&overview=full`);
+      if (!response.ok) throw new Error(`OSRM HTTP ${response.status}`);
+      const data = await response.json();
+      if (!data.routes?.length) throw new Error("No route found");
+      const points = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+      if (!points.every(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))) {
+        throw new Error("Route contains invalid coordinates");
+      }
+      return { points, wasFallback: false };
+    } catch (error) {
+      console.warn("[PlaceService] OSRM unavailable:", error.message);
+      const points = Array.from({ length: 11 }, (_, index) => {
+        const progress = index / 10;
+        const jitter = Math.sin(progress * Math.PI) * 0.001;
+        return [
+          origin.lat + (destination.lat - origin.lat) * progress + jitter,
+          origin.lng + (destination.lng - origin.lng) * progress,
+        ];
+      });
+      return { points, wasFallback: true };
+    }
+  }
+
+  getCount() {
+    return this.placeRepo.countPublicPlaces();
+  }
+
+  getAllReviews() {
+    return this.placeRepo.getAllPublicReviews();
   }
 
   toVendor(row, menu) {

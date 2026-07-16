@@ -18,7 +18,7 @@ const StallListPage = lazy(() =>
   import("../pages/StallListPage").then((module) => ({ default: module.StallListPage }))
 );
 const StallCreatePage = lazy(() =>
-  import("../pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage }))
+  import("../../shared/pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage }))
 );
 const StallDetailPage = lazy(() =>
   import("../pages/StallDetailPage").then((module) => ({ default: module.StallDetailPage }))

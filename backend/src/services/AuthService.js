@@ -388,7 +388,8 @@ class AuthService {
   }
 
   _publicSession(session) {
-    const { refreshTokenRecord, ...payload } = session;
+    const payload = { ...session };
+    delete payload.refreshTokenRecord;
     return payload;
   }
 

@@ -3,6 +3,7 @@ import { catchAsync } from "../utils/catchAsync.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { otpLimiter, loginLimiter, registerLimiter } from "../middlewares/rateLimiter.js";
 import AuthService from "../services/AuthService.js";
+import AppError from "../utils/AppError.js";
 
 const authService = new AuthService();
 const router = Router();
@@ -102,16 +103,10 @@ const requestContext = (req) => ({
 router.post("/register", registerLimiter, catchAsync(async (req, res) => {
   const { email, password, firstName, lastName, phone, roleScope } = req.body;
   if (!email || !password || !firstName || !lastName) {
-    return res.status(400).json({
-      success: false,
-      message: "Missing required fields: email, password, firstName, lastName",
-    });
+    throw new AppError("Missing required fields: email, password, firstName, lastName", 400);
   }
   if (password.length < 8) {
-    return res.status(400).json({
-      success: false,
-      message: "Password must be at least 8 characters",
-    });
+    throw new AppError("Password must be at least 8 characters", 400);
   }
   const result = await authService.register(
     { email, password, firstName, lastName, phone, roleScope },
@@ -145,10 +140,7 @@ router.post("/register", registerLimiter, catchAsync(async (req, res) => {
 router.post("/login", loginLimiter, catchAsync(async (req, res) => {
   const { email, password, expectedRole, expectedRoles } = req.body;
   if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Email and password are required",
-    });
+    throw new AppError("Email and password are required", 400);
   }
   const result = await authService.login(email, password, {
     ...requestContext(req),
@@ -181,7 +173,7 @@ router.post("/login", loginLimiter, catchAsync(async (req, res) => {
 router.post("/refresh", loginLimiter, catchAsync(async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
-    return res.status(400).json({ success: false, message: "Refresh token is required" });
+    throw new AppError("Refresh token is required", 400);
   }
   const result = await authService.refreshAccessToken(refreshToken, requestContext(req));
   res.json({ success: true, data: result });
@@ -240,10 +232,7 @@ router.post("/logout-all", authMiddleware, catchAsync(async (req, res) => {
 router.post("/forgot-password", otpLimiter, catchAsync(async (req, res) => {
   const { email } = req.body;
   if (!email) {
-    return res.status(400).json({
-      success: false,
-      message: "Email is required",
-    });
+    throw new AppError("Email is required", 400);
   }
   const result = await authService.forgotPassword(email);
   res.json({ success: true, data: result });
@@ -270,10 +259,7 @@ router.post("/forgot-password", otpLimiter, catchAsync(async (req, res) => {
 router.post("/verify-otp", otpLimiter, catchAsync(async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) {
-    return res.status(400).json({
-      success: false,
-      message: "Email and OTP are required",
-    });
+    throw new AppError("Email and OTP are required", 400);
   }
   const result = await authService.verifyOtp(email, otp);
   res.json({ success: true, data: result });
@@ -300,17 +286,11 @@ router.post("/verify-otp", otpLimiter, catchAsync(async (req, res) => {
 router.post("/reset-password", otpLimiter, catchAsync(async (req, res) => {
   const { email, otp, newPassword } = req.body;
   if (!email || !otp || !newPassword) {
-    return res.status(400).json({
-      success: false,
-      message: "Email, OTP, and newPassword are required",
-    });
+    throw new AppError("Email, OTP, and newPassword are required", 400);
   }
   // Server-side validation will enforce minimum length; basic client check
   if (newPassword.length < 8) {
-    return res.status(400).json({
-      success: false,
-      message: "Password must be at least 8 characters",
-    });
+    throw new AppError("Password must be at least 8 characters", 400);
   }
   const result = await authService.resetPassword(email, otp, newPassword);
   res.json({ success: true, data: result });
@@ -342,10 +322,7 @@ router.post("/reset-password", otpLimiter, catchAsync(async (req, res) => {
 router.post("/change-password", authMiddleware, catchAsync(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({
-      success: false,
-      message: "Current password and new password are required",
-    });
+    throw new AppError("Current password and new password are required", 400);
   }
   const result = await authService.changePassword(req.user.sub, currentPassword, newPassword);
   res.json({ success: true, data: result });

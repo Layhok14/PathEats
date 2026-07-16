@@ -2,7 +2,6 @@ import { Router } from "express";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import * as placesController from "../controllers/placesController.js";
-import { getConsumerCategories } from "../repositories/adminRepository.js";
 import { requirePrivileges } from "../middlewares/privilegeGuard.js";
 
 const router = Router();
@@ -12,14 +11,7 @@ router.post("/search", placesController.search);
 router.post("/score", placesController.getScore);
 router.post("/route", placesController.getRoute);
 router.get("/count", placesController.getCount);
-router.get("/categories", async (_req, res, next) => {
-  try {
-    const categories = await getConsumerCategories();
-    res.json({ success: true, data: categories });
-  } catch (err) {
-    next(err);
-  }
-});
+router.get("/categories", placesController.getCategories);
 router.get("/reviews/all", placesController.getAllReviews);
 router.get("/:id", placesController.getById);
 router.get("/:id/reviews", placesController.getReviews);

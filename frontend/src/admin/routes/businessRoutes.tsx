@@ -9,7 +9,7 @@ const VendorOnboardingPage = lazy(() => import("../pages/global/VendorOnboarding
 const ReviewModerationPage = lazy(() => import("../pages/global/ReviewModerationPage"));
 const AdminStallManagePage = lazy(() => import("../pages/global/AdminStallManagePage"));
 const AdminStallDetailPage = lazy(() => import("../pages/global/AdminStallDetailPage"));
-const StallCreatePage = lazy(() => import("../../vendor/pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage })));
+const StallCreatePage = lazy(() => import("../../shared/pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage })));
 
 const businessOrGlobal = (page: React.ReactNode) => (
   <AuthGuard requiredRole={["GLOBAL_ADMIN", "BUSINESS_ASSISTANCE"]}>{page}</AuthGuard>

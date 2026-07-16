@@ -2070,3 +2070,38 @@ export const getMenuItemLinkCount = async (menuItemId) => {
   );
   return rows[0]?.count ?? 0;
 };
+
+export const getUserRoleScope = async (userId) => {
+  const { rows } = await pool.query(
+    "SELECT role_scope FROM users WHERE id::text = $1 LIMIT 1",
+    [userId]
+  );
+  return rows[0]?.role_scope ?? null;
+};
+
+export const getSystemHealth = async () => {
+  const startedAt = Date.now();
+  const { rows } = await pool.query("SELECT NOW() AS now");
+  return {
+    status: "healthy",
+    dbConnected: true,
+    dbLatency: `${Date.now() - startedAt}ms`,
+    uptime: process.uptime(),
+    timestamp: rows[0]?.now,
+  };
+};
+
+export const cancelDatabaseQuery = async (pid) => {
+  const { rows } = await pool.query("SELECT pg_cancel_backend($1) AS cancelled", [pid]);
+  return Boolean(rows[0]?.cancelled);
+};
+
+export const getAdminProfile = async (userId) => {
+  const { rows } = await pool.query(
+    `SELECT id::text, email, first_name, last_name, phone_number,
+            role_scope, is_banned, created_at, updated_at
+     FROM users WHERE id = $1`,
+    [userId]
+  );
+  return rows[0] ?? null;
+};

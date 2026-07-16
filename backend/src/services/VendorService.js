@@ -61,8 +61,8 @@ class VendorService {
     }
 
     const stall = await this.vendorRepo.create({
-      owner_id: ownerId,
       ...data,
+      owner_id: ownerId,
       category_id: categoryId,
       menu_item_ids: normalizeMenuItemIds(data),
       name: sanitizeText(data.name),

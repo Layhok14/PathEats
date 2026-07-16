@@ -1,5 +1,6 @@
 import * as adminService from "../services/AdminService.js";
 import { validatePrice } from "../utils/validation.js";
+import AppError from "../utils/AppError.js";
 
 class AdminController {
   constructor(service) {
@@ -134,7 +135,7 @@ class AdminController {
   deleteStall = async (req, res, next) => {
     try {
       const stall = await this.service.deleteStall(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      if (!stall) throw new AppError("Stall not found", 404);
       res.json({ success: true, data: stall });
     } catch (error) {
       next(error);
@@ -170,7 +171,7 @@ class AdminController {
   deleteStallMenuItem = async (req, res, next) => {
     try {
       const menuItem = await this.service.deleteStallMenuItem(req.params.id, req.query.placeId || null, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!menuItem) return res.status(404).json({ success: false, message: "Menu item not found" });
+      if (!menuItem) throw new AppError("Menu item not found", 404);
       res.json({ success: true, data: menuItem });
     } catch (error) {
       next(error);
@@ -189,7 +190,7 @@ class AdminController {
   deleteStallCategory = async (req, res, next) => {
     try {
       const category = await this.service.deleteStallCategory(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!category) return res.status(404).json({ success: false, message: "Category not found" });
+      if (!category) throw new AppError("Category not found", 404);
       res.json({ success: true, data: category });
     } catch (error) {
       next(error);
@@ -208,7 +209,7 @@ class AdminController {
   deleteStallPlaceHour = async (req, res, next) => {
     try {
       const hour = await this.service.deleteStallPlaceHour(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!hour) return res.status(404).json({ success: false, message: "Place hour not found" });
+      if (!hour) throw new AppError("Place hour not found", 404);
       res.json({ success: true, data: hour });
     } catch (error) {
       next(error);
@@ -227,7 +228,7 @@ class AdminController {
   deleteStallReview = async (req, res, next) => {
     try {
       const review = await this.service.deleteStallReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      if (!review) throw new AppError("Review not found", 404);
       res.json({ success: true, data: review });
     } catch (error) {
       next(error);
@@ -260,7 +261,7 @@ class AdminController {
     try {
       const role = await this.service.updateRoleRecord(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       if (!role) {
-        return res.status(404).json({ success: false, message: "Role not found" });
+        throw new AppError("Role not found", 404);
       }
       res.json({ success: true, message: "Role updated successfully", data: role });
     } catch (error) {
@@ -272,7 +273,7 @@ class AdminController {
     try {
       const role = await this.service.deleteRoleRecord(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
       if (!role) {
-        return res.status(404).json({ success: false, message: "Role not found" });
+        throw new AppError("Role not found", 404);
       }
       res.json({ success: true, message: "Role deleted successfully", data: role });
     } catch (error) {
@@ -294,7 +295,7 @@ class AdminController {
   getStallById = async (req, res, next) => {
     try {
       const stall = await this.service.getStallById(req.params.id);
-      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      if (!stall) throw new AppError("Stall not found", 404);
       res.json({ success: true, data: stall });
     } catch (error) {
       next(error);
@@ -314,7 +315,7 @@ class AdminController {
   editStall = async (req, res, next) => {
     try {
       const stall = await this.service.editStall(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      if (!stall) throw new AppError("Stall not found", 404);
       res.json({ success: true, data: stall });
     } catch (error) {
       next(error);
@@ -324,7 +325,7 @@ class AdminController {
   toggleStallStatus = async (req, res, next) => {
     try {
       const stall = await this.service.toggleStallStatus(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!stall) return res.status(404).json({ success: false, message: "Stall not found" });
+      if (!stall) throw new AppError("Stall not found", 404);
       res.json({ success: true, data: stall });
     } catch (error) {
       next(error);
@@ -374,7 +375,7 @@ class AdminController {
     try {
       validatePrice(req.body.price);
       const item = await this.service.editMenuItem(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!item) return res.status(404).json({ success: false, message: "Menu item not found" });
+      if (!item) throw new AppError("Menu item not found", 404);
       res.json({ success: true, data: item });
     } catch (error) {
       next(error);
@@ -398,7 +399,7 @@ class AdminController {
       const roleScope = req.query.role_scope;
       const limit = Number(req.query.limit || 100);
       if (!roleScope || !["GLOBAL_ADMIN", "DEVELOPER_ADMIN", "BUSINESS_ASSISTANCE"].includes(roleScope)) {
-        return res.status(400).json({ success: false, message: "Valid role_scope is required (GLOBAL_ADMIN, DEVELOPER_ADMIN, BUSINESS_ASSISTANCE)" });
+        throw new AppError("Valid role_scope is required (GLOBAL_ADMIN, DEVELOPER_ADMIN, BUSINESS_ASSISTANCE)", 400);
       }
       const logs = await this.service.getAuditLogsByRoleScope(roleScope, limit);
       res.json({ success: true, data: logs });
@@ -412,7 +413,7 @@ class AdminController {
   getUserById = async (req, res, next) => {
     try {
       const user = await this.service.getUserById(req.params.id);
-      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      if (!user) throw new AppError("User not found", 404);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -422,7 +423,7 @@ class AdminController {
   updateUser = async (req, res, next) => {
     try {
       const user = await this.service.updateUser(req.params.id, req.body, req.user?.sub, req.user?.role_scope || req.user?.role, req.user);
-      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      if (!user) throw new AppError("User not found", 404);
       res.json({ success: true, data: user });
     } catch (error) {
       next(error);
@@ -432,7 +433,7 @@ class AdminController {
   deleteUser = async (req, res, next) => {
     try {
       const user = await this.service.deleteUser(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!user) return res.status(404).json({ success: false, message: "User not found" });
+      if (!user) throw new AppError("User not found", 404);
       res.json({ success: true, message: "User deleted successfully", data: user });
     } catch (error) {
       next(error);
@@ -475,7 +476,7 @@ class AdminController {
   flagReview = async (req, res, next) => {
     try {
       const review = await this.service.flagReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      if (!review) throw new AppError("Review not found", 404);
       res.json({ success: true, data: review });
     } catch (error) {
       next(error);
@@ -485,7 +486,7 @@ class AdminController {
   unflagReview = async (req, res, next) => {
     try {
       const review = await this.service.unflagReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      if (!review) throw new AppError("Review not found", 404);
       res.json({ success: true, data: review });
     } catch (error) {
       next(error);
@@ -495,7 +496,7 @@ class AdminController {
   removeReview = async (req, res, next) => {
     try {
       const review = await this.service.removeReview(req.params.id, req.user?.sub, req.user?.role_scope || req.user?.role);
-      if (!review) return res.status(404).json({ success: false, message: "Review not found" });
+      if (!review) throw new AppError("Review not found", 404);
       res.json({ success: true, data: review });
     } catch (error) {
       next(error);
@@ -530,6 +531,31 @@ class AdminController {
     try {
       const categories = await this.service.getConsumerCategories();
       res.json({ success: true, data: categories });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSystemHealth = async (_req, res, next) => {
+    try {
+      res.json({ success: true, data: await this.service.getSystemHealth() });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  cancelDatabaseQuery = async (req, res, next) => {
+    try {
+      const data = await this.service.cancelDatabaseQuery(req.body.pid);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getProfile = async (req, res, next) => {
+    try {
+      res.json({ success: true, data: await this.service.getAdminProfile(req.user.sub) });
     } catch (error) {
       next(error);
     }
@@ -592,5 +618,8 @@ export const removeReview = adminController.removeReview;
 export const getDeletionImpact = adminController.getDeletionImpact;
 export const getMenuItemLinkCount = adminController.getMenuItemLinkCount;
 export const getConsumerCategories = adminController.getConsumerCategories;
+export const getSystemHealth = adminController.getSystemHealth;
+export const cancelDatabaseQuery = adminController.cancelDatabaseQuery;
+export const getProfile = adminController.getProfile;
 
 export default adminController;

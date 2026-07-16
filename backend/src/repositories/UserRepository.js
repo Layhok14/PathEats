@@ -227,6 +227,142 @@ class UserRepository {
     return rows[0];
   }
 
+  async getBookmarks(userId) {
+    const { rows } = await db.query(
+      `SELECT b.id, b.place_id, b.notes, b.created_at,
+              p.name AS place_name, p.photo_url, p.price_range, p.rating_avg, p.address
+       FROM bookmarks b
+       JOIN places p ON p.id = b.place_id
+       JOIN users owner_user
+         ON owner_user.id = p.owner_id
+        AND owner_user.role_scope = 'VENDOR'
+        AND owner_user.is_banned = FALSE
+       WHERE b.user_id = $1
+         AND p.status = 'active'
+         AND p.is_open = TRUE
+       ORDER BY b.created_at DESC`,
+      [userId]
+    );
+    return rows;
+  }
+
+  async isPublicPlace(placeId) {
+    const { rowCount } = await db.query(
+      `SELECT p.id
+       FROM places p
+       JOIN users owner_user
+         ON owner_user.id = p.owner_id
+        AND owner_user.role_scope = 'VENDOR'
+        AND owner_user.is_banned = FALSE
+       WHERE p.id = $1 AND p.status = 'active' AND p.is_open = TRUE
+       LIMIT 1`,
+      [placeId]
+    );
+    return rowCount > 0;
+  }
+
+  async addBookmark(userId, placeId) {
+    const { rows } = await db.query(
+      `INSERT INTO bookmarks (user_id, place_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING
+       RETURNING id, place_id, created_at`,
+      [userId, placeId]
+    );
+    return rows[0] || null;
+  }
+
+  async removeBookmark(userId, placeId) {
+    const { rowCount } = await db.query(
+      "DELETE FROM bookmarks WHERE user_id = $1 AND place_id = $2",
+      [userId, placeId]
+    );
+    return rowCount > 0;
+  }
+
+  async getRoutes(userId) {
+    const { rows } = await db.query(
+      `SELECT id, label, origin, destination, waypoints, saved_at
+       FROM routes WHERE user_id = $1 ORDER BY saved_at DESC`,
+      [userId]
+    );
+    return rows;
+  }
+
+  async addRoute(userId, { label, origin, destination, waypoints }) {
+    const { rows } = await db.query(
+      `INSERT INTO routes (user_id, label, origin, destination, waypoints)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, label, origin, destination, waypoints, saved_at`,
+      [userId, label || null, JSON.stringify(origin), JSON.stringify(destination), waypoints ? JSON.stringify(waypoints) : null]
+    );
+    return rows[0];
+  }
+
+  async deleteAllRoutes(userId) {
+    const { rowCount } = await db.query("DELETE FROM routes WHERE user_id = $1", [userId]);
+    return rowCount;
+  }
+
+  async deleteRoute(userId, routeId) {
+    const { rowCount } = await db.query(
+      "DELETE FROM routes WHERE id = $1 AND user_id = $2",
+      [routeId, userId]
+    );
+    return rowCount > 0;
+  }
+
+  async routeLabelExists(userId, routeId, label) {
+    const { rowCount } = await db.query(
+      "SELECT id FROM routes WHERE user_id = $1 AND label = $2 AND id != $3 LIMIT 1",
+      [userId, label, routeId]
+    );
+    return rowCount > 0;
+  }
+
+  async updateRouteLabel(userId, routeId, label) {
+    const { rows } = await db.query(
+      `UPDATE routes SET label = $1
+       WHERE id = $2 AND user_id = $3
+       RETURNING id, label, origin, destination, waypoints, saved_at`,
+      [label, routeId, userId]
+    );
+    return rows[0] || null;
+  }
+
+  async getHistory(userId) {
+    const { rows } = await db.query(
+      `SELECT id, query, filters, results_count, created_at
+       FROM search_history WHERE user_id = $1
+       ORDER BY created_at DESC LIMIT 50`,
+      [userId]
+    );
+    return rows;
+  }
+
+  async addHistory(userId, { query, filters, resultsCount }) {
+    const { rows } = await db.query(
+      `INSERT INTO search_history (user_id, query, filters, results_count)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, query, filters, results_count, created_at`,
+      [userId, query, filters ? JSON.stringify(filters) : null, resultsCount || 0]
+    );
+    return rows[0];
+  }
+
+  async deleteAllHistory(userId) {
+    const { rowCount } = await db.query("DELETE FROM search_history WHERE user_id = $1", [userId]);
+    return rowCount;
+  }
+
+  async deleteHistory(userId, historyId) {
+    const { rowCount } = await db.query(
+      "DELETE FROM search_history WHERE id = $1 AND user_id = $2",
+      [historyId, userId]
+    );
+    return rowCount > 0;
+  }
+
   /**
    * Update user's password hash.
    */

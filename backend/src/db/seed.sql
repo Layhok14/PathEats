@@ -1,9 +1,15 @@
+-- Final clean-install schema and demo data.
+-- WARNING: this script drops existing PathEats tables. Run it only on a new
+-- or disposable database, then apply indexes.sql followed by policies.sql.
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Cleanup
+DROP TABLE IF EXISTS recovery_operations CASCADE;
+DROP TABLE IF EXISTS scheduled_backups CASCADE;
+DROP TABLE IF EXISTS backup_profiles CASCADE;
 DROP TABLE IF EXISTS onboarding_config CASCADE;
 DROP TABLE IF EXISTS menu_item_images CASCADE;
 DROP TABLE IF EXISTS place_menu_items CASCADE;
@@ -20,12 +26,13 @@ DROP TABLE IF EXISTS user_profile_images CASCADE;
 DROP TABLE IF EXISTS user_preferences CASCADE;
 DROP TABLE IF EXISTS session_events CASCADE;
 DROP TABLE IF EXISTS refresh_tokens CASCADE;
-DROP TABLE IF EXISTS audit_log CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS database_activity_log CASCADE;
 DROP TABLE IF EXISTS query_presets CASCADE;
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS "role" CASCADE;
 DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;
+DROP FUNCTION IF EXISTS update_menu_items_updated_at CASCADE;
 DROP FUNCTION IF EXISTS refresh_place_rating(UUID) CASCADE;
 DROP FUNCTION IF EXISTS refresh_place_rating_after_review() CASCADE;
 
@@ -40,7 +47,9 @@ CREATE TABLE users (
   role_scope TEXT NOT NULL DEFAULT 'CONSUMER',
   is_banned BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT users_role_scope_check
+    CHECK (role_scope IN ('CONSUMER','VENDOR','GLOBAL_ADMIN','DEVELOPER_ADMIN','BUSINESS_ASSISTANCE'))
 );
 
 CREATE TABLE refresh_tokens (
@@ -139,10 +148,12 @@ CREATE TABLE places (
   rating_avg NUMERIC(3,2) DEFAULT 0,
   rating_count INTEGER DEFAULT 0,
   is_open BOOLEAN DEFAULT TRUE,
-  status TEXT NOT NULL DEFAULT 'active'
-    CHECK (status IN ('active', 'closed')),
+  status TEXT NOT NULL DEFAULT 'active',
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT places_status_active_closed_check
+    CHECK (status IN ('active', 'closed'))
 );
 
 CREATE OR REPLACE FUNCTION enforce_place_owner_role()
@@ -210,7 +221,8 @@ CREATE TABLE menu_items (
   default_price DECIMAL(10,2) NOT NULL CHECK (default_price >= 0),
   category TEXT DEFAULT 'snack' CHECK (category IN ('snack', 'dessert', 'main course', 'drink')),
   image_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE place_menu_items (
@@ -322,6 +334,10 @@ CREATE TRIGGER set_user_profile_images_updated_at
 
 CREATE TRIGGER set_places_updated_at
   BEFORE UPDATE ON places FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_menu_items_updated_at
+  BEFORE UPDATE ON menu_items FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER set_reviews_updated_at
@@ -748,18 +764,19 @@ BEGIN
         RETURNING id
       )
       INSERT INTO place_menu_items (place_id, menu_item_id, price)
-      SELECT p_id, id, round(item_price::numeric, 2) FROM created_item;
+      SELECT p_id, id, round(item_price::numeric, 2) FROM created_item
+      ON CONFLICT (place_id, menu_item_id) DO UPDATE
+      SET price = EXCLUDED.price,
+          updated_at = NOW();
     END LOOP;
 
-    -- Reviews (~40% of places get reviews)
+    -- Reviews (~40% of places get one review from the seeded consumer).
+    -- The active-review unique index permits one review per user and place.
     IF random() > 0.6 THEN
-      r := 1 + floor(random() * 5)::int;
-      FOR j IN 1..r::int LOOP
-        review_rating := 3 + floor(random() * 3)::int;
-        review_body := review_bodies[1 + floor(random() * array_length(review_bodies, 1))::int];
-        INSERT INTO reviews (place_id, user_id, rating, body, is_moderated)
-        VALUES (p_id, v_consumer, review_rating, review_body, TRUE);
-      END LOOP;
+      review_rating := 3 + floor(random() * 3)::int;
+      review_body := review_bodies[1 + floor(random() * array_length(review_bodies, 1))::int];
+      INSERT INTO reviews (place_id, user_id, rating, body, is_moderated)
+      VALUES (p_id, v_consumer, review_rating, review_body, TRUE);
     END IF;
   END LOOP;
 END $$;
@@ -847,6 +864,8 @@ CREATE TABLE IF NOT EXISTS recovery_operations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   recovery_type VARCHAR(50) NOT NULL,
   file_name VARCHAR(255) DEFAULT 'N/A',
+  scope TEXT,
+  actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
   status VARCHAR(20) DEFAULT 'COMPLETED',
   message TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -910,24 +929,45 @@ ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS "role" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT UNIQUE NOT NULL,
-  base_scope TEXT NOT NULL CHECK (base_scope IN ('CONSUMER','VENDOR','GLOBAL_ADMIN','DEVELOPER_ADMIN','BUSINESS_ASSISTANCE')),
+  base_scope TEXT NOT NULL,
   table_privileges JSONB DEFAULT '{}'::jsonb,
   system_capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,
   grant_option BOOLEAN DEFAULT FALSE,
   is_system BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT role_name_format_check
+    CHECK (name ~ '^[A-Z][A-Z0-9_]{2,39}$'),
+  CONSTRAINT role_base_scope_check
+    CHECK (base_scope IN ('CONSUMER','VENDOR','GLOBAL_ADMIN','DEVELOPER_ADMIN','BUSINESS_ASSISTANCE'))
 );
 INSERT INTO "role" (name, base_scope, table_privileges, system_capabilities, grant_option, is_system) VALUES
   ('CONSUMER', 'CONSUMER', '{"users":["SELECT","UPDATE"],"user_preferences":["SELECT","INSERT","UPDATE"],"user_profile_images":["SELECT","INSERT","UPDATE","DELETE"],"places":["SELECT"],"menu_items":["SELECT"],"place_menu_items":["SELECT"],"reviews":["SELECT","INSERT","UPDATE","DELETE"],"routes":["SELECT","INSERT","UPDATE","DELETE"],"bookmarks":["SELECT","INSERT","UPDATE","DELETE"],"search_history":["SELECT","INSERT","DELETE"]}'::jsonb, '[]'::jsonb, FALSE, TRUE),
   ('VENDOR', 'VENDOR', '{"users":["SELECT","UPDATE"],"user_preferences":["SELECT","INSERT","UPDATE"],"user_profile_images":["SELECT","INSERT","UPDATE","DELETE"],"places":["SELECT","INSERT","UPDATE","DELETE"],"place_categories":["SELECT"],"place_hours":["SELECT","INSERT","UPDATE","DELETE"],"place_images":["SELECT","INSERT","UPDATE","DELETE"],"menu_items":["SELECT","INSERT","UPDATE","DELETE"],"menu_item_images":["SELECT","INSERT","UPDATE","DELETE"],"place_menu_items":["SELECT","INSERT","UPDATE","DELETE"],"reviews":["SELECT"]}'::jsonb, '[]'::jsonb, FALSE, TRUE),
-  ('GLOBAL_ADMIN', 'GLOBAL_ADMIN', '{"users":["SELECT","INSERT","UPDATE","DELETE"],"places":["SELECT","INSERT","UPDATE","DELETE"],"place_categories":["SELECT","INSERT","UPDATE","DELETE"],"place_hours":["SELECT","INSERT","UPDATE","DELETE"],"place_images":["SELECT","INSERT","UPDATE","DELETE"],"menu_items":["SELECT","INSERT","UPDATE","DELETE"],"menu_item_images":["SELECT","INSERT","UPDATE","DELETE"],"place_menu_items":["SELECT","INSERT","UPDATE","DELETE"],"reviews":["SELECT","INSERT","UPDATE","DELETE"],"routes":["SELECT","INSERT","UPDATE","DELETE"],"bookmarks":["SELECT","INSERT","UPDATE","DELETE"],"search_history":["SELECT","DELETE"],"onboarding_config":["SELECT","UPDATE"],"audit_log":["SELECT"],"role":["SELECT","INSERT","UPDATE","DELETE"],"backup_profiles":["SELECT","INSERT","UPDATE","DELETE"],"scheduled_backups":["SELECT","INSERT","UPDATE","DELETE"],"recovery_operations":["SELECT","INSERT"],"query_presets":["SELECT","INSERT","UPDATE","DELETE"],"database_activity_log":["SELECT","INSERT"]}'::jsonb, '["BACKUP","RECOVERY","QUERY","MAINTENANCE"]'::jsonb, TRUE, TRUE),
-  ('BUSINESS_ASSISTANCE', 'BUSINESS_ASSISTANCE', '{"users":["SELECT","INSERT","UPDATE"],"places":["SELECT","INSERT","UPDATE","DELETE"],"menu_items":["SELECT","INSERT","UPDATE","DELETE"],"place_menu_items":["SELECT","INSERT","UPDATE","DELETE"],"reviews":["SELECT","UPDATE","DELETE"],"onboarding_config":["SELECT","UPDATE"]}'::jsonb, '[]'::jsonb, FALSE, TRUE),
+  ('GLOBAL_ADMIN', 'GLOBAL_ADMIN', '{"users":["SELECT","INSERT","UPDATE","DELETE"],"user_preferences":["SELECT","INSERT","UPDATE"],"user_profile_images":["SELECT","INSERT","UPDATE","DELETE"],"places":["SELECT","INSERT","UPDATE","DELETE"],"place_categories":["SELECT","INSERT","UPDATE","DELETE"],"place_hours":["SELECT","INSERT","UPDATE","DELETE"],"place_images":["SELECT","INSERT","UPDATE","DELETE"],"menu_items":["SELECT","INSERT","UPDATE","DELETE"],"menu_item_images":["SELECT","INSERT","UPDATE","DELETE"],"place_menu_items":["SELECT","INSERT","UPDATE","DELETE"],"reviews":["SELECT","INSERT","UPDATE","DELETE"],"routes":["SELECT","INSERT","UPDATE","DELETE"],"bookmarks":["SELECT","INSERT","UPDATE","DELETE"],"search_history":["SELECT","DELETE"],"onboarding_config":["SELECT","UPDATE"],"audit_log":["SELECT"],"role":["SELECT","INSERT","UPDATE","DELETE"],"backup_profiles":["SELECT","INSERT","UPDATE","DELETE"],"scheduled_backups":["SELECT","INSERT","UPDATE","DELETE"],"recovery_operations":["SELECT","INSERT"],"query_presets":["SELECT","INSERT","UPDATE","DELETE"],"database_activity_log":["SELECT","INSERT"]}'::jsonb, '["BACKUP","RECOVERY","QUERY","MAINTENANCE"]'::jsonb, TRUE, TRUE),
+  ('BUSINESS_ASSISTANCE', 'BUSINESS_ASSISTANCE', '{"users":["SELECT","INSERT","UPDATE"],"places":["SELECT","INSERT","UPDATE","DELETE"],"place_categories":["SELECT"],"place_hours":["SELECT","INSERT","UPDATE","DELETE"],"place_images":["SELECT","INSERT","UPDATE","DELETE"],"menu_items":["SELECT","INSERT","UPDATE","DELETE"],"menu_item_images":["SELECT","INSERT","UPDATE","DELETE"],"place_menu_items":["SELECT","INSERT","UPDATE","DELETE"],"reviews":["SELECT","UPDATE","DELETE"],"onboarding_config":["SELECT","UPDATE"],"audit_log":["SELECT"]}'::jsonb, '[]'::jsonb, FALSE, TRUE),
   ('DEVELOPER_ADMIN', 'DEVELOPER_ADMIN', '{}'::jsonb, '["BACKUP","RECOVERY","QUERY","MAINTENANCE"]'::jsonb, TRUE, TRUE)
 ON CONFLICT (name) DO NOTHING;
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES "role"(id) ON DELETE RESTRICT;
 UPDATE users u SET role_id = r.id FROM "role" r WHERE u.role_id IS NULL AND r.name = u.role_scope;
 ALTER TABLE users ALTER COLUMN role_id SET NOT NULL;
+
+CREATE OR REPLACE FUNCTION prevent_role_base_scope_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.base_scope IS DISTINCT FROM OLD.base_scope THEN
+    RAISE EXCEPTION 'Role base_scope is immutable';
+  END IF;
+
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_role_base_scope_immutable
+BEFORE UPDATE ON "role"
+FOR EACH ROW
+EXECUTE FUNCTION prevent_role_base_scope_change();
 
 COMMIT;

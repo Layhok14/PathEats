@@ -633,3 +633,36 @@ export const getMenuItemLinkCount = async (id) => {
 export const getConsumerCategories = async () => {
   return adminRepository.getConsumerCategories();
 };
+
+export const getUserRoleScope = async (userId) => {
+  return adminRepository.getUserRoleScope(userId);
+};
+
+export const getSystemHealth = async () => {
+  return adminRepository.getSystemHealth();
+};
+
+export const cancelDatabaseQuery = async (pid) => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    throw new AppError("Valid PID (positive integer) is required", 400);
+  }
+  const cancelled = await adminRepository.cancelDatabaseQuery(pid);
+  if (!cancelled) throw new AppError(`Database process ${pid} was not active`, 404);
+  return { message: `Cancel signal sent to PID ${pid}` };
+};
+
+export const getAdminProfile = async (userId) => {
+  const row = await adminRepository.getAdminProfile(userId);
+  if (!row) throw new AppError("User not found", 404);
+  return {
+    id: row.id,
+    email: row.email,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    phone: row.phone_number,
+    roleScope: row.role_scope,
+    isBanned: row.is_banned,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};

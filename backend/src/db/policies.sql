@@ -1,6 +1,10 @@
 -- RLS policies and data integrity constraints.
 -- Always safe to apply: if Supabase Auth (auth.uid()) is not present,
 -- a NULL-returning shim is created so RLS defaults to deny for browser clients.
+-- The backend's database credential may bypass RLS, so backend authentication,
+-- application-role checks, ownership checks, and field validation remain required.
+
+BEGIN;
 
 DO $auth_shim$
 BEGIN
@@ -166,3 +170,5 @@ BEGIN
   END IF;
 END
 $integrity$;
+
+COMMIT;

@@ -4,38 +4,13 @@ import { restrictToRoles } from "../middlewares/rbacGuard.js";
 import { catchAsync } from "../utils/catchAsync.js";
 import AppError from "../utils/AppError.js";
 import * as adminController from "../controllers/adminController.js";
-import db, { pool } from "../config/db.js";
+import * as adminService from "../services/AdminService.js";
 import { normalizeRoleScope } from "../utils/roles.js";
 import { requirePrivileges, requireSystemCapability } from "../middlewares/privilegeGuard.js";
-import { BUILT_IN_ROLE_POLICIES } from "../utils/privilegeRegistry.js";
 
 const router = Router();
 
-const devAdminBypass = (req, res, next) => {
-  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
-  const isDevelopment = nodeEnv === "development" || nodeEnv === "dev";
-  const isBypassEnabled = process.env.PATHEAT_ADMIN_BYPASS === "true";
-
-  if (isDevelopment && isBypassEnabled) {
-    console.warn("[BYPASS] Admin bypass active — hardcoded GLOBAL_ADMIN session");
-    req.user = {
-      sub: "dev-admin",
-      email: "dev-admin@patheat.local",
-      role_scope: "GLOBAL_ADMIN",
-      role: "GLOBAL_ADMIN",
-      roleName: "GLOBAL_ADMIN",
-      baseScope: "GLOBAL_ADMIN",
-      grantOption: true,
-      isSystemRole: true,
-      tablePrivileges: BUILT_IN_ROLE_POLICIES.GLOBAL_ADMIN,
-    };
-    return next();
-  }
-
-  return authMiddleware(req, res, next);
-};
-
-router.use(devAdminBypass);
+router.use(authMiddleware);
 router.use(restrictToRoles("GLOBAL_ADMIN", "BUSINESS_ASSISTANCE"));
 
 const globalAdminOnly = restrictToRoles("GLOBAL_ADMIN");
@@ -75,12 +50,9 @@ const vendorAccountOrGlobalAdmin = async (req, _res, next) => {
       return next(forbidden("Business assistants cannot change accounts out of the vendor role."));
     }
 
-    const { rows } = await db.query(
-      "SELECT role_scope FROM users WHERE id::text = $1 LIMIT 1",
-      [req.params.id]
-    );
-    if (!rows.length) return next(new AppError("User not found", 404));
-    if (requestedRole(rows[0].role_scope) !== "VENDOR") {
+    const roleScope = await adminService.getUserRoleScope(req.params.id);
+    if (!roleScope) return next(new AppError("User not found", 404));
+    if (requestedRole(roleScope) !== "VENDOR") {
       return next(forbidden("Business assistants can only manage vendor accounts."));
     }
     return next();
@@ -952,39 +924,11 @@ router.delete("/stalls/reviews/:id", globalAdminOnly, requirePrivileges({ table:
  *       200:
  *         description: Health status
  */
-router.get("/health", globalAdminOnly, catchAsync(async (req, res) => {
-  try {
-    const dbResult = await pool.query("SELECT NOW() AS now");
-    const latency = Date.now() - req._startTime;
-    res.json({
-      success: true,
-      data: {
-        status: "healthy",
-        dbConnected: true,
-        dbLatency: `${latency}ms`,
-        uptime: process.uptime(),
-        timestamp: dbResult.rows[0]?.now,
-      },
-    });
-  } catch (_err) {
-    res.status(503).json({ success: false, data: { status: "unhealthy", dbConnected: false } });
-  }
-}));
+router.get("/health", globalAdminOnly, catchAsync(adminController.getSystemHealth));
 
 // ── Kill Query ──────────────────────────────────────────────────────────────
 
-router.post("/audit/kill-query", globalAdminOnly, requireSystemCapability("MAINTENANCE"), catchAsync(async (req, res) => {
-  const { pid } = req.body;
-  if (!pid || typeof pid !== "number") {
-    throw new AppError("Valid PID (number) is required", 400);
-  }
-  try {
-    await db.query(`SELECT pg_cancel_backend($1)`, [pid]);
-    res.json({ success: true, data: { message: `Cancel signal sent to PID ${pid}` } });
-  } catch (err) {
-    throw new AppError(`Failed to cancel PID ${pid}: ${err.message}`, 500);
-  }
-}));
+router.post("/audit/kill-query", globalAdminOnly, requireSystemCapability("MAINTENANCE"), catchAsync(adminController.cancelDatabaseQuery));
 
 // ── Onboarding Config ──────────────────────────────────────────────────
 router.get("/onboarding", requirePrivileges({ table: "onboarding_config", action: "SELECT" }), catchAsync(adminController.getOnboardingConfig));
@@ -1001,30 +945,6 @@ router.delete("/stalls/reviews/:id/remove", businessOrGlobal, requirePrivileges(
 router.get("/categories", requirePrivileges({ table: "place_categories", action: "SELECT" }), catchAsync(adminController.getConsumerCategories));
 
 // ── Profile ────────────────────────────────────────────────────────────
-router.get("/profile", requirePrivileges({ table: "users", action: "SELECT" }), catchAsync(async (req, res) => {
-  const result = await pool.query(
-    `SELECT id::text, email, first_name, last_name, phone_number, role_scope, is_banned, created_at, updated_at
-     FROM users WHERE id = $1`,
-    [req.user.sub]
-  );
-  if (result.rows.length === 0) {
-    return res.status(404).json({ success: false, message: "User not found" });
-  }
-  const row = result.rows[0];
-  res.json({
-    success: true,
-    data: {
-      id: row.id,
-      email: row.email,
-      firstName: row.first_name,
-      lastName: row.last_name,
-      phone: row.phone_number,
-      roleScope: row.role_scope,
-      isBanned: row.is_banned,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    },
-  });
-}));
+router.get("/profile", requirePrivileges({ table: "users", action: "SELECT" }), catchAsync(adminController.getProfile));
 
 export default router;

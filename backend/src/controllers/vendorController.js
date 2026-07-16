@@ -1,5 +1,5 @@
-import bcrypt from "bcryptjs";
 import VendorService from "../services/VendorService.js";
+import AuthService from "../services/AuthService.js";
 import UserRepository from "../repositories/UserRepository.js";
 import { uploadVendorImage } from "../services/storageService.js";
 import { imageUpload } from "../middlewares/imageUpload.js";
@@ -14,6 +14,7 @@ import { validatePrice } from "../utils/validation.js";
 
 const userRepo = new UserRepository();
 const vendorService = new VendorService();
+const authService = new AuthService();
 
 export { imageUpload };
 
@@ -76,16 +77,8 @@ export const changePassword = catchAsync(async (req, res) => {
   if (!currentPassword || !newPassword) {
     throw new AppError("Current password and new password are required", 400);
   }
-  if (newPassword.length < 8) {
-    throw new AppError("New password must be at least 8 characters", 400);
-  }
-  const user = await userRepo.findByEmailWithPassword(req.user.email);
-  if (!user) throw new AppError("User not found", 404);
-  const valid = await bcrypt.compare(currentPassword, user.password_hash);
-  if (!valid) throw new AppError("Current password is incorrect", 401);
-  const password_hash = await bcrypt.hash(newPassword, 12);
-  await userRepo.updatePassword(req.user.sub, password_hash);
-  res.json({ success: true, data: { message: "Password changed successfully" } });
+  const result = await authService.changePassword(req.user.sub, currentPassword, newPassword);
+  res.json({ success: true, data: result });
 });
 
 // ── Dashboard ──

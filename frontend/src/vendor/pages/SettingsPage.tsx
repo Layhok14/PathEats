@@ -205,7 +205,7 @@ export function SettingsPage() {
         <div className="mb-6">
           <label style={lbl}>Phone Number</label>
           <div className="flex gap-2">
-            <div style={{ ...inp, width: "60px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>+1</div>
+            <div style={{ ...inp, width: "60px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>+855</div>
             <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} style={inp} />
           </div>
         </div>

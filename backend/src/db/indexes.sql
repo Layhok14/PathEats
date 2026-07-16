@@ -1,8 +1,10 @@
+-- Final index set. Run after seed.sql and before policies.sql.
 BEGIN;
 
 -- Users
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role_scope);
+CREATE INDEX IF NOT EXISTS idx_users_role_id ON users(role_id);
 CREATE INDEX IF NOT EXISTS idx_user_profile_images_user ON user_profile_images(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_profile_images_uploaded_by ON user_profile_images(uploaded_by);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profile_images_storage_object_unique
@@ -31,6 +33,12 @@ CREATE INDEX IF NOT EXISTS idx_session_events_type_created
 CREATE INDEX IF NOT EXISTS idx_places_location ON places USING GIST (location);
 CREATE INDEX IF NOT EXISTS idx_places_category ON places(category_id);
 CREATE INDEX IF NOT EXISTS idx_places_owner ON places(owner_id);
+-- Preferred physical order for vendor place listings by newest first.
+-- PostgreSQL does not maintain clustered order automatically. Run
+-- `CLUSTER places;` separately during a controlled maintenance window.
+CREATE INDEX IF NOT EXISTS idx_places_owner_created_at
+  ON places(owner_id, created_at DESC);
+ALTER TABLE places CLUSTER ON idx_places_owner_created_at;
 CREATE INDEX IF NOT EXISTS idx_places_admin_managed ON places(is_admin_managed);
 CREATE INDEX IF NOT EXISTS idx_places_status ON places(status);
 CREATE INDEX IF NOT EXISTS idx_place_hours_place ON place_hours(place_id);
@@ -40,6 +48,8 @@ CREATE INDEX IF NOT EXISTS idx_place_hours_open_lookup
 -- Menu items
 CREATE INDEX IF NOT EXISTS idx_menu_items_owner ON menu_items(owner_id);
 CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_items_owner_normalized_name
+  ON menu_items(owner_id, lower(regexp_replace(trim(name), '[[:space:]]+', ' ', 'g')));
 CREATE INDEX IF NOT EXISTS idx_place_menu_items_item ON place_menu_items(menu_item_id);
 CREATE INDEX IF NOT EXISTS idx_place_menu_items_available
   ON place_menu_items(place_id, is_available);
@@ -66,6 +76,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_unique_active
 CREATE INDEX IF NOT EXISTS idx_place_images_place ON place_images(place_id);
 CREATE INDEX IF NOT EXISTS idx_place_images_place_primary
   ON place_images(place_id, is_primary, sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_place_images_one_primary
+  ON place_images(place_id) WHERE is_primary = TRUE;
 CREATE INDEX IF NOT EXISTS idx_place_images_uploaded_by ON place_images(uploaded_by);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_place_images_storage_object_unique
   ON place_images(bucket_name, object_path);
@@ -73,6 +85,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_place_images_storage_object_unique
 CREATE INDEX IF NOT EXISTS idx_menu_item_images_menu_item ON menu_item_images(menu_item_id);
 CREATE INDEX IF NOT EXISTS idx_menu_item_images_menu_item_primary
   ON menu_item_images(menu_item_id, is_primary, sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_item_images_one_primary
+  ON menu_item_images(menu_item_id) WHERE is_primary = TRUE;
 CREATE INDEX IF NOT EXISTS idx_menu_item_images_uploaded_by ON menu_item_images(uploaded_by);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_item_images_storage_object_unique
   ON menu_item_images(bucket_name, object_path);
@@ -81,6 +95,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_item_images_storage_object_unique
 CREATE INDEX IF NOT EXISTS idx_dal_event_type ON database_activity_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_dal_executed_at ON database_activity_log(executed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_dal_actor ON database_activity_log(actor_id);
+
+-- Developer query presets
+CREATE UNIQUE INDEX IF NOT EXISTS idx_query_presets_system_title
+  ON query_presets(title) WHERE is_system_preset = TRUE;
+
+-- Application roles
+CREATE UNIQUE INDEX IF NOT EXISTS idx_role_name_case_insensitive
+  ON "role"(UPPER(name));
 
 -- Backup lifecycle
 CREATE INDEX IF NOT EXISTS idx_backup_profiles_due

@@ -1,5 +1,6 @@
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
+import { applyRouteCatalog } from "./routeCatalog.js";
 
 const options = {
   definition: {
@@ -44,7 +45,7 @@ const options = {
   apis: ["./src/routes/*.js"],
 };
 
-const swaggerSpec = swaggerJsdoc(options);
+const swaggerSpec = applyRouteCatalog(swaggerJsdoc(options));
 
 export function setupSwagger(app) {
   app.use(

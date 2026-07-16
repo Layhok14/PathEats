@@ -11,7 +11,7 @@ const ConsumerManagementPage = lazy(() => import("../pages/global/ConsumerManage
 const VendorListPage = lazy(() => import("../pages/global/VendorListPage"));
 const AdminStallManagePage = lazy(() => import("../pages/global/AdminStallManagePage"));
 const AdminStallDetailPage = lazy(() => import("../pages/global/AdminStallDetailPage"));
-const StallCreatePage = lazy(() => import("../../vendor/pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage })));
+const StallCreatePage = lazy(() => import("../../shared/pages/StallCreatePage").then((module) => ({ default: module.StallCreatePage })));
 const BusinessDashboardPage = lazy(() => import("../pages/global/BusinessDashboardPage"));
 const VendorOnboardingPage = lazy(() => import("../pages/global/VendorOnboardingPage"));
 const ReviewModerationPage = lazy(() => import("../pages/global/ReviewModerationPage"));

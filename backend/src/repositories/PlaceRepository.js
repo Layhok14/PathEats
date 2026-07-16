@@ -325,6 +325,45 @@ class PlaceRepository {
     );
     return rows[0] || null;
   }
+
+  async refreshRating(placeId) {
+    await db.query("SELECT refresh_place_rating($1)", [placeId]);
+  }
+
+  async countPublicPlaces() {
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::int AS total
+       FROM places p
+       JOIN users owner_user
+         ON owner_user.id = p.owner_id
+        AND owner_user.role_scope = 'VENDOR'
+        AND owner_user.is_banned = FALSE
+       WHERE p.status = 'active'
+         AND p.is_open = TRUE
+         AND p.deleted_at IS NULL`
+    );
+    return rows[0].total;
+  }
+
+  async getAllPublicReviews() {
+    const { rows } = await db.query(
+      `SELECT r.id, r.rating AS stars, r.body, r.created_at,
+              COALESCE(u.first_name || ' ' || u.last_name, 'Anonymous') AS user_name,
+              p.name AS place_name, p.id AS place_id
+       FROM reviews r
+       JOIN places p ON p.id = r.place_id
+       JOIN users owner_user
+         ON owner_user.id = p.owner_id
+        AND owner_user.role_scope = 'VENDOR'
+        AND owner_user.is_banned = FALSE
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.deleted_at IS NULL
+         AND p.status = 'active'
+         AND p.is_open = TRUE
+       ORDER BY r.created_at DESC`
+    );
+    return rows;
+  }
 }
 
 export default PlaceRepository;

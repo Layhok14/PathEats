@@ -1,27 +1,27 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { ChevronLeft, Check, MapPin, AlertTriangle } from "lucide-react";
-import { PhotoUpload } from "../components/PhotoUpload";
-import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
-import { SuccessModal } from "../../shared/components/SuccessModal";
+import { PhotoUpload } from "../../vendor/components/PhotoUpload";
+import { LoadingSpinner } from "../components/LoadingSpinner";
+import { SuccessModal } from "../components/SuccessModal";
 import { toast } from "sonner";
-import { MenuItemSelector } from "../components/MenuItemSelector";
-import { StepIndicator } from "../components/StepIndicator";
-import { useStalls } from "../../shared/hooks/useStalls";
-import { useMenuItems } from "../../shared/hooks/useMenuItems";
-import { formatPrice } from "../../shared/utils/formatters";
-import { STALL_CATEGORIES } from "../../shared/constants/categories";
-import api from "../../shared/services/axiosService";
+import { MenuItemSelector } from "../../vendor/components/MenuItemSelector";
+import { StepIndicator } from "../../vendor/components/StepIndicator";
+import { useStalls } from "../hooks/useStalls";
+import { useMenuItems } from "../hooks/useMenuItems";
+import { formatPrice } from "../utils/formatters";
+import { STALL_CATEGORIES } from "../constants/categories";
+import api from "../services/axiosService";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { LIGHT_VECTOR_STYLE } from "../../shared/constants/appConfig";
+import { LIGHT_VECTOR_STYLE } from "../constants/appConfig";
 import {
   attachMapContextRecovery,
   removeMapSafely,
   removeMarkersSafely,
-} from "../../shared/utils/maplibreLifecycle";
-import type { StallFormData, StallCategory } from "../../shared/types";
-import type { Stall, VendorMenuItem, OperatingSchedule } from "../../shared/types";
+} from "../utils/maplibreLifecycle";
+import type { StallFormData, StallCategory } from "../types";
+import type { Stall, VendorMenuItem, OperatingSchedule } from "../types";
 import {
   getAdminAllStalls,
   getAdminStallById,
