@@ -10,3 +10,9 @@ export function getApiErrorMessage(error: unknown, fallback = "Something went wr
 
   return fallback;
 }
+
+export function getApiFieldErrors(error: unknown): Record<string, string> {
+  if (!error || typeof error !== "object") return {};
+  const response = (error as { response?: { data?: { fieldErrors?: Record<string, string> } } }).response;
+  return response?.data?.fieldErrors ?? {};
+}

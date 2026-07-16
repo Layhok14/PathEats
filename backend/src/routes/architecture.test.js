@@ -26,6 +26,20 @@ describe("backend architecture", () => {
     }
   });
 
+  it("keeps database access out of backup and recovery services", async () => {
+    const serviceDirectory = path.join(currentDirectory, "../services");
+    const serviceFiles = [
+      "DeveloperBackupService.js",
+      "backupService.js",
+      "backupRecoveryService.js",
+      "backupScheduler.js",
+    ];
+    for (const serviceFile of serviceFiles) {
+      const source = await readFile(path.join(serviceDirectory, serviceFile), "utf8");
+      expect(source).not.toMatch(/config\/db|\b(?:db|pool|client)\.query\s*\(|\bpool\.connect\s*\(/);
+    }
+  });
+
   it("documents every registered domain endpoint", async () => {
     const documented = new Set(routeCatalog.map(({ method, path: routePath }) => `${method.toUpperCase()} ${routePath}`));
     const missing = [];

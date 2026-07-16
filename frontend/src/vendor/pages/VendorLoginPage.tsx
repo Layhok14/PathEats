@@ -3,8 +3,10 @@ import { useNavigate, Link } from "react-router";
 import { useAuth } from "../../shared/hooks/useAuth";
 import api from "../../shared/services/axiosService";
 import { consumeSessionNotice } from "../../shared/utils/authRedirect";
-import { getApiErrorMessage } from "../../shared/utils/apiError";
+import { getApiErrorMessage, getApiFieldErrors } from "../../shared/utils/apiError";
 import { ArrowLeft, CheckCircle } from "lucide-react";
+import { PasswordRequirementChecklist } from "../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../shared/utils/passwordPolicy";
 
 type Step = "login" | "forgot" | "otp" | "reset" | "success";
 
@@ -17,6 +19,7 @@ export function VendorLoginPage() {
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
@@ -46,6 +49,7 @@ export function VendorLoginPage() {
     setPassword("");
     setOtp("");
     setNewPassword("");
+    setConfirmPassword("");
     setSuccessMsg("");
   }
 
@@ -75,7 +79,9 @@ export function VendorLoginPage() {
     }
     if (step === "reset") {
       if (!newPassword) errs.newPassword = "New password is required";
-      else if (newPassword.length < 8) errs.newPassword = "At least 8 characters";
+      else if (!isStrongPassword(newPassword)) errs.newPassword = "Complete every password requirement";
+      if (!confirmPassword) errs.confirmPassword = "Please confirm your password";
+      else if (newPassword !== confirmPassword) errs.confirmPassword = "Passwords do not match";
     }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -136,6 +142,8 @@ export function VendorLoginPage() {
       setStep("success");
       setSuccessMsg("Password has been reset. You can now sign in.");
     } catch (err: any) {
+      const serverFields = getApiFieldErrors(err);
+      if (serverFields.password) setFieldErrors((previous) => ({ ...previous, newPassword: serverFields.password }));
       setError(getApiErrorMessage(err, "Failed to reset password."));
     } finally {
       setLoading(false);
@@ -305,11 +313,17 @@ export function VendorLoginPage() {
                 className={inp}
               />
               {fieldErrors.newPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.newPassword}</p>}
+              <PasswordRequirementChecklist password={newPassword} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[#374151] block mb-1.5">Confirm new password *</label>
+              <input type="password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword"); }} placeholder="Re-enter new password" className={inp} />
+              {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
             </div>
             {error && <p className="text-xs text-red-500">{error}</p>}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !isStrongPassword(newPassword) || newPassword !== confirmPassword}
               className="w-full py-2.5 rounded-lg text-[13px] font-semibold bg-[#006e2f] text-white hover:bg-[#005a26] transition-colors disabled:opacity-50"
             >
               {loading ? "Resetting\u2026" : "Reset Password"}

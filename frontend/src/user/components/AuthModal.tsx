@@ -4,6 +4,8 @@ import { X, Mail, Lock, User, Eye, EyeOff, ArrowLeft, CheckCircle, KeyRound } fr
 import { useAuth } from "../../shared/hooks/useAuth";
 import { useTheme } from "../../shared/hooks/useTheme";
 import api from "../../shared/services/axiosService";
+import { PasswordRequirementChecklist } from "../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../shared/utils/passwordPolicy";
 
 interface Props {
   onClose: () => void;
@@ -26,6 +28,7 @@ export function AuthModal({ onClose, prompt }: Props) {
   const [lastName, setLastName] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
   function resetForm() {
@@ -34,6 +37,7 @@ export function AuthModal({ onClose, prompt }: Props) {
     setPassword("");
     setOtp("");
     setNewPassword("");
+    setConfirmPassword("");
     setSuccessMsg("");
   }
 
@@ -59,6 +63,7 @@ export function AuthModal({ onClose, prompt }: Props) {
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     if (!firstName.trim()) { setError("First name is required."); return; }
+    if (!isStrongPassword(password) || password !== confirmPassword) { setError("Use a strong password and make sure both passwords match."); return; }
     setError("");
     setLoading(true);
     try {
@@ -103,7 +108,7 @@ export function AuthModal({ onClose, prompt }: Props) {
 
   async function handleResetPassword(e: React.FormEvent) {
     e.preventDefault();
-    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (!isStrongPassword(newPassword) || newPassword !== confirmPassword) { setError("Use a strong password and make sure both passwords match."); return; }
     setError("");
     setLoading(true);
     try {
@@ -377,10 +382,15 @@ export function AuthModal({ onClose, prompt }: Props) {
                     {showPw ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
                 </div>
+                <PasswordRequirementChecklist password={password} />
+                <div className="relative">
+                  <Lock size={12} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: tm.text4 }} />
+                  <input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm password" required className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30" style={inp} />
+                </div>
                 {error && <p className="text-xs text-red-400">{error}</p>}
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !isStrongPassword(password) || password !== confirmPassword}
                   className="w-full py-2.5 rounded-xl text-sm font-bold transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
                   style={{ background: tm.primary, color: tm.primaryText }}
                 >
@@ -489,10 +499,15 @@ export function AuthModal({ onClose, prompt }: Props) {
                   {showPw ? <EyeOff size={12} /> : <Eye size={12} />}
                 </button>
               </div>
+              <PasswordRequirementChecklist password={newPassword} />
+              <div className="relative">
+                <Lock size={12} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: tm.text4 }} />
+                <input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" required className="w-full pl-8 pr-3 py-2.5 rounded-xl text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500/30" style={inp} />
+              </div>
               {error && <p className="text-xs text-red-400">{error}</p>}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !isStrongPassword(newPassword) || newPassword !== confirmPassword}
                 className="w-full py-2.5 rounded-xl text-sm font-bold transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
                 style={{ background: tm.primary, color: tm.primaryText }}
               >

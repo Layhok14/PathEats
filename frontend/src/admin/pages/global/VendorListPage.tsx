@@ -3,6 +3,8 @@ import { useNavigate } from "react-router";
 import { Search, Store, Plus, Pencil, Trash2, X, Ban, CheckCircle, Download } from "lucide-react";
 import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
+import { PasswordRequirementChecklist } from "../../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../../shared/utils/passwordPolicy";
 import { toast } from "sonner";
 import { SuccessModal } from "../../../shared/components/SuccessModal";
 import {
@@ -11,6 +13,7 @@ import {
   updateAdminUser,
   deleteAdminUser,
   updateAdminUserStatus,
+  getAdminRoles,
   type AdminUserOverviewRow,
 } from "../../services/adminDashboardService";
 import { DetailModal } from "../developer/devShared";
@@ -64,7 +67,7 @@ export default function VendorListPage() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [successState, setSuccessState] = useState<{ message: string } | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
 
   const [detailRow, setDetailRow] = useState<AdminUserOverviewRow | null>(null);
   const [detailTable, setDetailTable] = useState<"user" | "search">("user");
@@ -92,14 +95,16 @@ export default function VendorListPage() {
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleCreate = async () => {
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      toast.error("Name, email, and password required.");
+    if (!form.name.trim() || !form.email.trim() || !isStrongPassword(form.password) || form.password !== form.confirmPassword) {
+      toast.error("Complete the form with a strong, matching password.");
       return;
     }
     try {
-      await createAdminUser({ name: form.name, email: form.email, password: form.password, role_scope: "VENDOR" });
+      const role = (await getAdminRoles()).find((item) => item.baseScope === "VENDOR");
+      if (!role) throw new Error("Vendor role is not configured");
+      await createAdminUser({ name: form.name, email: form.email, password: form.password, roleId: role.id });
       setShowCreate(false);
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", email: "", password: "", confirmPassword: "" });
       await loadRows();
       setSuccessState({ message: "Vendor created." });
     } catch (err) {
@@ -255,11 +260,17 @@ export default function VendorListPage() {
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Password *</label>
                 <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+                <PasswordRequirementChecklist password={form.password} />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-[#64748b]">Confirm Password *</label>
+                <input type="password" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} className="w-full mt-1 rounded-lg border border-[#e2e8f0] px-3 py-2 text-[13px] outline-none focus:border-[#006e2f]" />
+                {form.confirmPassword && form.password !== form.confirmPassword && <p className="mt-1 text-xs text-red-500">Passwords do not match</p>}
               </div>
             </div>
             <div className="flex justify-end gap-3 border-t border-[#e2e8f0] px-6 py-4">
               <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
-              <button onClick={handleCreate} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26]">Create</button>
+              <button onClick={handleCreate} disabled={!isStrongPassword(form.password) || form.password !== form.confirmPassword} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-50">Create</button>
             </div>
           </div>
         </div>

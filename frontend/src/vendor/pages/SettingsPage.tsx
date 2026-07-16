@@ -3,7 +3,9 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuth } from "../../shared/hooks/useAuth";
 import api from "../../shared/services/axiosService";
-import { getApiErrorMessage } from "../../shared/utils/apiError";
+import { getApiErrorMessage, getApiFieldErrors } from "../../shared/utils/apiError";
+import { PasswordRequirementChecklist } from "../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../shared/utils/passwordPolicy";
 import { Camera, Save, Lock, LogOut } from "lucide-react";
 import { LoadingSpinner } from "../../shared/components/LoadingSpinner";
 
@@ -101,7 +103,7 @@ export function SettingsPage() {
     const errs: Record<string, string> = {};
     if (!currentPassword) errs.currentPassword = "Current password is required";
     if (!newPassword) errs.newPassword = "New password is required";
-    else if (newPassword.length < 8) errs.newPassword = "At least 8 characters";
+    else if (!isStrongPassword(newPassword)) errs.newPassword = "Complete every password requirement";
     if (!confirmPassword) errs.confirmPassword = "Please confirm your password";
     else if (newPassword !== confirmPassword) errs.confirmPassword = "Passwords do not match";
     setPwFieldErrors(errs);
@@ -115,6 +117,8 @@ export function SettingsPage() {
       setConfirmPassword("");
       setShowChangePassword(false);
     } catch (err) {
+      const serverFields = getApiFieldErrors(err);
+      if (serverFields.password) setPwFieldErrors((previous) => ({ ...previous, newPassword: serverFields.password }));
       toast.error(getApiErrorMessage(err, "Failed to change password"));
     } finally {
       setChangingPassword(false);
@@ -241,6 +245,7 @@ export function SettingsPage() {
               <label style={lbl}>New Password *</label>
               <input type="password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); clearFieldError("newPassword", true); }} placeholder="At least 8 characters" style={inp} />
               {pwFieldErrors.newPassword && <p style={{ color: "#d4183d", fontSize: "12px", marginTop: "4px", fontFamily: "Poppins, sans-serif" }}>{pwFieldErrors.newPassword}</p>}
+              <PasswordRequirementChecklist password={newPassword} />
             </div>
             <div>
               <label style={lbl}>Confirm New Password *</label>
@@ -250,7 +255,7 @@ export function SettingsPage() {
             <div className="flex gap-2">
               <button
                 onClick={handleChangePassword}
-                disabled={changingPassword}
+                disabled={changingPassword || !currentPassword || !isStrongPassword(newPassword) || newPassword !== confirmPassword}
                 style={{ padding: "10px 24px", borderRadius: "6px", border: "none", background: "var(--brand-green)", color: "white", fontFamily: "Poppins, sans-serif", fontSize: "14px", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", opacity: changingPassword ? 0.7 : 1 }}
               >
                 <Lock size={16} />

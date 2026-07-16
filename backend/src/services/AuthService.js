@@ -7,22 +7,12 @@ import TokenRepository from "../repositories/TokenRepository.js";
 import AppError from "../utils/AppError.js";
 import { isPublicRegistrationRole, normalizeRoleScope } from "../utils/roles.js";
 import { sendOTPEmail } from "./emailService.js";
+import { assertStrongPassword } from "../utils/passwordPolicy.js";
 
 const JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || "15m";
 const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
-
-const MIN_PASSWORD_LENGTH = 8;
-
-function validatePassword(password) {
-  if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    throw new AppError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400, {
-      code: "WEAK_PASSWORD",
-      safeMessage: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`,
-    });
-  }
-}
 
 function normalizeExpectedRoles(expectedRoles) {
   if (!expectedRoles) return [];
@@ -55,7 +45,7 @@ class AuthService {
         details: { requestedRole: normalizedRoleScope },
       });
     }
-    validatePassword(password);
+    assertStrongPassword(password);
 
     const existing = await this.userRepo.findByEmail(email);
     if (existing) throw new AppError("Email already registered", 409);
@@ -302,10 +292,9 @@ class AuthService {
   }
 
   async resetPassword(email, otpCode, newPassword) {
+    assertStrongPassword(newPassword);
     const otp = await this.otpRepo.verify(email, otpCode, "password_reset");
     if (!otp) throw new AppError("Invalid or expired OTP", 400);
-
-    validatePassword(newPassword);
 
     const user = await this.userRepo.findByEmail(email);
     if (!user) throw new AppError("No account found with that email", 404);
@@ -327,7 +316,15 @@ class AuthService {
     const valid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!valid) throw new AppError("Current password is incorrect", 401);
 
-    validatePassword(newPassword);
+    assertStrongPassword(newPassword);
+    const reusesCurrentPassword = await bcrypt.compare(newPassword, user.password_hash);
+    if (reusesCurrentPassword) {
+      throw new AppError("New password must differ from the current password", 400, {
+        code: "PASSWORD_REUSE",
+        safeMessage: "Choose a new password that is different from your current password.",
+        fieldErrors: { password: "New password must differ from your current password." },
+      });
+    }
 
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(newPassword, salt);

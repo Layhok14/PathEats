@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useAuth } from "../../shared/hooks/useAuth";
-import { getApiErrorMessage } from "../../shared/utils/apiError";
+import { getApiErrorMessage, getApiFieldErrors } from "../../shared/utils/apiError";
+import { PasswordRequirementChecklist } from "../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../shared/utils/passwordPolicy";
 
 export function VendorRegisterPage() {
   const { vendorSignup } = useAuth();
@@ -11,6 +13,7 @@ export function VendorRegisterPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -29,7 +32,9 @@ export function VendorRegisterPage() {
     if (!email.trim()) errs.email = "Email is required";
     else if (!/\S+@\S+\.\S+/.test(email)) errs.email = "Enter a valid email";
     if (!password) errs.password = "Password is required";
-    else if (password.length < 6) errs.password = "At least 8 characters";
+    else if (!isStrongPassword(password)) errs.password = "Complete every password requirement";
+    if (!confirmPassword) errs.confirmPassword = "Please confirm your password";
+    else if (password !== confirmPassword) errs.confirmPassword = "Passwords do not match";
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -43,6 +48,7 @@ export function VendorRegisterPage() {
       await vendorSignup({ firstName, lastName, email, password });
       navigate("/vendor/stalls", { replace: true });
     } catch (err: any) {
+      setFieldErrors((previous) => ({ ...previous, ...getApiFieldErrors(err) }));
       setError(getApiErrorMessage(err, "Registration failed."));
     } finally {
       setLoading(false);
@@ -102,11 +108,23 @@ export function VendorRegisterPage() {
               className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
             />
             {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
+            <PasswordRequirementChecklist password={password} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[#374151] block mb-1.5">Confirm Password *</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword"); }}
+              placeholder="Re-enter your password"
+              className="w-full px-3 py-2.5 text-[13px] border border-[#e2e8f0] rounded-lg outline-none focus:border-[#006e2f] bg-white text-[#374151] placeholder:text-[#94a3b8]"
+            />
+            {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isStrongPassword(password) || password !== confirmPassword}
             className="w-full py-2.5 rounded-lg text-[13px] font-semibold bg-[#006e2f] text-white hover:bg-[#005a26] transition-colors disabled:opacity-50"
           >
             {loading ? "Creating account\u2026" : "Create Account"}

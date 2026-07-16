@@ -3,28 +3,18 @@ import { spawn } from "child_process";
 import os from "os";
 import path from "path";
 
-import { pool } from "../config/db.js";
+import BackupRepository from "../repositories/BackupRepository.js";
+import RecoveryRepository from "../repositories/RecoveryRepository.js";
 import AppError from "../utils/AppError.js";
-import { getPublicTableNames, postgresToolConfig } from "./backupService.js";
+import { postgresToolConfig } from "./backupService.js";
 import { filterManagedSchemaRestoreList, inspectPostgresToc } from "../utils/backupToc.js";
 import { parseCsv } from "../utils/csv.js";
 
-const quoteIdent = (identifier) => `"${String(identifier).replace(/"/g, '""')}"`;
-let recoveryInProgress = false;
+const backupRepository = new BackupRepository();
+const recoveryRepository = new RecoveryRepository();
 
-export async function withRecoveryLock(operation) {
-  if (recoveryInProgress) {
-    throw new AppError("Another recovery operation is already running", 409, {
-      code: "RECOVERY_IN_PROGRESS",
-      safeMessage: "Another recovery is already running. Wait for it to finish before trying again.",
-    });
-  }
-  recoveryInProgress = true;
-  try {
-    return await operation();
-  } finally {
-    recoveryInProgress = false;
-  }
+export async function withRecoveryLock(operation, repository = recoveryRepository) {
+  return repository.withAdvisoryLock(operation);
 }
 
 function runPostgresTool(command, args, options = {}) {
@@ -163,7 +153,7 @@ export async function restoreFullDump(dumpFilePath) {
   }
 }
 
-export async function restoreTableDump(dumpFilePath, targetTable, options = {}) {
+export async function restoreTableDump(dumpFilePath, targetTable, options = {}, repository = recoveryRepository) {
   if (!dumpFilePath) throw new AppError("Dump file path is required", 400);
   if (!targetTable) throw new AppError("Table name is required for a partial restore", 400);
 
@@ -174,12 +164,7 @@ export async function restoreTableDump(dumpFilePath, targetTable, options = {}) 
   const tableArg = `--table=public.${targetTable}`;
 
   if (options.truncateFirst) {
-    const client = await pool.connect();
-    try {
-      await client.query(`TRUNCATE TABLE ${quoteIdent(targetTable)} RESTART IDENTITY CASCADE`);
-    } finally {
-      client.release();
-    }
+    await repository.truncateTable(targetTable);
   }
 
   const restoreList = await createManagedSchemaRestoreList(dumpFilePath);
@@ -203,7 +188,7 @@ export async function restoreTableDump(dumpFilePath, targetTable, options = {}) 
   }
 }
 
-export async function restoreCsvFile(csvFilePath, targetTable) {
+export async function restoreCsvFile(csvFilePath, targetTable, repository = recoveryRepository) {
   if (!csvFilePath) throw new AppError("CSV file path is required", 400);
   if (!targetTable) throw new AppError("Table name is required for CSV restore", 400);
 
@@ -211,75 +196,12 @@ export async function restoreCsvFile(csvFilePath, targetTable) {
     throw new AppError("CSV file not found", 404, { details: { path: csvFilePath } });
   });
 
-  const client = await pool.connect();
-  try {
-    const csvContent = await readFile(csvFilePath, "utf-8");
-    const { headers, records } = parseCsv(csvContent);
-    const [columnResult, primaryKeyResult] = await Promise.all([
-      client.query(
-        `SELECT column_name
-         FROM information_schema.columns
-         WHERE table_schema = 'public'
-           AND table_name = $1
-           AND is_generated = 'NEVER'`,
-        [targetTable]
-      ),
-      client.query(
-        `SELECT attribute.attname AS column_name
-         FROM pg_index index_info
-         JOIN pg_class table_info ON table_info.oid = index_info.indrelid
-         JOIN pg_namespace namespace_info ON namespace_info.oid = table_info.relnamespace
-         JOIN unnest(index_info.indkey) WITH ORDINALITY AS key_info(attnum, position) ON TRUE
-         JOIN pg_attribute attribute ON attribute.attrelid = table_info.oid AND attribute.attnum = key_info.attnum
-         WHERE namespace_info.nspname = 'public'
-           AND table_info.relname = $1
-           AND index_info.indisprimary
-         ORDER BY key_info.position`,
-        [targetTable]
-      ),
-    ]);
-    const allowedColumns = new Set(columnResult.rows.map((row) => row.column_name));
-    if (allowedColumns.size === 0) throw new AppError(`Target table "${targetTable}" does not exist`, 400);
-    const invalidColumns = headers.filter((header) => !allowedColumns.has(header));
-    if (invalidColumns.length > 0) {
-      throw new AppError(`CSV contains unsupported columns: ${invalidColumns.join(", ")}`, 400);
-    }
-
-    const primaryKey = primaryKeyResult.rows.map((row) => row.column_name);
-    const quotedHeaders = headers.map(quoteIdent);
-    const updateColumns = headers.filter((header) => !primaryKey.includes(header));
-    const conflictClause = primaryKey.length > 0 && primaryKey.every((column) => headers.includes(column))
-      ? updateColumns.length > 0
-        ? `ON CONFLICT (${primaryKey.map(quoteIdent).join(", ")}) DO UPDATE SET ${updateColumns.map((column) => `${quoteIdent(column)} = EXCLUDED.${quoteIdent(column)}`).join(", ")}`
-        : `ON CONFLICT (${primaryKey.map(quoteIdent).join(", ")}) DO NOTHING`
-      : "ON CONFLICT DO NOTHING";
-
-    await client.query("BEGIN");
-    for (const record of records) {
-      const values = record.map((value) => {
-        if (value === "\\N") return null;
-        if (value === "\\\\N") return "\\N";
-        return value;
-      });
-      const placeholders = values.map((_, index) => `$${index + 1}`);
-      await client.query(
-        `INSERT INTO public.${quoteIdent(targetTable)} (${quotedHeaders.join(", ")})
-         VALUES (${placeholders.join(", ")})
-         ${conflictClause}`,
-        values
-      );
-    }
-
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  const csvContent = await readFile(csvFilePath, "utf-8");
+  const { headers, records } = parseCsv(csvContent);
+  await repository.restoreCsvRecords(targetTable, headers, records);
 }
 
-export async function inspectPostgresDump(dumpFilePath) {
+export async function inspectPostgresDump(dumpFilePath, repository = backupRepository) {
   await stat(dumpFilePath).catch(() => {
     throw new AppError("File not found", 404, { details: { path: dumpFilePath } });
   });
@@ -289,10 +211,5 @@ export async function inspectPostgresDump(dumpFilePath) {
     dumpFilePath,
   ]);
 
-  const client = await pool.connect();
-  try {
-    return inspectPostgresToc(stdout, await getPublicTableNames(client));
-  } finally {
-    client.release();
-  }
+  return inspectPostgresToc(stdout, await repository.getPublicTableNames());
 }

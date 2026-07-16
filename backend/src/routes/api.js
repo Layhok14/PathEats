@@ -34,7 +34,7 @@ router.use("/storage", storageRoutes); // Public signed image URLs
 router.use("/user", userRoutes);       // CONSUMER
 router.use("/vendor", vendorRoutes);   // VENDOR
 router.use("/admin", adminRoutes);     // GLOBAL_ADMIN
-router.use("/dev", devRoutes);         // GLOBAL_ADMIN / DEVELOPER_ADMIN
+router.use("/dev", devRoutes);         // DEVELOPER_ADMIN
 router.use("/places", placesRoutes);   // Public (reviews POST requires auth)
 
 export default router;

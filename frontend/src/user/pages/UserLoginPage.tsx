@@ -3,8 +3,10 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../../shared/hooks/useAuth";
 import api from "../../shared/services/axiosService";
 import { consumeSessionNotice } from "../../shared/utils/authRedirect";
-import { getApiErrorMessage } from "../../shared/utils/apiError";
+import { getApiErrorMessage, getApiFieldErrors } from "../../shared/utils/apiError";
 import { Eye, EyeOff, ArrowLeft, CheckCircle } from "lucide-react";
+import { PasswordRequirementChecklist } from "../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../shared/utils/passwordPolicy";
 
 type Step = "login" | "signup" | "forgot" | "otp" | "reset" | "success";
 
@@ -24,6 +26,7 @@ export default function UserLoginPage() {
   const [lastName, setLastName] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
   const NAVY = "#0b1c30";
@@ -49,6 +52,7 @@ export default function UserLoginPage() {
     setPassword("");
     setOtp("");
     setNewPassword("");
+    setConfirmPassword("");
     setSuccessMsg("");
   }
 
@@ -73,7 +77,9 @@ export default function UserLoginPage() {
       if (stepName === "signup") {
         if (!firstName.trim()) errs.firstName = "First name is required";
         if (!password) errs.password = "Password is required";
-        else if (password.length < 8) errs.password = "At least 8 characters";
+        else if (!isStrongPassword(password)) errs.password = "Complete every password requirement";
+        if (!confirmPassword) errs.confirmPassword = "Please confirm your password";
+        else if (password !== confirmPassword) errs.confirmPassword = "Passwords do not match";
       }
     }
     if (stepName === "forgot") {
@@ -82,7 +88,9 @@ export default function UserLoginPage() {
     }
     if (stepName === "reset") {
       if (!newPassword) errs.newPassword = "New password is required";
-      else if (newPassword.length < 8) errs.newPassword = "At least 8 characters";
+      else if (!isStrongPassword(newPassword)) errs.newPassword = "Complete every password requirement";
+      if (!confirmPassword) errs.confirmPassword = "Please confirm your password";
+      else if (newPassword !== confirmPassword) errs.confirmPassword = "Passwords do not match";
     }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
@@ -118,6 +126,7 @@ export default function UserLoginPage() {
       setStep("success");
       setSuccessMsg("Account created successfully! You can now explore PathEats.");
     } catch (err: any) {
+      setFieldErrors((previous) => ({ ...previous, ...getApiFieldErrors(err) }));
       setError(getApiErrorMessage(err, "Registration failed."));
     } finally {
       setLoading(false);
@@ -169,6 +178,8 @@ export default function UserLoginPage() {
       setStep("success");
       setSuccessMsg("Password has been reset. You can now sign in.");
     } catch (err: any) {
+      const serverFields = getApiFieldErrors(err);
+      if (serverFields.password) setFieldErrors((previous) => ({ ...previous, newPassword: serverFields.password }));
       setError(getApiErrorMessage(err, "Failed to reset password."));
     } finally {
       setLoading(false);
@@ -312,9 +323,15 @@ export default function UserLoginPage() {
                 </button>
               </div>
               {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
+              <PasswordRequirementChecklist password={password} />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Confirm password *</label>
+              <input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword"); }} placeholder="Re-enter password" className={inp} />
+              {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
             </div>
             {error && <p className="text-xs text-red-500">{error}</p>}
-            <button type="submit" disabled={loading}
+            <button type="submit" disabled={loading || !isStrongPassword(password) || password !== confirmPassword}
               className="w-full py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-50 hover:bg-[#005a26]"
               style={{ background: GREEN }}
             >
@@ -377,9 +394,15 @@ export default function UserLoginPage() {
                 </button>
               </div>
               {fieldErrors.newPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.newPassword}</p>}
+              <PasswordRequirementChecklist password={newPassword} />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: "#374151" }}>Confirm new password *</label>
+              <input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); clearFieldError("confirmPassword"); }} placeholder="Re-enter new password" className={inp} />
+              {fieldErrors.confirmPassword && <p className="text-xs text-red-500 mt-1">{fieldErrors.confirmPassword}</p>}
             </div>
             {error && <p className="text-xs text-red-500">{error}</p>}
-            <button type="submit" disabled={loading}
+            <button type="submit" disabled={loading || !isStrongPassword(newPassword) || newPassword !== confirmPassword}
               className="w-full py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-50 hover:bg-[#005a26]"
               style={{ background: GREEN }}
             >

@@ -107,6 +107,7 @@ router.get("/telemetry", catchAsync(adminController.getDashboardTelemetry));
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [name, email, roleId, password]
  *             properties:
  *               name: { type: string }
  *               privileges: { type: array, items: { type: string } }
@@ -192,7 +193,13 @@ router.delete("/roles/:id", globalAdminOnly, requirePrivileges({ table: "role", 
  *               name: { type: string }
  *               email: { type: string, format: email }
  *               role: { type: string }
- *               password: { type: string }
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S{8,}$'
+ *                 description: At least 8 characters with uppercase, lowercase, number, special character, and no whitespace.
+ *                 example: "SecurePass123!"
  *     responses:
  *       201:
  *         description: User created

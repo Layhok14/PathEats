@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import * as adminRepository from "../repositories/adminRepository.js";
 import AppError from "../utils/AppError.js";
 import { validateCoordinates } from "../utils/validation.js";
+import { assertStrongPassword } from "../utils/passwordPolicy.js";
 import {
   BUILT_IN_ROLE_POLICIES,
   BUILT_IN_SYSTEM_CAPABILITIES,
@@ -67,6 +68,7 @@ export const createUser = async (userData, adminId = null, roleScope = null, act
   if (!email) fieldErrors.email = "Email is required.";
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fieldErrors.email = "Enter a valid email address.";
   if (!userData.roleId) fieldErrors.role = "Select a role.";
+  if (!userData.password) fieldErrors.password = "Password is required.";
   if (Object.keys(fieldErrors).length > 0) {
     throw new AppError("User details are invalid", 400, {
       code: "USER_VALIDATION_FAILED",
@@ -74,15 +76,8 @@ export const createUser = async (userData, adminId = null, roleScope = null, act
     });
   }
 
-  const temporaryPassword = userData.password || "ChangeMe123!";
-  if (temporaryPassword.length < 8) {
-    throw new AppError("Password must be at least 8 characters", 400, {
-      code: "WEAK_PASSWORD",
-      safeMessage: "Password must be at least 8 characters.",
-      fieldErrors: { password: "Password must be at least 8 characters." },
-    });
-  }
-  const password_hash = await bcrypt.hash(temporaryPassword, 12);
+  assertStrongPassword(userData.password);
+  const password_hash = await bcrypt.hash(userData.password, 12);
 
   const [firstName = "", ...rest] = name.split(" ");
   const lastName = rest.join(" ");

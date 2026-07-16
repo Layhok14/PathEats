@@ -6,9 +6,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-import { pool } from "../config/db.js";
-import db from "../config/db.js";
+import BackupRepository from "../repositories/BackupRepository.js";
 import AppError from "../utils/AppError.js";
+
+const backupRepository = new BackupRepository();
 
 const SAFE_IDENTIFIER_PATTERN = /^[a-z_][a-z0-9_]*$/i;
 const BACKUP_METHODS = new Set(["Entire Database", "Specific Tables", "Specific Rows"]);
@@ -78,38 +79,26 @@ export function validateRowCondition(condition = "") {
   return normalized;
 }
 
-export async function getPublicTableNames(client) {
-  const result = await client.query(`
-    SELECT table_name
-    FROM information_schema.tables
-    WHERE table_schema = 'public'
-      AND table_type = 'BASE TABLE'
-    ORDER BY table_name
-  `);
-  return result.rows.map((row) => row.table_name);
+export async function getPublicTableNames(repository = backupRepository) {
+  return repository.getPublicTableNames();
 }
 
-export async function validateBackupProfile(profile) {
+export async function validateBackupProfile(profile, repository = backupRepository) {
   if (!BACKUP_METHODS.has(profile.method)) throw new AppError("Invalid backup method", 400);
   if (profile.method === "Entire Database") {
     const parts = parseScope(profile.scope || "schema:public");
     if (parts.schema && parts.schema !== "public") throw new AppError("Only the public schema can be backed up", 400);
     return;
   }
-  const client = await pool.connect();
-  try {
-    const availableTables = await getPublicTableNames(client);
-    const resolved = resolveBackupTables(profile.scope, availableTables);
-    if (profile.method === "Specific Tables" && resolved.tableNames.length === 0) {
-      throw new AppError("Select at least one table", 400);
-    }
-    if (profile.method === "Specific Rows") {
-      const parts = parseScope(profile.scope);
-      if (!parts.table) throw new AppError("Select a table for row backup", 400);
-      validateRowCondition(parts.condition || "");
-    }
-  } finally {
-    client.release();
+  const availableTables = await repository.getPublicTableNames();
+  const resolved = resolveBackupTables(profile.scope, availableTables);
+  if (profile.method === "Specific Tables" && resolved.tableNames.length === 0) {
+    throw new AppError("Select at least one table", 400);
+  }
+  if (profile.method === "Specific Rows") {
+    const parts = parseScope(profile.scope);
+    if (!parts.table) throw new AppError("Select a table for row backup", 400);
+    validateRowCondition(parts.condition || "");
   }
 }
 
@@ -241,22 +230,17 @@ export function runPostgresTool(command, args, options = {}) {
   });
 }
 
-export async function postgresDumpArgsForProfile(profile) {
+export async function postgresDumpArgsForProfile(profile, repository = backupRepository) {
   if (profile.method === "Entire Database") {
     return ["--schema=public", "--exclude-table=public.spatial_ref_sys"];
   }
 
-  const client = await pool.connect();
-  try {
-    const availableTables = await getPublicTableNames(client);
-    const { tableNames } = resolveBackupTables(profile.scope, availableTables);
-    if (tableNames.length === 0) {
-      throw new AppError("Select at least one table for this backup profile", 400);
-    }
-    return tableNames.map((tableName) => `--table=public.${tableName}`);
-  } finally {
-    client.release();
+  const availableTables = await repository.getPublicTableNames();
+  const { tableNames } = resolveBackupTables(profile.scope, availableTables);
+  if (tableNames.length === 0) {
+    throw new AppError("Select at least one table for this backup profile", 400);
   }
+  return tableNames.map((tableName) => `--table=public.${tableName}`);
 }
 
 function quoteCsvField(value) {
@@ -266,10 +250,10 @@ function quoteCsvField(value) {
   return value;
 }
 
-export async function createPostgresDumpFile(profile) {
+export async function createPostgresDumpFile(profile, repository = backupRepository) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-pgdump-"));
   const dumpPath = path.join(tempDir, "backup.dump");
-  const scopeArgs = await postgresDumpArgsForProfile(profile);
+  const scopeArgs = await postgresDumpArgsForProfile(profile, repository);
 
   try {
     await runPostgresTool("pg_dump", [
@@ -290,7 +274,7 @@ export async function createPostgresDumpFile(profile) {
   }
 }
 
-export async function createPostgresCsvFile(profile) {
+export async function createPostgresCsvFile(profile, repository = backupRepository) {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "patheats-csv-"));
   const csvPath = path.join(tempDir, "backup.csv");
   const parts = parseScope(profile.scope);
@@ -299,29 +283,10 @@ export async function createPostgresCsvFile(profile) {
   validateIdentifier(tableName, "Backup table");
 
   const condition = validateRowCondition(parts.condition || "");
-  const quotedTable = quoteIdent(tableName);
-  const columnResult = await db.query(
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND is_generated = 'NEVER'
-     ORDER BY ordinal_position`,
-    [tableName]
-  );
-  if (columnResult.rows.length === 0) throw new AppError(`Backup table "${tableName}" does not exist`, 400);
-  const columns = columnResult.rows.map((row) => row.column_name);
-  const selectList = columns
-    .map((column) => `${quoteIdent(column)}::text AS ${quoteIdent(column)}`)
-    .join(", ");
-  const selectQuery = condition
-    ? `SELECT ${selectList} FROM ${quotedTable} ${condition}`
-    : `SELECT ${selectList} FROM ${quotedTable}`;
-
   try {
-    const result = await db.query(selectQuery);
-    const rows = result.rows;
-    const headers = result.fields.map((field) => field.name);
+    const exportData = await repository.getCsvExportData(tableName, condition);
+    if (!exportData) throw new AppError(`Backup table "${tableName}" does not exist`, 400);
+    const { headers, rows } = exportData;
     const csvLines = [headers.map(quoteCsvField).join(",")];
     for (const row of rows) {
       csvLines.push(headers.map((h) => {
@@ -349,11 +314,11 @@ function isSpecificRowBackup(profile) {
   return false;
 }
 
-export async function generateBackupForProfile(profile) {
+export async function generateBackupForProfile(profile, repository = backupRepository) {
   const isCsv = isSpecificRowBackup(profile);
   const { tempDir, dumpPath, sizeBytes } = isCsv
-    ? await createPostgresCsvFile(profile)
-    : await createPostgresDumpFile(profile);
+    ? await createPostgresCsvFile(profile, repository)
+    : await createPostgresDumpFile(profile, repository);
 
   return {
     tempDir,

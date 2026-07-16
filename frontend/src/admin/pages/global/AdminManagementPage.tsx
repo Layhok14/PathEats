@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { MetricCard } from "../../components/MetricCard";
 import { LoadingSpinner } from "../../../shared/components/LoadingSpinner";
 import { ConfirmDialog } from "../../../shared/components/ConfirmDialog";
+import { PasswordRequirementChecklist } from "../../../shared/components/PasswordRequirementChecklist";
+import { isStrongPassword } from "../../../shared/utils/passwordPolicy";
 import { formatDate } from "../../../shared/utils/formatters";
 import CreateRoleModal from "../../components/AddRole";
 import {
@@ -421,7 +423,7 @@ function UserFormModal({
     if (!form.role) errs.role = "Role is required";
     if (!isEditing) {
       if (!form.password) errs.password = "Password is required";
-      else if (form.password.length < 8) errs.password = "At least 8 characters";
+      else if (!isStrongPassword(form.password)) errs.password = "Complete every password requirement";
       if (!form.confirmPassword) errs.confirmPassword = "Please confirm your password";
       else if (form.password !== form.confirmPassword) errs.confirmPassword = "Passwords do not match";
     }
@@ -502,6 +504,7 @@ function UserFormModal({
                 <label className="text-[12px] font-medium text-[#64748b]">Password *</label>
                 <input type="password" aria-invalid={Boolean(fieldErrors.password)} value={form.password} onChange={(e) => { setForm(f => ({ ...f, password: e.target.value })); clearFieldError("password"); }} placeholder="Enter password" className={`w-full mt-1 rounded-lg border px-3 py-2 text-[13px] outline-none focus:border-[#006e2f] ${fieldErrors.password ? "border-[#ba1a1a]" : "border-[#e2e8f0]"}`} />
                 {fieldErrors.password && <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>}
+                <PasswordRequirementChecklist password={form.password} />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-[#64748b]">Confirm Password *</label>
@@ -512,7 +515,7 @@ function UserFormModal({
           )}
           <div className="flex justify-end gap-3 pt-4 border-t border-[#e2e8f0]">
             <button type="button" onClick={onClose} className="px-4 py-2 text-[12px] font-medium rounded-lg border border-[#bccbb9] text-[#374151] hover:bg-gray-50">Cancel</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-60">
+            <button type="submit" disabled={saving || (!isEditing && (!isStrongPassword(form.password) || form.password !== form.confirmPassword))} className="px-4 py-2 text-[12px] font-medium rounded-lg bg-[#006e2f] text-white hover:bg-[#005a26] disabled:opacity-60">
               {saving ? "Saving..." : isEditing ? "Save" : "Create"}
             </button>
           </div>

@@ -22,7 +22,13 @@ const requestContext = (req) => ({
  *       required: [email, password, firstName, lastName]
  *       properties:
  *         email:       { type: string, format: email, example: "vendor@patheat.app" }
- *         password:    { type: string, format: password, example: "SecurePass123!" }
+ *         password:
+ *           type: string
+ *           format: password
+ *           minLength: 8
+ *           pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S{8,}$'
+ *           description: At least 8 characters with uppercase, lowercase, number, special character, and no whitespace.
+ *           example: "SecurePass123!"
  *         firstName:   { type: string, example: "Sophea" }
  *         lastName:    { type: string, example: "Meng" }
  *         phone:       { type: string, example: "012-345-678" }
@@ -50,7 +56,13 @@ const requestContext = (req) => ({
  *       properties:
  *         email:       { type: string, format: email, example: "vendor@patheat.app" }
  *         otp:         { type: string, example: "123456" }
- *         newPassword: { type: string, format: password, example: "NewSecurePass123!" }
+ *         newPassword:
+ *           type: string
+ *           format: password
+ *           minLength: 8
+ *           pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S{8,}$'
+ *           description: At least 8 characters with uppercase, lowercase, number, special character, and no whitespace.
+ *           example: "NewSecurePass123!"
  *     AuthResponse:
  *       type: object
  *       properties:
@@ -104,9 +116,6 @@ router.post("/register", registerLimiter, catchAsync(async (req, res) => {
   const { email, password, firstName, lastName, phone, roleScope } = req.body;
   if (!email || !password || !firstName || !lastName) {
     throw new AppError("Missing required fields: email, password, firstName, lastName", 400);
-  }
-  if (password.length < 8) {
-    throw new AppError("Password must be at least 8 characters", 400);
   }
   const result = await authService.register(
     { email, password, firstName, lastName, phone, roleScope },
@@ -288,10 +297,6 @@ router.post("/reset-password", otpLimiter, catchAsync(async (req, res) => {
   if (!email || !otp || !newPassword) {
     throw new AppError("Email, OTP, and newPassword are required", 400);
   }
-  // Server-side validation will enforce minimum length; basic client check
-  if (newPassword.length < 8) {
-    throw new AppError("Password must be at least 8 characters", 400);
-  }
   const result = await authService.resetPassword(email, otp, newPassword);
   res.json({ success: true, data: result });
 }));
@@ -312,7 +317,13 @@ router.post("/reset-password", otpLimiter, catchAsync(async (req, res) => {
  *             required: [currentPassword, newPassword]
  *             properties:
  *               currentPassword: { type: string, example: "oldpassword123" }
- *               newPassword:     { type: string, example: "newpassword456" }
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 pattern: '^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9\\s])\\S{8,}$'
+ *                 description: Must satisfy all password requirements and differ from the current password.
+ *                 example: "NewSecurePass123!"
  *     responses:
  *       200:
  *         description: Password changed successfully

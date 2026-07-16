@@ -34,7 +34,7 @@ router.get("/maintenance", developerController.getMaintenance);
 router.get("/errors", developerController.getErrors);
 router.get("/activity-log", developerController.getActivityLog);
 
-router.get("/backups", backupController.listProfiles);
+router.get("/backups",backupController.listProfiles);
 router.get("/backups/tables", backupController.listTables);
 router.post("/backups", backupController.createProfile);
 router.get("/backups/:id/download", backupController.downloadProfile);

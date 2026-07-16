@@ -68,21 +68,21 @@ The first five minutes explain the system. The remaining two minutes are for dem
 
 | Slide | Topic | Main speaker | Target time |
 | ---: | --- | --- | ---: |
-| 1 | PathEats Backend Development | Layhok | 10 sec |
-| 2 | Presentation overview | Layhok | 10 sec |
-| 3 | Problem, users, and objectives | Smey | 20 sec |
-| 4 | Backend architecture | Layhok | 25 sec |
-| 5 | Technology stack | Layhok | 25 sec |
-| 6 | REST routes by domain | Smey | 25 sec |
-| 7 | JWT authentication | Smey | 30 sec |
-| 8 | Roles, privileges, and Business Assistance boundaries | Pav | 25 sec |
-| 9 | Route-controller-service-repository separation | Pav | 25 sec |
-| 10 | Vendor business logic, ownership, and transactions | Pav | 25 sec |
-| 11 | Global security controls | Layhok | 25 sec |
-| 12 | Error handling and logging | Layhok | 25 sec |
-| 13 | Swagger and automated verification | Layhok | 30 sec |
-| 14 | Live demonstration | All members | 1 min 45 sec |
-| 15 | Conclusion | Smey | 15 sec |
+| 1 | PathEats Backend Development | pav | 10 sec |
+| 2 | Presentation overview | pav | 10 sec |
+| 3 | Problem, users, and objectives | pav | 20 sec |
+| 4 | Backend architecture | pav | 25 sec |
+| 5 | Technology stack | pav | 25 sec |
+| 6 | REST routes by domain | Layhok | 25 sec |
+| 7 | JWT authentication | Layhok | 30 sec |
+| 8 | Roles, privileges, and Business Assistance boundaries | Layhok | 25 sec |
+| 9 | Route-controller-service-repository separation | Layhok | 25 sec |
+| 10 | Vendor business logic, ownership, and transactions | Smey | 25 sec |
+| 11 | Global security controls | Smey | 25 sec |
+| 12 | Error handling and logging | Smey | 25 sec |
+| 13 | Swagger and automated verification | Smey | 30 sec |
+| 14 | Live demonstration | Layhok | 8 min 45 sec |
+| 15 | Conclusion | Layhok | 15 sec |
 
 If the final slide ownership changes, keep the role-specific code ownership below. Each member may still be questioned individually.
 
